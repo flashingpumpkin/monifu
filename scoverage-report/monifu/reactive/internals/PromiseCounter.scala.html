@@ -1,0 +1,490 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          monifu/reactive/internals/PromiseCounter.scala.html
+        </title>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''> 
+</span>17 <span style=''>package monifu.reactive.internals
+</span>18 <span style=''>
+</span>19 <span style=''>import scala.concurrent.Promise
+</span>20 <span style=''>import monifu.concurrent.atomic.padded.Atomic
+</span>21 <span style=''>
+</span>22 <span style=''>/**
+</span>23 <span style=''> * Represents a Promise that completes with `value` after
+</span>24 <span style=''> * receiving a `countdownUntil` number of `countdown()` calls.
+</span>25 <span style=''> */
+</span>26 <span style=''>final class PromiseCounter[T] private (value: T, countdownUntil: Int) {
+</span>27 <span style=''>  </span><span style='background: #AEF1AE'>require(countdownUntil > 0, </span><span style='background: #F0ADAD'>"countdownUntil must be strictly positive"</span><span style='background: #AEF1AE'>)</span><span style=''>
+</span>28 <span style=''>
+</span>29 <span style=''>  private[this] val promise = </span><span style='background: #AEF1AE'>Promise[T]()</span><span style=''>
+</span>30 <span style=''>  private[this] val counter = </span><span style='background: #AEF1AE'>Atomic(0)</span><span style=''>
+</span>31 <span style=''>
+</span>32 <span style=''>  def future = </span><span style='background: #AEF1AE'>promise.future</span><span style=''>
+</span>33 <span style=''>
+</span>34 <span style=''>  def countdown(): Unit =
+</span>35 <span style=''>    if (</span><span style='background: #AEF1AE'>counter.incrementAndGet() >= countdownUntil</span><span style=''>) {
+</span>36 <span style=''>      </span><span style='background: #AEF1AE'>promise.success(value)</span><span style=''>
+</span>37 <span style=''>    }
+</span>38 <span style=''>
+</span>39 <span style=''>  def success(value: T) = {
+</span>40 <span style=''>    </span><span style='background: #F0ADAD'>promise.success(value)</span><span style=''>
+</span>41 <span style=''>  }
+</span>42 <span style=''>}
+</span>43 <span style=''>
+</span>44 <span style=''>object PromiseCounter {
+</span>45 <span style=''>  def apply[T](value: T, countDown: Int): PromiseCounter[T] =
+</span>46 <span style=''>    </span><span style='background: #AEF1AE'>new PromiseCounter[T](value, countDown)</span><span style=''>
+</span>47 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          27
+        </td>
+        <td>
+          2999
+        </td>
+        <td>
+          937
+          -
+          955
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          PromiseCounter.this.countdownUntil.&gt;(0)
+        </td>
+      </tr><tr>
+        <td>
+          27
+        </td>
+        <td>
+          3001
+        </td>
+        <td>
+          929
+          -
+          1000
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Predef.require
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.require(PromiseCounter.this.countdownUntil.&gt;(0), &quot;countdownUntil must be strictly positive&quot;)
+        </td>
+      </tr><tr>
+        <td>
+          27
+        </td>
+        <td>
+          3000
+        </td>
+        <td>
+          957
+          -
+          999
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          &quot;countdownUntil must be strictly positive&quot;
+        </td>
+      </tr><tr>
+        <td>
+          29
+        </td>
+        <td>
+          3002
+        </td>
+        <td>
+          1032
+          -
+          1044
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Promise.apply
+        </td>
+        <td style="background: #AEF1AE">
+          scala.concurrent.Promise.apply[T]()
+        </td>
+      </tr><tr>
+        <td>
+          30
+        </td>
+        <td>
+          3005
+        </td>
+        <td>
+          1075
+          -
+          1084
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.Atomic.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.atomic.padded.Atomic.apply[Int, monifu.concurrent.atomic.padded.AtomicInt](0)(padded.this.AtomicBuilder.AtomicIntBuilder)
+        </td>
+      </tr><tr>
+        <td>
+          30
+        </td>
+        <td>
+          3004
+        </td>
+        <td>
+          1081
+          -
+          1081
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.Implicits.Level3.AtomicIntBuilder
+        </td>
+        <td style="background: #AEF1AE">
+          padded.this.AtomicBuilder.AtomicIntBuilder
+        </td>
+      </tr><tr>
+        <td>
+          30
+        </td>
+        <td>
+          3003
+        </td>
+        <td>
+          1082
+          -
+          1083
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          0
+        </td>
+      </tr><tr>
+        <td>
+          32
+        </td>
+        <td>
+          3006
+        </td>
+        <td>
+          1101
+          -
+          1115
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.Promise.future
+        </td>
+        <td style="background: #AEF1AE">
+          PromiseCounter.this.promise.future
+        </td>
+      </tr><tr>
+        <td>
+          35
+        </td>
+        <td>
+          3008
+        </td>
+        <td>
+          1180
+          -
+          1194
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.PromiseCounter.countdownUntil
+        </td>
+        <td style="background: #AEF1AE">
+          PromiseCounter.this.countdownUntil
+        </td>
+      </tr><tr>
+        <td>
+          35
+        </td>
+        <td>
+          3007
+        </td>
+        <td>
+          1159
+          -
+          1159
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicInt.incrementAndGet$default$1
+        </td>
+        <td style="background: #AEF1AE">
+          PromiseCounter.this.counter.incrementAndGet$default$1
+        </td>
+      </tr><tr>
+        <td>
+          35
+        </td>
+        <td>
+          3009
+        </td>
+        <td>
+          1151
+          -
+          1194
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.&gt;=
+        </td>
+        <td style="background: #AEF1AE">
+          PromiseCounter.this.counter.incrementAndGet(PromiseCounter.this.counter.incrementAndGet$default$1).&gt;=(PromiseCounter.this.countdownUntil)
+        </td>
+      </tr><tr>
+        <td>
+          35
+        </td>
+        <td>
+          3015
+        </td>
+        <td>
+          1147
+          -
+          1147
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          35
+        </td>
+        <td>
+          3014
+        </td>
+        <td>
+          1147
+          -
+          1147
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          3011
+        </td>
+        <td>
+          1204
+          -
+          1226
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Promise.success
+        </td>
+        <td style="background: #AEF1AE">
+          PromiseCounter.this.promise.success(PromiseCounter.this.value)
+        </td>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          3013
+        </td>
+        <td>
+          1204
+          -
+          1226
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  PromiseCounter.this.promise.success(PromiseCounter.this.value);
+  ()
+}
+        </td>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          3010
+        </td>
+        <td>
+          1220
+          -
+          1225
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.PromiseCounter.value
+        </td>
+        <td style="background: #AEF1AE">
+          PromiseCounter.this.value
+        </td>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          3012
+        </td>
+        <td>
+          1219
+          -
+          1219
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          40
+        </td>
+        <td>
+          3016
+        </td>
+        <td>
+          1266
+          -
+          1288
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Promise.success
+        </td>
+        <td style="background: #F0ADAD">
+          PromiseCounter.this.promise.success(value)
+        </td>
+      </tr><tr>
+        <td>
+          46
+        </td>
+        <td>
+          3017
+        </td>
+        <td>
+          1386
+          -
+          1425
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.internals.PromiseCounter.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new monifu.reactive.internals.PromiseCounter[T](value, countDown)
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

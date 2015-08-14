@@ -1,0 +1,697 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          monifu/concurrent/FutureUtils.scala.html
+        </title>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''>
+</span>17 <span style=''>package monifu.concurrent
+</span>18 <span style=''>
+</span>19 <span style=''>import java.util.concurrent.{TimeUnit, TimeoutException}
+</span>20 <span style=''>import scala.concurrent.duration._
+</span>21 <span style=''>import scala.concurrent.{ExecutionContext, Future, Promise}
+</span>22 <span style=''>import scala.util.Try
+</span>23 <span style=''>
+</span>24 <span style=''>object FutureUtils {
+</span>25 <span style=''>  /**
+</span>26 <span style=''>   * Utility that returns a new Future that either completes with
+</span>27 <span style=''>   * the original Future's result or with a TimeoutException in case
+</span>28 <span style=''>   * the maximum wait time was exceeded.
+</span>29 <span style=''>   *
+</span>30 <span style=''>   * @param atMost specifies the maximum wait time until the future is
+</span>31 <span style=''>   *               terminated with a TimeoutException
+</span>32 <span style=''>   *
+</span>33 <span style=''>   * @param s is the Scheduler, needed for completing our internal promise
+</span>34 <span style=''>   *
+</span>35 <span style=''>   * @return a new future that will either complete with the result of our
+</span>36 <span style=''>   *         source or fail in case the timeout is reached.
+</span>37 <span style=''>   */
+</span>38 <span style=''>  def withTimeout[T](source: Future[T], atMost: FiniteDuration)(implicit s: Scheduler): Future[T] = {
+</span>39 <span style=''>    val err = </span><span style='background: #AEF1AE'>new TimeoutException</span><span style=''>
+</span>40 <span style=''>    val promise = </span><span style='background: #AEF1AE'>Promise[T]()</span><span style=''>
+</span>41 <span style=''>    val task = </span><span style='background: #AEF1AE'>s.scheduleOnce(atMost)(promise.tryFailure(err))</span><span style=''>
+</span>42 <span style=''>
+</span>43 <span style=''>    </span><span style='background: #AEF1AE'>source.onComplete { case r =>
+</span>44 <span style=''></span><span style='background: #AEF1AE'>      // canceling task to prevent waisted CPU resources and memory leaks
+</span>45 <span style=''></span><span style='background: #AEF1AE'>      // if the task has been executed already, this has no effect
+</span>46 <span style=''></span><span style='background: #AEF1AE'>      task.cancel()
+</span>47 <span style=''></span><span style='background: #AEF1AE'>      promise.tryComplete(r)
+</span>48 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>49 <span style=''>
+</span>50 <span style=''>    </span><span style='background: #AEF1AE'>promise.future</span><span style=''>
+</span>51 <span style=''>  }
+</span>52 <span style=''>
+</span>53 <span style=''>  /**
+</span>54 <span style=''>   * Utility that lifts a `Future[T]` into a `Future[Try[T]]`, just because
+</span>55 <span style=''>   * it is useful sometimes.
+</span>56 <span style=''>   */
+</span>57 <span style=''>  def liftTry[T](source: Future[T])(implicit ec: ExecutionContext): Future[Try[T]] = {
+</span>58 <span style=''>    if (</span><span style='background: #F0ADAD'>source.isCompleted</span><span style=''>) {
+</span>59 <span style=''>      </span><span style='background: #F0ADAD'>Future.successful(source.value.get)</span><span style=''>
+</span>60 <span style=''>    }
+</span>61 <span style=''>    else </span><span style='background: #F0ADAD'>{
+</span>62 <span style=''></span><span style='background: #F0ADAD'>      val p = Promise[Try[T]]()
+</span>63 <span style=''></span><span style='background: #F0ADAD'>      source.onComplete { case result => p.success(result) }
+</span>64 <span style=''></span><span style='background: #F0ADAD'>      p.future
+</span>65 <span style=''></span><span style='background: #F0ADAD'>    }</span><span style=''>
+</span>66 <span style=''>  }
+</span>67 <span style=''>
+</span>68 <span style=''>  /**
+</span>69 <span style=''>   * Returns a new `Future` that takes a minimum amount of time to execute,
+</span>70 <span style=''>   * specified by `atLeast`.
+</span>71 <span style=''>   *
+</span>72 <span style=''>   * @param atLeast the minimal duration that the returned future will take to complete.
+</span>73 <span style=''>   * @param s the implicit scheduler that handles the scheduling and the execution
+</span>74 <span style=''>   * @return a new `Future` whose execution time is within the specified bounds
+</span>75 <span style=''>   */
+</span>76 <span style=''>  def withMinDuration[T](source: Future[T], atLeast: FiniteDuration)(implicit s: Scheduler): Future[T] = {
+</span>77 <span style=''>    val start = </span><span style='background: #AEF1AE'>s.currentTimeMillis()</span><span style=''>
+</span>78 <span style=''>    val p = </span><span style='background: #AEF1AE'>Promise[T]()</span><span style=''>
+</span>79 <span style=''>
+</span>80 <span style=''>    </span><span style='background: #AEF1AE'>source.onComplete {
+</span>81 <span style=''></span><span style='background: #AEF1AE'>      case result =>
+</span>82 <span style=''></span><span style='background: #AEF1AE'>        val remainingMillis = atLeast.toMillis - (s.currentTimeMillis() - start)
+</span>83 <span style=''></span><span style='background: #AEF1AE'>        if (remainingMillis >= 1)
+</span>84 <span style=''></span><span style='background: #AEF1AE'>          s.scheduleOnce(remainingMillis, TimeUnit.MILLISECONDS)(p.complete(result))
+</span>85 <span style=''></span><span style='background: #AEF1AE'>        else
+</span>86 <span style=''></span><span style='background: #AEF1AE'>          p.complete(result)
+</span>87 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>88 <span style=''>
+</span>89 <span style=''>    </span><span style='background: #AEF1AE'>p.future</span><span style=''>
+</span>90 <span style=''>  }
+</span>91 <span style=''>
+</span>92 <span style=''>  /**
+</span>93 <span style=''>   * Creates a future that completes with the specified `result`, but only
+</span>94 <span style=''>   * after the specified `delay`.
+</span>95 <span style=''>   */
+</span>96 <span style=''>  def delayedResult[T](delay: FiniteDuration)(result: => T)(implicit s: Scheduler): Future[T] = {
+</span>97 <span style=''>    val p = </span><span style='background: #AEF1AE'>Promise[T]()</span><span style=''>
+</span>98 <span style=''>    </span><span style='background: #AEF1AE'>s.scheduleOnce(delay)(p.complete(Try(result)))</span><span style=''>
+</span>99 <span style=''>    </span><span style='background: #AEF1AE'>p.future</span><span style=''>
+</span>100 <span style=''>  }
+</span>101 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          39
+        </td>
+        <td>
+          1997
+        </td>
+        <td>
+          1488
+          -
+          1508
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.util.concurrent.TimeoutException.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new java.util.concurrent.TimeoutException()
+        </td>
+      </tr><tr>
+        <td>
+          40
+        </td>
+        <td>
+          1998
+        </td>
+        <td>
+          1527
+          -
+          1539
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Promise.apply
+        </td>
+        <td style="background: #AEF1AE">
+          scala.concurrent.Promise.apply[T]()
+        </td>
+      </tr><tr>
+        <td>
+          41
+        </td>
+        <td>
+          2000
+        </td>
+        <td>
+          1596
+          -
+          1596
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          41
+        </td>
+        <td>
+          1999
+        </td>
+        <td>
+          1578
+          -
+          1601
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Promise.tryFailure
+        </td>
+        <td style="background: #AEF1AE">
+          promise.tryFailure(err)
+        </td>
+      </tr><tr>
+        <td>
+          41
+        </td>
+        <td>
+          2001
+        </td>
+        <td>
+          1555
+          -
+          1602
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.scheduleOnce
+        </td>
+        <td style="background: #AEF1AE">
+          s.scheduleOnce(atMost)({
+  promise.tryFailure(err);
+  ()
+})
+        </td>
+      </tr><tr>
+        <td>
+          43
+        </td>
+        <td>
+          2002
+        </td>
+        <td>
+          1608
+          -
+          1833
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.concurrent.Future.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          source.onComplete[Boolean](((x0$1: scala.util.Try[T]) =&gt; x0$1 match {
+  case (r @ _) =&gt; {
+    task.cancel();
+    promise.tryComplete(r)
+  }
+}))(s)
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          2003
+        </td>
+        <td>
+          1839
+          -
+          1853
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.Promise.future
+        </td>
+        <td style="background: #AEF1AE">
+          promise.future
+        </td>
+      </tr><tr>
+        <td>
+          58
+        </td>
+        <td>
+          2004
+        </td>
+        <td>
+          2071
+          -
+          2089
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.Future.isCompleted
+        </td>
+        <td style="background: #F0ADAD">
+          source.isCompleted
+        </td>
+      </tr><tr>
+        <td>
+          59
+        </td>
+        <td>
+          2006
+        </td>
+        <td>
+          2099
+          -
+          2134
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Future.successful
+        </td>
+        <td style="background: #F0ADAD">
+          scala.concurrent.Future.successful[scala.util.Try[T]](source.value.get)
+        </td>
+      </tr><tr>
+        <td>
+          59
+        </td>
+        <td>
+          2005
+        </td>
+        <td>
+          2117
+          -
+          2133
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Option.get
+        </td>
+        <td style="background: #F0ADAD">
+          source.value.get
+        </td>
+      </tr><tr>
+        <td>
+          59
+        </td>
+        <td>
+          2007
+        </td>
+        <td>
+          2099
+          -
+          2134
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          scala.concurrent.Future.successful
+        </td>
+        <td style="background: #F0ADAD">
+          scala.concurrent.Future.successful[scala.util.Try[T]](source.value.get)
+        </td>
+      </tr><tr>
+        <td>
+          61
+        </td>
+        <td>
+          2011
+        </td>
+        <td>
+          2150
+          -
+          2265
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          {
+  val p: scala.concurrent.Promise[scala.util.Try[T]] = scala.concurrent.Promise.apply[scala.util.Try[T]]();
+  source.onComplete[scala.concurrent.Promise[scala.util.Try[T]]](((x0$2: scala.util.Try[T]) =&gt; x0$2 match {
+    case (result @ _) =&gt; p.success(result)
+  }))(ec);
+  p.future
+}
+        </td>
+      </tr><tr>
+        <td>
+          62
+        </td>
+        <td>
+          2008
+        </td>
+        <td>
+          2166
+          -
+          2183
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Promise.apply
+        </td>
+        <td style="background: #F0ADAD">
+          scala.concurrent.Promise.apply[scala.util.Try[T]]()
+        </td>
+      </tr><tr>
+        <td>
+          63
+        </td>
+        <td>
+          2009
+        </td>
+        <td>
+          2190
+          -
+          2244
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.concurrent.Future.onComplete
+        </td>
+        <td style="background: #F0ADAD">
+          source.onComplete[scala.concurrent.Promise[scala.util.Try[T]]](((x0$2: scala.util.Try[T]) =&gt; x0$2 match {
+  case (result @ _) =&gt; p.success(result)
+}))(ec)
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          2010
+        </td>
+        <td>
+          2251
+          -
+          2259
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.Promise.future
+        </td>
+        <td style="background: #F0ADAD">
+          p.future
+        </td>
+      </tr><tr>
+        <td>
+          77
+        </td>
+        <td>
+          2012
+        </td>
+        <td>
+          2768
+          -
+          2789
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.currentTimeMillis
+        </td>
+        <td style="background: #AEF1AE">
+          s.currentTimeMillis()
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          2013
+        </td>
+        <td>
+          2802
+          -
+          2814
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Promise.apply
+        </td>
+        <td style="background: #AEF1AE">
+          scala.concurrent.Promise.apply[T]()
+        </td>
+      </tr><tr>
+        <td>
+          80
+        </td>
+        <td>
+          2014
+        </td>
+        <td>
+          2820
+          -
+          3108
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.concurrent.Future.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          source.onComplete[Object](((x0$3: scala.util.Try[T]) =&gt; x0$3 match {
+  case (result @ _) =&gt; {
+    val remainingMillis: Long = atLeast.toMillis.-(s.currentTimeMillis().-(start));
+    if (remainingMillis.&gt;=(1))
+      s.scheduleOnce(remainingMillis, MILLISECONDS)({
+        p.complete(result);
+        ()
+      })
+    else
+      p.complete(result)
+  }
+}))(s)
+        </td>
+      </tr><tr>
+        <td>
+          89
+        </td>
+        <td>
+          2015
+        </td>
+        <td>
+          3114
+          -
+          3122
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.Promise.future
+        </td>
+        <td style="background: #AEF1AE">
+          p.future
+        </td>
+      </tr><tr>
+        <td>
+          97
+        </td>
+        <td>
+          2016
+        </td>
+        <td>
+          3359
+          -
+          3371
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Promise.apply
+        </td>
+        <td style="background: #AEF1AE">
+          scala.concurrent.Promise.apply[T]()
+        </td>
+      </tr><tr>
+        <td>
+          98
+        </td>
+        <td>
+          2018
+        </td>
+        <td>
+          3398
+          -
+          3421
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Promise.complete
+        </td>
+        <td style="background: #AEF1AE">
+          p.complete(scala.util.Try.apply[T](result))
+        </td>
+      </tr><tr>
+        <td>
+          98
+        </td>
+        <td>
+          2017
+        </td>
+        <td>
+          3409
+          -
+          3420
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.util.Try.apply
+        </td>
+        <td style="background: #AEF1AE">
+          scala.util.Try.apply[T](result)
+        </td>
+      </tr><tr>
+        <td>
+          98
+        </td>
+        <td>
+          2020
+        </td>
+        <td>
+          3376
+          -
+          3422
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.scheduleOnce
+        </td>
+        <td style="background: #AEF1AE">
+          s.scheduleOnce(delay)({
+  p.complete(scala.util.Try.apply[T](result));
+  ()
+})
+        </td>
+      </tr><tr>
+        <td>
+          98
+        </td>
+        <td>
+          2019
+        </td>
+        <td>
+          3408
+          -
+          3408
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          99
+        </td>
+        <td>
+          2021
+        </td>
+        <td>
+          3427
+          -
+          3435
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.Promise.future
+        </td>
+        <td style="background: #AEF1AE">
+          p.future
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

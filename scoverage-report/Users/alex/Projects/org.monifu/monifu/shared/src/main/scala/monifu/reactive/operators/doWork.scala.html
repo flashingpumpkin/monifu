@@ -1,0 +1,888 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          /Users/alex/Projects/org.monifu/monifu/shared/src/main/scala/monifu/reactive/operators/doWork.scala.html
+        </title>
+        <link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css"/>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+        <script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script>
+        <script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.18.3/addons/pager/jquery.tablesorter.pager.min.js"></script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''>
+</span>17 <span style=''>package monifu.reactive.operators
+</span>18 <span style=''>
+</span>19 <span style=''>import monifu.concurrent.Cancelable
+</span>20 <span style=''>import monifu.reactive.Ack.Cancel
+</span>21 <span style=''>import monifu.reactive.internals._
+</span>22 <span style=''>import monifu.reactive.{Observable, Observer}
+</span>23 <span style=''>import scala.concurrent.Future
+</span>24 <span style=''>import scala.util.control.NonFatal
+</span>25 <span style=''>
+</span>26 <span style=''>
+</span>27 <span style=''>object doWork {
+</span>28 <span style=''>  /**
+</span>29 <span style=''>   * Implementation for [[Observable.doWork]].
+</span>30 <span style=''>   */
+</span>31 <span style=''>  def onNext[T](source: Observable[T])(cb: T => Unit): Observable[T] =
+</span>32 <span style=''>    </span><span style='background: #AEF1AE'>Observable.create[T] { subscriber =>
+</span>33 <span style=''></span><span style='background: #AEF1AE'>      implicit val s = subscriber.scheduler
+</span>34 <span style=''></span><span style='background: #AEF1AE'>      val observer = subscriber.observer
+</span>35 <span style=''></span><span style='background: #AEF1AE'>
+</span>36 <span style=''></span><span style='background: #AEF1AE'>      source.unsafeSubscribe(new Observer[T] {
+</span>37 <span style=''></span><span style='background: #AEF1AE'>        def onError(ex: Throwable) = observer.onError(ex)
+</span>38 <span style=''></span><span style='background: #AEF1AE'>        def onComplete() = observer.onComplete()
+</span>39 <span style=''></span><span style='background: #AEF1AE'>
+</span>40 <span style=''></span><span style='background: #AEF1AE'>        def onNext(elem: T) = {
+</span>41 <span style=''></span><span style='background: #AEF1AE'>          // See Section 6.4. in the Rx Design Guidelines:
+</span>42 <span style=''></span><span style='background: #AEF1AE'>          // Protect calls to user code from within an operator
+</span>43 <span style=''></span><span style='background: #AEF1AE'>          var streamError = true
+</span>44 <span style=''></span><span style='background: #AEF1AE'>          try {
+</span>45 <span style=''></span><span style='background: #AEF1AE'>            cb(elem)
+</span>46 <span style=''></span><span style='background: #AEF1AE'>            streamError = false
+</span>47 <span style=''></span><span style='background: #AEF1AE'>            observer.onNext(elem)
+</span>48 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>49 <span style=''></span><span style='background: #AEF1AE'>          catch {
+</span>50 <span style=''></span><span style='background: #AEF1AE'>            case NonFatal(ex) =>
+</span>51 <span style=''></span><span style='background: #AEF1AE'>              if (streamError) { observer.onError(ex); Cancel } else Future.failed(ex)
+</span>52 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>53 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>54 <span style=''></span><span style='background: #AEF1AE'>      })
+</span>55 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>56 <span style=''>
+</span>57 <span style=''>  /**
+</span>58 <span style=''>   * Implementation for [[Observable.doOnComplete]].
+</span>59 <span style=''>   */
+</span>60 <span style=''>  def onComplete[T](source: Observable[T])(cb: => Unit): Observable[T] =
+</span>61 <span style=''>    </span><span style='background: #AEF1AE'>Observable.create[T] { subscriber =>
+</span>62 <span style=''></span><span style='background: #AEF1AE'>      implicit val s = subscriber.scheduler
+</span>63 <span style=''></span><span style='background: #AEF1AE'>      val observer = subscriber.observer
+</span>64 <span style=''></span><span style='background: #AEF1AE'>
+</span>65 <span style=''></span><span style='background: #AEF1AE'>      source.unsafeSubscribe(new Observer[T] {
+</span>66 <span style=''></span><span style='background: #AEF1AE'>        def onNext(elem: T) = {
+</span>67 <span style=''></span><span style='background: #AEF1AE'>          observer.onNext(elem)
+</span>68 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>69 <span style=''></span><span style='background: #AEF1AE'>
+</span>70 <span style=''></span><span style='background: #AEF1AE'>        def onError(ex: Throwable): Unit = {
+</span>71 <span style=''></span><span style='background: #AEF1AE'>          observer.onError(ex)
+</span>72 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>73 <span style=''></span><span style='background: #AEF1AE'>
+</span>74 <span style=''></span><span style='background: #AEF1AE'>        def onComplete(): Unit = {
+</span>75 <span style=''></span><span style='background: #AEF1AE'>          // protecting call to user level code
+</span>76 <span style=''></span><span style='background: #AEF1AE'>          var streamError = true
+</span>77 <span style=''></span><span style='background: #AEF1AE'>          try {
+</span>78 <span style=''></span><span style='background: #AEF1AE'>            cb
+</span>79 <span style=''></span><span style='background: #AEF1AE'>            streamError = false
+</span>80 <span style=''></span><span style='background: #AEF1AE'>            observer.onComplete()
+</span>81 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>82 <span style=''></span><span style='background: #AEF1AE'>          catch {
+</span>83 <span style=''></span><span style='background: #AEF1AE'>            case NonFatal(ex) =>
+</span>84 <span style=''></span><span style='background: #AEF1AE'>              observer.onError(ex)
+</span>85 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>86 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>87 <span style=''></span><span style='background: #AEF1AE'>      })
+</span>88 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>89 <span style=''>
+</span>90 <span style=''>  /**
+</span>91 <span style=''>   * Implementation for [[Observable.doOnError]].
+</span>92 <span style=''>   */
+</span>93 <span style=''>  def onError[T](source: Observable[T])(cb: Throwable => Unit): Observable[T] =
+</span>94 <span style=''>    </span><span style='background: #AEF1AE'>Observable.create[T] { subscriber =>
+</span>95 <span style=''></span><span style='background: #AEF1AE'>      implicit val s = subscriber.scheduler
+</span>96 <span style=''></span><span style='background: #AEF1AE'>      val observer = subscriber.observer
+</span>97 <span style=''></span><span style='background: #AEF1AE'>
+</span>98 <span style=''></span><span style='background: #AEF1AE'>      source.unsafeSubscribe(new Observer[T] {
+</span>99 <span style=''></span><span style='background: #AEF1AE'>        def onNext(elem: T) = {
+</span>100 <span style=''></span><span style='background: #AEF1AE'>          observer.onNext(elem)
+</span>101 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>102 <span style=''></span><span style='background: #AEF1AE'>
+</span>103 <span style=''></span><span style='background: #AEF1AE'>        def onError(ex: Throwable): Unit = {
+</span>104 <span style=''></span><span style='background: #AEF1AE'>          // in case our callback throws an error
+</span>105 <span style=''></span><span style='background: #AEF1AE'>          // the behavior is undefined, so we just
+</span>106 <span style=''></span><span style='background: #AEF1AE'>          // log it
+</span>107 <span style=''></span><span style='background: #AEF1AE'>          try {
+</span>108 <span style=''></span><span style='background: #AEF1AE'>            cb(ex)
+</span>109 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>110 <span style=''></span><span style='background: #AEF1AE'>          catch {
+</span>111 <span style=''></span><span style='background: #AEF1AE'>            case NonFatal(err) =>
+</span>112 <span style=''></span><span style='background: #AEF1AE'>              s.reportFailure(err)
+</span>113 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>114 <span style=''></span><span style='background: #AEF1AE'>          finally {
+</span>115 <span style=''></span><span style='background: #AEF1AE'>            observer.onError(ex)
+</span>116 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>117 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>118 <span style=''></span><span style='background: #AEF1AE'>
+</span>119 <span style=''></span><span style='background: #AEF1AE'>        def onComplete(): Unit = {
+</span>120 <span style=''></span><span style='background: #AEF1AE'>          observer.onComplete()
+</span>121 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>122 <span style=''></span><span style='background: #AEF1AE'>      })
+</span>123 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>124 <span style=''>
+</span>125 <span style=''>  /**
+</span>126 <span style=''>   * Implementation for [[Observable.doOnCanceled]].
+</span>127 <span style=''>   */
+</span>128 <span style=''>  def onCanceled[T](source: Observable[T])(cb: => Unit): Observable[T] =
+</span>129 <span style=''>    </span><span style='background: #AEF1AE'>Observable.create[T] { subscriber =>
+</span>130 <span style=''></span><span style='background: #AEF1AE'>      implicit val s = subscriber.scheduler
+</span>131 <span style=''></span><span style='background: #AEF1AE'>      val observer = subscriber.observer
+</span>132 <span style=''></span><span style='background: #AEF1AE'>      val isActive = Cancelable(cb)
+</span>133 <span style=''></span><span style='background: #AEF1AE'>
+</span>134 <span style=''></span><span style='background: #AEF1AE'>      source.unsafeSubscribe(new Observer[T] {
+</span>135 <span style=''></span><span style='background: #AEF1AE'>        def onNext(elem: T) = {
+</span>136 <span style=''></span><span style='background: #AEF1AE'>          observer.onNext(elem)
+</span>137 <span style=''></span><span style='background: #AEF1AE'>            .ifCanceledDoCancel(isActive)
+</span>138 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>139 <span style=''></span><span style='background: #AEF1AE'>
+</span>140 <span style=''></span><span style='background: #AEF1AE'>        def onError(ex: Throwable): Unit = {
+</span>141 <span style=''></span><span style='background: #AEF1AE'>          observer.onError(ex)
+</span>142 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>143 <span style=''></span><span style='background: #AEF1AE'>
+</span>144 <span style=''></span><span style='background: #AEF1AE'>        def onComplete(): Unit = {
+</span>145 <span style=''></span><span style='background: #AEF1AE'>          observer.onComplete()
+</span>146 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>147 <span style=''></span><span style='background: #AEF1AE'>      })
+</span>148 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>149 <span style=''>
+</span>150 <span style=''>  /**
+</span>151 <span style=''>   * Implementation for [[Observable.doOnStart]].
+</span>152 <span style=''>   */
+</span>153 <span style=''>  def onStart[T](source: Observable[T])(cb: T => Unit): Observable[T] =
+</span>154 <span style=''>    </span><span style='background: #AEF1AE'>Observable.create { subscriber =>
+</span>155 <span style=''></span><span style='background: #AEF1AE'>      implicit val s = subscriber.scheduler
+</span>156 <span style=''></span><span style='background: #AEF1AE'>      val observer = subscriber.observer
+</span>157 <span style=''></span><span style='background: #AEF1AE'>
+</span>158 <span style=''></span><span style='background: #AEF1AE'>      source.unsafeSubscribe(new Observer[T] {
+</span>159 <span style=''></span><span style='background: #AEF1AE'>        private[this] var isStarted = false
+</span>160 <span style=''></span><span style='background: #AEF1AE'>
+</span>161 <span style=''></span><span style='background: #AEF1AE'>        def onNext(elem: T) = {
+</span>162 <span style=''></span><span style='background: #AEF1AE'>          if (!isStarted) {
+</span>163 <span style=''></span><span style='background: #AEF1AE'>            isStarted = true
+</span>164 <span style=''></span><span style='background: #AEF1AE'>            var streamError = true
+</span>165 <span style=''></span><span style='background: #AEF1AE'>            try {
+</span>166 <span style=''></span><span style='background: #AEF1AE'>              cb(elem)
+</span>167 <span style=''></span><span style='background: #AEF1AE'>              streamError = false
+</span>168 <span style=''></span><span style='background: #AEF1AE'>              observer.onNext(elem)
+</span>169 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>170 <span style=''></span><span style='background: #AEF1AE'>            catch {
+</span>171 <span style=''></span><span style='background: #AEF1AE'>              case NonFatal(ex) =>
+</span>172 <span style=''></span><span style='background: #AEF1AE'>                observer.onError(ex)
+</span>173 <span style=''></span><span style='background: #AEF1AE'>                Cancel
+</span>174 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>175 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>176 <span style=''></span><span style='background: #AEF1AE'>          else
+</span>177 <span style=''></span><span style='background: #AEF1AE'>            observer.onNext(elem)
+</span>178 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>179 <span style=''></span><span style='background: #AEF1AE'>
+</span>180 <span style=''></span><span style='background: #AEF1AE'>        def onError(ex: Throwable) = observer.onError(ex)
+</span>181 <span style=''></span><span style='background: #AEF1AE'>        def onComplete() = observer.onComplete()
+</span>182 <span style=''></span><span style='background: #AEF1AE'>      })
+</span>183 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>184 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          32
+        </td>
+        <td>
+          4097
+        </td>
+        <td>
+          1015
+          -
+          1770
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observable.create
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Observable.create[T](((subscriber: monifu.reactive.Subscriber[T]) =&gt; {
+  implicit val s: monifu.concurrent.Scheduler = subscriber.scheduler;
+  val observer: monifu.reactive.Observer[T] = subscriber.observer;
+  source.unsafeSubscribe({
+    final class $anon extends AnyRef with monifu.reactive.Observer[T] {
+      def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[T]&gt; = {
+        $anon.super.&lt;init&gt;();
+        ()
+      };
+      def onError(ex: Throwable): Unit = observer.onError(ex);
+      def onComplete(): Unit = observer.onComplete();
+      def onNext(elem: T): scala.concurrent.Future[monifu.reactive.Ack] = {
+        var streamError: Boolean = true;
+        try {
+          cb.apply(elem);
+          streamError = false;
+          observer.onNext(elem)
+        } catch {
+          case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((ex @ _)) =&gt; if (streamError)
+            {
+              observer.onError(ex);
+              monifu.reactive.Ack.Cancel
+            }
+          else
+            scala.concurrent.Future.failed[Nothing](ex)
+        }
+      }
+    };
+    new $anon()
+  })(s)
+}))
+        </td>
+      </tr><tr>
+        <td>
+          33
+        </td>
+        <td>
+          4094
+        </td>
+        <td>
+          1075
+          -
+          1095
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          34
+        </td>
+        <td>
+          4095
+        </td>
+        <td>
+          1117
+          -
+          1136
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.observer
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.observer
+        </td>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          4096
+        </td>
+        <td>
+          1144
+          -
+          1764
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.Observable.unsafeSubscribe
+        </td>
+        <td style="background: #AEF1AE">
+          source.unsafeSubscribe({
+  final class $anon extends AnyRef with monifu.reactive.Observer[T] {
+    def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[T]&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def onError(ex: Throwable): Unit = observer.onError(ex);
+    def onComplete(): Unit = observer.onComplete();
+    def onNext(elem: T): scala.concurrent.Future[monifu.reactive.Ack] = {
+      var streamError: Boolean = true;
+      try {
+        cb.apply(elem);
+        streamError = false;
+        observer.onNext(elem)
+      } catch {
+        case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((ex @ _)) =&gt; if (streamError)
+          {
+            observer.onError(ex);
+            monifu.reactive.Ack.Cancel
+          }
+        else
+          scala.concurrent.Future.failed[Nothing](ex)
+      }
+    }
+  };
+  new $anon()
+})(s)
+        </td>
+      </tr><tr>
+        <td>
+          61
+        </td>
+        <td>
+          4101
+        </td>
+        <td>
+          1914
+          -
+          2593
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observable.create
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Observable.create[T](((subscriber: monifu.reactive.Subscriber[T]) =&gt; {
+  implicit val s: monifu.concurrent.Scheduler = subscriber.scheduler;
+  val observer: monifu.reactive.Observer[T] = subscriber.observer;
+  source.unsafeSubscribe({
+    final class $anon extends AnyRef with monifu.reactive.Observer[T] {
+      def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[T]&gt; = {
+        $anon.super.&lt;init&gt;();
+        ()
+      };
+      def onNext(elem: T): scala.concurrent.Future[monifu.reactive.Ack] = observer.onNext(elem);
+      def onError(ex: Throwable): Unit = observer.onError(ex);
+      def onComplete(): Unit = {
+        var streamError: Boolean = true;
+        try {
+          cb;
+          streamError = false;
+          observer.onComplete()
+        } catch {
+          case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((ex @ _)) =&gt; observer.onError(ex)
+        }
+      }
+    };
+    new $anon()
+  })(s)
+}))
+        </td>
+      </tr><tr>
+        <td>
+          62
+        </td>
+        <td>
+          4098
+        </td>
+        <td>
+          1974
+          -
+          1994
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          63
+        </td>
+        <td>
+          4099
+        </td>
+        <td>
+          2016
+          -
+          2035
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.observer
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.observer
+        </td>
+      </tr><tr>
+        <td>
+          65
+        </td>
+        <td>
+          4100
+        </td>
+        <td>
+          2043
+          -
+          2587
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.Observable.unsafeSubscribe
+        </td>
+        <td style="background: #AEF1AE">
+          source.unsafeSubscribe({
+  final class $anon extends AnyRef with monifu.reactive.Observer[T] {
+    def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[T]&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def onNext(elem: T): scala.concurrent.Future[monifu.reactive.Ack] = observer.onNext(elem);
+    def onError(ex: Throwable): Unit = observer.onError(ex);
+    def onComplete(): Unit = {
+      var streamError: Boolean = true;
+      try {
+        cb;
+        streamError = false;
+        observer.onComplete()
+      } catch {
+        case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((ex @ _)) =&gt; observer.onError(ex)
+      }
+    }
+  };
+  new $anon()
+})(s)
+        </td>
+      </tr><tr>
+        <td>
+          94
+        </td>
+        <td>
+          4105
+        </td>
+        <td>
+          2741
+          -
+          3465
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observable.create
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Observable.create[T](((subscriber: monifu.reactive.Subscriber[T]) =&gt; {
+  implicit val s: monifu.concurrent.Scheduler = subscriber.scheduler;
+  val observer: monifu.reactive.Observer[T] = subscriber.observer;
+  source.unsafeSubscribe({
+    final class $anon extends AnyRef with monifu.reactive.Observer[T] {
+      def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[T]&gt; = {
+        $anon.super.&lt;init&gt;();
+        ()
+      };
+      def onNext(elem: T): scala.concurrent.Future[monifu.reactive.Ack] = observer.onNext(elem);
+      def onError(ex: Throwable): Unit = try {
+        cb.apply(ex)
+      } catch {
+        case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((err @ _)) =&gt; s.reportFailure(err)
+      } finally observer.onError(ex);
+      def onComplete(): Unit = observer.onComplete()
+    };
+    new $anon()
+  })(s)
+}))
+        </td>
+      </tr><tr>
+        <td>
+          95
+        </td>
+        <td>
+          4102
+        </td>
+        <td>
+          2801
+          -
+          2821
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          96
+        </td>
+        <td>
+          4103
+        </td>
+        <td>
+          2843
+          -
+          2862
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.observer
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.observer
+        </td>
+      </tr><tr>
+        <td>
+          98
+        </td>
+        <td>
+          4104
+        </td>
+        <td>
+          2870
+          -
+          3459
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.Observable.unsafeSubscribe
+        </td>
+        <td style="background: #AEF1AE">
+          source.unsafeSubscribe({
+  final class $anon extends AnyRef with monifu.reactive.Observer[T] {
+    def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[T]&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def onNext(elem: T): scala.concurrent.Future[monifu.reactive.Ack] = observer.onNext(elem);
+    def onError(ex: Throwable): Unit = try {
+      cb.apply(ex)
+    } catch {
+      case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((err @ _)) =&gt; s.reportFailure(err)
+    } finally observer.onError(ex);
+    def onComplete(): Unit = observer.onComplete()
+  };
+  new $anon()
+})(s)
+        </td>
+      </tr><tr>
+        <td>
+          129
+        </td>
+        <td>
+          4110
+        </td>
+        <td>
+          3609
+          -
+          4110
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observable.create
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Observable.create[T](((subscriber: monifu.reactive.Subscriber[T]) =&gt; {
+  implicit val s: monifu.concurrent.Scheduler = subscriber.scheduler;
+  val observer: monifu.reactive.Observer[T] = subscriber.observer;
+  val isActive: monifu.concurrent.Cancelable = monifu.concurrent.Cancelable.apply(cb);
+  source.unsafeSubscribe({
+    final class $anon extends AnyRef with monifu.reactive.Observer[T] {
+      def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[T]&gt; = {
+        $anon.super.&lt;init&gt;();
+        ()
+      };
+      def onNext(elem: T): scala.concurrent.Future[monifu.reactive.Ack] = monifu.reactive.internals.`package`.FutureAckExtensions(observer.onNext(elem)).ifCanceledDoCancel(isActive)(s);
+      def onError(ex: Throwable): Unit = observer.onError(ex);
+      def onComplete(): Unit = observer.onComplete()
+    };
+    new $anon()
+  })(s)
+}))
+        </td>
+      </tr><tr>
+        <td>
+          130
+        </td>
+        <td>
+          4106
+        </td>
+        <td>
+          3669
+          -
+          3689
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          131
+        </td>
+        <td>
+          4107
+        </td>
+        <td>
+          3711
+          -
+          3730
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.observer
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.observer
+        </td>
+      </tr><tr>
+        <td>
+          132
+        </td>
+        <td>
+          4108
+        </td>
+        <td>
+          3752
+          -
+          3766
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Cancelable.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.Cancelable.apply(cb)
+        </td>
+      </tr><tr>
+        <td>
+          134
+        </td>
+        <td>
+          4109
+        </td>
+        <td>
+          3774
+          -
+          4104
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.Observable.unsafeSubscribe
+        </td>
+        <td style="background: #AEF1AE">
+          source.unsafeSubscribe({
+  final class $anon extends AnyRef with monifu.reactive.Observer[T] {
+    def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[T]&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def onNext(elem: T): scala.concurrent.Future[monifu.reactive.Ack] = monifu.reactive.internals.`package`.FutureAckExtensions(observer.onNext(elem)).ifCanceledDoCancel(isActive)(s);
+    def onError(ex: Throwable): Unit = observer.onError(ex);
+    def onComplete(): Unit = observer.onComplete()
+  };
+  new $anon()
+})(s)
+        </td>
+      </tr><tr>
+        <td>
+          154
+        </td>
+        <td>
+          4114
+        </td>
+        <td>
+          4250
+          -
+          5033
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observable.create
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Observable.create[T](((subscriber: monifu.reactive.Subscriber[T]) =&gt; {
+  implicit val s: monifu.concurrent.Scheduler = subscriber.scheduler;
+  val observer: monifu.reactive.Observer[T] = subscriber.observer;
+  source.unsafeSubscribe({
+    final class $anon extends AnyRef with monifu.reactive.Observer[T] {
+      def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[T]&gt; = {
+        $anon.super.&lt;init&gt;();
+        ()
+      };
+      private[this] var isStarted: Boolean = false;
+      def onNext(elem: T): scala.concurrent.Future[monifu.reactive.Ack] = if ($anon.this.isStarted.unary_!)
+        {
+          $anon.this.isStarted = true;
+          var streamError: Boolean = true;
+          try {
+            cb.apply(elem);
+            streamError = false;
+            observer.onNext(elem)
+          } catch {
+            case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((ex @ _)) =&gt; {
+              observer.onError(ex);
+              monifu.reactive.Ack.Cancel
+            }
+          }
+        }
+      else
+        observer.onNext(elem);
+      def onError(ex: Throwable): Unit = observer.onError(ex);
+      def onComplete(): Unit = observer.onComplete()
+    };
+    new $anon()
+  })(s)
+}))
+        </td>
+      </tr><tr>
+        <td>
+          155
+        </td>
+        <td>
+          4111
+        </td>
+        <td>
+          4307
+          -
+          4327
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          156
+        </td>
+        <td>
+          4112
+        </td>
+        <td>
+          4349
+          -
+          4368
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.observer
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.observer
+        </td>
+      </tr><tr>
+        <td>
+          158
+        </td>
+        <td>
+          4113
+        </td>
+        <td>
+          4376
+          -
+          5027
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.Observable.unsafeSubscribe
+        </td>
+        <td style="background: #AEF1AE">
+          source.unsafeSubscribe({
+  final class $anon extends AnyRef with monifu.reactive.Observer[T] {
+    def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[T]&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    private[this] var isStarted: Boolean = false;
+    def onNext(elem: T): scala.concurrent.Future[monifu.reactive.Ack] = if ($anon.this.isStarted.unary_!)
+      {
+        $anon.this.isStarted = true;
+        var streamError: Boolean = true;
+        try {
+          cb.apply(elem);
+          streamError = false;
+          observer.onNext(elem)
+        } catch {
+          case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((ex @ _)) =&gt; {
+            observer.onError(ex);
+            monifu.reactive.Ack.Cancel
+          }
+        }
+      }
+    else
+      observer.onNext(elem);
+    def onError(ex: Throwable): Unit = observer.onError(ex);
+    def onComplete(): Unit = observer.onComplete()
+  };
+  new $anon()
+})(s)
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

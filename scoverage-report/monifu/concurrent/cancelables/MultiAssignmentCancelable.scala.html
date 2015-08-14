@@ -1,0 +1,748 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          monifu/concurrent/cancelables/MultiAssignmentCancelable.scala.html
+        </title>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''> 
+</span>17 <span style=''>package monifu.concurrent.cancelables
+</span>18 <span style=''>
+</span>19 <span style=''>import monifu.concurrent.Cancelable
+</span>20 <span style=''>import monifu.concurrent.atomic.Atomic
+</span>21 <span style=''>import monifu.concurrent.cancelables.MultiAssignmentCancelable.State
+</span>22 <span style=''>import monifu.concurrent.cancelables.MultiAssignmentCancelable.State.{Cancelled, Active}
+</span>23 <span style=''>import scala.annotation.tailrec
+</span>24 <span style=''>
+</span>25 <span style=''>/**
+</span>26 <span style=''> * Represents a [[monifu.concurrent.Cancelable]] whose underlying cancelable reference can be swapped for another.
+</span>27 <span style=''> *
+</span>28 <span style=''> * Example:
+</span>29 <span style=''> * {{{
+</span>30 <span style=''> *   val s = MultiAssignmentCancelable()
+</span>31 <span style=''> *   s() = c1 // sets the underlying cancelable to c1
+</span>32 <span style=''> *   s() = c2 // swaps the underlying cancelable to c2
+</span>33 <span style=''> *
+</span>34 <span style=''> *   s.cancel() // also cancels c2
+</span>35 <span style=''> *
+</span>36 <span style=''> *   s() = c3 // also cancels c3, because s is already canceled
+</span>37 <span style=''> * }}}
+</span>38 <span style=''> */
+</span>39 <span style=''>final class MultiAssignmentCancelable private () extends BooleanCancelable {
+</span>40 <span style=''>  private[this] val state = </span><span style='background: #AEF1AE'>Atomic(Active(Cancelable()) : State)</span><span style=''>
+</span>41 <span style=''>
+</span>42 <span style=''>  def isCanceled: Boolean = </span><span style='background: #AEF1AE'>state.get</span><span style=''> match {
+</span>43 <span style=''>    case Cancelled => </span><span style='background: #AEF1AE'>true</span><span style=''>
+</span>44 <span style=''>    case _ => </span><span style='background: #AEF1AE'>false</span><span style=''>
+</span>45 <span style=''>  }
+</span>46 <span style=''>
+</span>47 <span style=''>  @tailrec
+</span>48 <span style=''>  def cancel(): Boolean = </span><span style='background: #AEF1AE'>state.get</span><span style=''> match {
+</span>49 <span style=''>    case Cancelled => </span><span style='background: #AEF1AE'>false</span><span style=''>
+</span>50 <span style=''>    case current @ Active(s) =>
+</span>51 <span style=''>      if (</span><span style='background: #AEF1AE'>state.compareAndSet(current, Cancelled)</span><span style=''>) </span><span style='background: #AEF1AE'>{
+</span>52 <span style=''></span><span style='background: #AEF1AE'>        s.cancel()
+</span>53 <span style=''></span><span style='background: #AEF1AE'>        true
+</span>54 <span style=''></span><span style='background: #AEF1AE'>      }</span><span style=''>
+</span>55 <span style=''>      else
+</span>56 <span style=''>        </span><span style='background: #F0ADAD'>cancel()</span><span style=''>
+</span>57 <span style=''>  }
+</span>58 <span style=''>
+</span>59 <span style=''>  /**
+</span>60 <span style=''>   * Swaps the underlying cancelable reference with `s`.
+</span>61 <span style=''>   *
+</span>62 <span style=''>   * In case this `MultiAssignmentCancelable` is already canceled,
+</span>63 <span style=''>   * then the reference `value` will also be canceled on assignment.
+</span>64 <span style=''>   */
+</span>65 <span style=''>  @tailrec
+</span>66 <span style=''>  def update(value: Cancelable): Unit = </span><span style='background: #AEF1AE'>state.get</span><span style=''> match {
+</span>67 <span style=''>    case Cancelled => </span><span style='background: #AEF1AE'>value.cancel()</span><span style=''>
+</span>68 <span style=''>    case current @ Active(s) =>
+</span>69 <span style=''>      if (</span><span style='background: #AEF1AE'>!state.compareAndSet(current, Active(value))</span><span style=''>)
+</span>70 <span style=''>        </span><span style='background: #F0ADAD'>update(value)</span><span style=''>
+</span>71 <span style=''>  }
+</span>72 <span style=''>
+</span>73 <span style=''>  /**
+</span>74 <span style=''>   * Alias for `update(value)`
+</span>75 <span style=''>   */
+</span>76 <span style=''>  def `:=`(value: Cancelable): Unit =
+</span>77 <span style=''>    </span><span style='background: #AEF1AE'>update(value)</span><span style=''>
+</span>78 <span style=''>}
+</span>79 <span style=''>
+</span>80 <span style=''>object MultiAssignmentCancelable {
+</span>81 <span style=''>  def apply(): MultiAssignmentCancelable =
+</span>82 <span style=''>    </span><span style='background: #AEF1AE'>new MultiAssignmentCancelable()</span><span style=''>
+</span>83 <span style=''>
+</span>84 <span style=''>  def apply(s: Cancelable): MultiAssignmentCancelable = {
+</span>85 <span style=''>    val ms = </span><span style='background: #AEF1AE'>new MultiAssignmentCancelable()</span><span style=''>
+</span>86 <span style=''>    </span><span style='background: #AEF1AE'>ms() = s</span><span style=''>
+</span>87 <span style=''>    ms
+</span>88 <span style=''>  }
+</span>89 <span style=''>
+</span>90 <span style=''>  sealed trait State
+</span>91 <span style=''>  object State {
+</span>92 <span style=''>    case class Active(s: Cancelable) extends State
+</span>93 <span style=''>    case object Cancelled extends State
+</span>94 <span style=''>  }
+</span>95 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          40
+        </td>
+        <td>
+          2156
+        </td>
+        <td>
+          1435
+          -
+          1435
+        </td>
+        <td>
+          TypeApply
+        </td>
+        <td>
+          monifu.concurrent.atomic.Implicits.Level1.AtomicRefBuilder
+        </td>
+        <td style="background: #AEF1AE">
+          atomic.this.AtomicBuilder.AtomicRefBuilder[monifu.concurrent.cancelables.MultiAssignmentCancelable.State]
+        </td>
+      </tr><tr>
+        <td>
+          40
+        </td>
+        <td>
+          2155
+        </td>
+        <td>
+          1436
+          -
+          1456
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.MultiAssignmentCancelable.State.Active.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.cancelables.MultiAssignmentCancelable.State.Active.apply(monifu.concurrent.Cancelable.apply())
+        </td>
+      </tr><tr>
+        <td>
+          40
+        </td>
+        <td>
+          2154
+        </td>
+        <td>
+          1443
+          -
+          1455
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Cancelable.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.Cancelable.apply()
+        </td>
+      </tr><tr>
+        <td>
+          40
+        </td>
+        <td>
+          2157
+        </td>
+        <td>
+          1429
+          -
+          1465
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.concurrent.atomic.Atomic.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.atomic.Atomic.apply[monifu.concurrent.cancelables.MultiAssignmentCancelable.State, monifu.concurrent.atomic.AtomicAny[monifu.concurrent.cancelables.MultiAssignmentCancelable.State]]((monifu.concurrent.cancelables.MultiAssignmentCancelable.State.Active.apply(monifu.concurrent.Cancelable.apply()): monifu.concurrent.cancelables.MultiAssignmentCancelable.State))(atomic.this.AtomicBuilder.AtomicRefBuilder[monifu.concurrent.cancelables.MultiAssignmentCancelable.State])
+        </td>
+      </tr><tr>
+        <td>
+          42
+        </td>
+        <td>
+          2158
+        </td>
+        <td>
+          1495
+          -
+          1504
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicAny.get
+        </td>
+        <td style="background: #AEF1AE">
+          MultiAssignmentCancelable.this.state.get
+        </td>
+      </tr><tr>
+        <td>
+          43
+        </td>
+        <td>
+          2159
+        </td>
+        <td>
+          1535
+          -
+          1539
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          44
+        </td>
+        <td>
+          2160
+        </td>
+        <td>
+          1554
+          -
+          1559
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          false
+        </td>
+      </tr><tr>
+        <td>
+          48
+        </td>
+        <td>
+          2161
+        </td>
+        <td>
+          1602
+          -
+          1611
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicAny.get
+        </td>
+        <td style="background: #AEF1AE">
+          MultiAssignmentCancelable.this.state.get
+        </td>
+      </tr><tr>
+        <td>
+          49
+        </td>
+        <td>
+          2162
+        </td>
+        <td>
+          1642
+          -
+          1647
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          false
+        </td>
+      </tr><tr>
+        <td>
+          51
+        </td>
+        <td>
+          2164
+        </td>
+        <td>
+          1690
+          -
+          1729
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicAny.compareAndSet
+        </td>
+        <td style="background: #AEF1AE">
+          MultiAssignmentCancelable.this.state.compareAndSet(current, monifu.concurrent.cancelables.MultiAssignmentCancelable.State.Cancelled)
+        </td>
+      </tr><tr>
+        <td>
+          51
+        </td>
+        <td>
+          2167
+        </td>
+        <td>
+          1731
+          -
+          1772
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  s.cancel();
+  true
+}
+        </td>
+      </tr><tr>
+        <td>
+          51
+        </td>
+        <td>
+          2163
+        </td>
+        <td>
+          1719
+          -
+          1728
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.cancelables.MultiAssignmentCancelable.State.Cancelled
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.cancelables.MultiAssignmentCancelable.State.Cancelled
+        </td>
+      </tr><tr>
+        <td>
+          52
+        </td>
+        <td>
+          2165
+        </td>
+        <td>
+          1741
+          -
+          1751
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Cancelable.cancel
+        </td>
+        <td style="background: #AEF1AE">
+          s.cancel()
+        </td>
+      </tr><tr>
+        <td>
+          53
+        </td>
+        <td>
+          2166
+        </td>
+        <td>
+          1760
+          -
+          1764
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          56
+        </td>
+        <td>
+          2169
+        </td>
+        <td>
+          1792
+          -
+          1800
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.concurrent.cancelables.MultiAssignmentCancelable.cancel
+        </td>
+        <td style="background: #F0ADAD">
+          MultiAssignmentCancelable.this.cancel()
+        </td>
+      </tr><tr>
+        <td>
+          56
+        </td>
+        <td>
+          2168
+        </td>
+        <td>
+          1792
+          -
+          1800
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.MultiAssignmentCancelable.cancel
+        </td>
+        <td style="background: #F0ADAD">
+          MultiAssignmentCancelable.this.cancel()
+        </td>
+      </tr><tr>
+        <td>
+          66
+        </td>
+        <td>
+          2170
+        </td>
+        <td>
+          2067
+          -
+          2076
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicAny.get
+        </td>
+        <td style="background: #AEF1AE">
+          MultiAssignmentCancelable.this.state.get
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          2172
+        </td>
+        <td>
+          2119
+          -
+          2119
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          2171
+        </td>
+        <td>
+          2107
+          -
+          2121
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Cancelable.cancel
+        </td>
+        <td style="background: #AEF1AE">
+          value.cancel()
+        </td>
+      </tr><tr>
+        <td>
+          69
+        </td>
+        <td>
+          2173
+        </td>
+        <td>
+          2194
+          -
+          2207
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.MultiAssignmentCancelable.State.Active.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.cancelables.MultiAssignmentCancelable.State.Active.apply(value)
+        </td>
+      </tr><tr>
+        <td>
+          69
+        </td>
+        <td>
+          2178
+        </td>
+        <td>
+          2160
+          -
+          2160
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          69
+        </td>
+        <td>
+          2174
+        </td>
+        <td>
+          2164
+          -
+          2208
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          MultiAssignmentCancelable.this.state.compareAndSet(current, monifu.concurrent.cancelables.MultiAssignmentCancelable.State.Active.apply(value)).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          69
+        </td>
+        <td>
+          2177
+        </td>
+        <td>
+          2160
+          -
+          2160
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          70
+        </td>
+        <td>
+          2176
+        </td>
+        <td>
+          2218
+          -
+          2231
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.concurrent.cancelables.MultiAssignmentCancelable.update
+        </td>
+        <td style="background: #F0ADAD">
+          MultiAssignmentCancelable.this.update(value)
+        </td>
+      </tr><tr>
+        <td>
+          70
+        </td>
+        <td>
+          2175
+        </td>
+        <td>
+          2218
+          -
+          2231
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.MultiAssignmentCancelable.update
+        </td>
+        <td style="background: #F0ADAD">
+          MultiAssignmentCancelable.this.update(value)
+        </td>
+      </tr><tr>
+        <td>
+          77
+        </td>
+        <td>
+          2179
+        </td>
+        <td>
+          2322
+          -
+          2335
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.MultiAssignmentCancelable.update
+        </td>
+        <td style="background: #AEF1AE">
+          MultiAssignmentCancelable.this.update(value)
+        </td>
+      </tr><tr>
+        <td>
+          82
+        </td>
+        <td>
+          2180
+        </td>
+        <td>
+          2421
+          -
+          2452
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.MultiAssignmentCancelable.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new MultiAssignmentCancelable()
+        </td>
+      </tr><tr>
+        <td>
+          85
+        </td>
+        <td>
+          2181
+        </td>
+        <td>
+          2525
+          -
+          2556
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.MultiAssignmentCancelable.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new MultiAssignmentCancelable()
+        </td>
+      </tr><tr>
+        <td>
+          86
+        </td>
+        <td>
+          2182
+        </td>
+        <td>
+          2561
+          -
+          2569
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.MultiAssignmentCancelable.update
+        </td>
+        <td style="background: #AEF1AE">
+          ms.update(s)
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

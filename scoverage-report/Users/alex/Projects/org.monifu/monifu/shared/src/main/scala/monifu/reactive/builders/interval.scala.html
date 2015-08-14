@@ -1,0 +1,1161 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          /Users/alex/Projects/org.monifu/monifu/shared/src/main/scala/monifu/reactive/builders/interval.scala.html
+        </title>
+        <link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css"/>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+        <script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script>
+        <script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.18.3/addons/pager/jquery.tablesorter.pager.min.js"></script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''>
+</span>17 <span style=''>package monifu.reactive.builders
+</span>18 <span style=''>
+</span>19 <span style=''>import java.util.concurrent.TimeUnit
+</span>20 <span style=''>import monifu.reactive.Observable
+</span>21 <span style=''>import monifu.reactive.internals._
+</span>22 <span style=''>import scala.concurrent.duration._
+</span>23 <span style=''>
+</span>24 <span style=''>
+</span>25 <span style=''>object interval {
+</span>26 <span style=''>  /**
+</span>27 <span style=''>   * Creates an Observable that emits auto-incremented natural numbers (longs) spaced equally by
+</span>28 <span style=''>   * a given time interval. Starts from 0 with no delay, after which it emits incremented
+</span>29 <span style=''>   * numbers spaced by the `period` of time.
+</span>30 <span style=''>   *
+</span>31 <span style=''>   * <img src="https://raw.githubusercontent.com/wiki/monifu/monifu/assets/rx-operators/interval.png"" />
+</span>32 <span style=''>   *
+</span>33 <span style=''>   * @param delay the delay between two subsequent events
+</span>34 <span style=''>   */
+</span>35 <span style=''>  def withFixedDelay(delay: FiniteDuration): Observable[Long] = {
+</span>36 <span style=''>    </span><span style='background: #AEF1AE'>Observable.create { subscriber =>
+</span>37 <span style=''></span><span style='background: #AEF1AE'>      implicit val s = subscriber.scheduler
+</span>38 <span style=''></span><span style='background: #AEF1AE'>      val o = subscriber.observer
+</span>39 <span style=''></span><span style='background: #AEF1AE'>
+</span>40 <span style=''></span><span style='background: #AEF1AE'>      s.execute(new Runnable { self =>
+</span>41 <span style=''></span><span style='background: #AEF1AE'>        import monifu.reactive.internals.ObserverState.{ON_CONTINUE, ON_NEXT}
+</span>42 <span style=''></span><span style='background: #AEF1AE'>        var state = ON_NEXT
+</span>43 <span style=''></span><span style='background: #AEF1AE'>        var counter = 0L
+</span>44 <span style=''></span><span style='background: #AEF1AE'>
+</span>45 <span style=''></span><span style='background: #AEF1AE'>        def run() = state match {
+</span>46 <span style=''></span><span style='background: #AEF1AE'>          case ON_NEXT =>
+</span>47 <span style=''></span><span style='background: #AEF1AE'>            state = ON_CONTINUE
+</span>48 <span style=''></span><span style='background: #AEF1AE'>            o.onNext(counter).onContinue(self)
+</span>49 <span style=''></span><span style='background: #AEF1AE'>
+</span>50 <span style=''></span><span style='background: #AEF1AE'>          case ON_CONTINUE =>
+</span>51 <span style=''></span><span style='background: #AEF1AE'>            state = ON_NEXT
+</span>52 <span style=''></span><span style='background: #AEF1AE'>            counter += 1
+</span>53 <span style=''></span><span style='background: #AEF1AE'>            s.scheduleOnce(delay, self)
+</span>54 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>55 <span style=''></span><span style='background: #AEF1AE'>      })
+</span>56 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>57 <span style=''>  }
+</span>58 <span style=''>
+</span>59 <span style=''>  /**
+</span>60 <span style=''>   * Creates an Observable that emits auto-incremented natural numbers (longs) emitted
+</span>61 <span style=''>   * at a fixed rate, as specified by `period`.
+</span>62 <span style=''>   *
+</span>63 <span style=''>   * @param period the delay between two subsequent events
+</span>64 <span style=''>   */
+</span>65 <span style=''>  def atFixedRate(period: FiniteDuration): Observable[Long] = {
+</span>66 <span style=''>    </span><span style='background: #AEF1AE'>Observable.create { subscriber =>
+</span>67 <span style=''></span><span style='background: #AEF1AE'>      implicit val s = subscriber.scheduler
+</span>68 <span style=''></span><span style='background: #AEF1AE'>      val o = subscriber.observer
+</span>69 <span style=''></span><span style='background: #AEF1AE'>
+</span>70 <span style=''></span><span style='background: #AEF1AE'>      s.execute(new Runnable { self =>
+</span>71 <span style=''></span><span style='background: #AEF1AE'>        import monifu.reactive.internals.ObserverState.{ON_CONTINUE, ON_NEXT}
+</span>72 <span style=''></span><span style='background: #AEF1AE'>
+</span>73 <span style=''></span><span style='background: #AEF1AE'>        private[this] val periodMillis = period.toMillis
+</span>74 <span style=''></span><span style='background: #AEF1AE'>        private[this] var state = ON_NEXT
+</span>75 <span style=''></span><span style='background: #AEF1AE'>        private[this] var counter = 0L
+</span>76 <span style=''></span><span style='background: #AEF1AE'>        private[this] var startedAt = 0L
+</span>77 <span style=''></span><span style='background: #AEF1AE'>
+</span>78 <span style=''></span><span style='background: #AEF1AE'>        def run() = state match {
+</span>79 <span style=''></span><span style='background: #AEF1AE'>          case ON_NEXT =>
+</span>80 <span style=''></span><span style='background: #AEF1AE'>            state = ON_CONTINUE
+</span>81 <span style=''></span><span style='background: #AEF1AE'>            startedAt = s.currentTimeMillis()
+</span>82 <span style=''></span><span style='background: #AEF1AE'>            o.onNext(counter).onContinue(self)
+</span>83 <span style=''></span><span style='background: #AEF1AE'>
+</span>84 <span style=''></span><span style='background: #AEF1AE'>          case ON_CONTINUE =>
+</span>85 <span style=''></span><span style='background: #AEF1AE'>            state = ON_NEXT
+</span>86 <span style=''></span><span style='background: #AEF1AE'>            counter += 1
+</span>87 <span style=''></span><span style='background: #AEF1AE'>
+</span>88 <span style=''></span><span style='background: #AEF1AE'>            val delay = {
+</span>89 <span style=''></span><span style='background: #AEF1AE'>              val durationMillis = s.currentTimeMillis() - startedAt
+</span>90 <span style=''></span><span style='background: #AEF1AE'>              val d = periodMillis - durationMillis
+</span>91 <span style=''></span><span style='background: #AEF1AE'>              if (d >= 0L) d else </span><span style='background: #F0ADAD'>0L</span><span style='background: #AEF1AE'>
+</span>92 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>93 <span style=''></span><span style='background: #AEF1AE'>
+</span>94 <span style=''></span><span style='background: #AEF1AE'>            s.scheduleOnce(delay, TimeUnit.MILLISECONDS, self)
+</span>95 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>96 <span style=''></span><span style='background: #AEF1AE'>      })
+</span>97 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>98 <span style=''>  }
+</span>99 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          2834
+        </td>
+        <td>
+          1294
+          -
+          1865
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observable.create
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Observable.create[Long](((subscriber: monifu.reactive.Subscriber[Long]) =&gt; {
+  implicit val s: monifu.concurrent.Scheduler = subscriber.scheduler;
+  val o: monifu.reactive.Observer[Long] = subscriber.observer;
+  s.execute({
+    final class $anon extends Object with Runnable { self: &lt;$anon: Runnable&gt; =&gt; 
+      def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+        $anon.super.&lt;init&gt;();
+        ()
+      };
+      import monifu.reactive.internals.ObserverState.{ON_CONTINUE, ON_NEXT};
+      private[this] var state: monifu.reactive.internals.ObserverState.Value = monifu.reactive.internals.ObserverState.ON_NEXT;
+      &lt;accessor&gt; def state: monifu.reactive.internals.ObserverState.Value = $anon.this.state;
+      &lt;accessor&gt; def state_=(x$1: monifu.reactive.internals.ObserverState.Value): Unit = $anon.this.state = x$1;
+      private[this] var counter: Long = 0L;
+      &lt;accessor&gt; def counter: Long = $anon.this.counter;
+      &lt;accessor&gt; def counter_=(x$1: Long): Unit = $anon.this.counter = x$1;
+      def run(): Unit = $anon.this.state match {
+        case monifu.reactive.internals.ObserverState.ON_NEXT =&gt; {
+          $anon.this.state_=(monifu.reactive.internals.ObserverState.ON_CONTINUE);
+          monifu.reactive.internals.`package`.FutureAckExtensions(o.onNext($anon.this.counter)).onContinue($anon.this)(s)
+        }
+        case monifu.reactive.internals.ObserverState.ON_CONTINUE =&gt; {
+          $anon.this.state_=(monifu.reactive.internals.ObserverState.ON_NEXT);
+          $anon.this.counter_=($anon.this.counter.+(1));
+          {
+            s.scheduleOnce(delay, $anon.this);
+            ()
+          }
+        }
+      }
+    };
+    new $anon()
+  })
+}))
+        </td>
+      </tr><tr>
+        <td>
+          37
+        </td>
+        <td>
+          2818
+        </td>
+        <td>
+          1351
+          -
+          1371
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          38
+        </td>
+        <td>
+          2819
+        </td>
+        <td>
+          1386
+          -
+          1405
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.observer
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.observer
+        </td>
+      </tr><tr>
+        <td>
+          40
+        </td>
+        <td>
+          2833
+        </td>
+        <td>
+          1413
+          -
+          1859
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.execute
+        </td>
+        <td style="background: #AEF1AE">
+          s.execute({
+  final class $anon extends Object with Runnable { self: &lt;$anon: Runnable&gt; =&gt; 
+    def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    import monifu.reactive.internals.ObserverState.{ON_CONTINUE, ON_NEXT};
+    private[this] var state: monifu.reactive.internals.ObserverState.Value = monifu.reactive.internals.ObserverState.ON_NEXT;
+    &lt;accessor&gt; def state: monifu.reactive.internals.ObserverState.Value = $anon.this.state;
+    &lt;accessor&gt; def state_=(x$1: monifu.reactive.internals.ObserverState.Value): Unit = $anon.this.state = x$1;
+    private[this] var counter: Long = 0L;
+    &lt;accessor&gt; def counter: Long = $anon.this.counter;
+    &lt;accessor&gt; def counter_=(x$1: Long): Unit = $anon.this.counter = x$1;
+    def run(): Unit = $anon.this.state match {
+      case monifu.reactive.internals.ObserverState.ON_NEXT =&gt; {
+        $anon.this.state_=(monifu.reactive.internals.ObserverState.ON_CONTINUE);
+        monifu.reactive.internals.`package`.FutureAckExtensions(o.onNext($anon.this.counter)).onContinue($anon.this)(s)
+      }
+      case monifu.reactive.internals.ObserverState.ON_CONTINUE =&gt; {
+        $anon.this.state_=(monifu.reactive.internals.ObserverState.ON_NEXT);
+        $anon.this.counter_=($anon.this.counter.+(1));
+        {
+          s.scheduleOnce(delay, $anon.this);
+          ()
+        }
+      }
+    }
+  };
+  new $anon()
+})
+        </td>
+      </tr><tr>
+        <td>
+          40
+        </td>
+        <td>
+          2832
+        </td>
+        <td>
+          1423
+          -
+          1426
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.builders.interval.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          42
+        </td>
+        <td>
+          2820
+        </td>
+        <td>
+          1544
+          -
+          1551
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.ObserverState.ON_NEXT
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.internals.ObserverState.ON_NEXT
+        </td>
+      </tr><tr>
+        <td>
+          43
+        </td>
+        <td>
+          2821
+        </td>
+        <td>
+          1574
+          -
+          1576
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          0L
+        </td>
+      </tr><tr>
+        <td>
+          45
+        </td>
+        <td>
+          2822
+        </td>
+        <td>
+          1598
+          -
+          1603
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.builders.interval.$anon.state
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this.state
+        </td>
+      </tr><tr>
+        <td>
+          47
+        </td>
+        <td>
+          2824
+        </td>
+        <td>
+          1650
+          -
+          1669
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.builders.interval.$anon.state_=
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this.state_=(monifu.reactive.internals.ObserverState.ON_CONTINUE)
+        </td>
+      </tr><tr>
+        <td>
+          47
+        </td>
+        <td>
+          2823
+        </td>
+        <td>
+          1658
+          -
+          1669
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.ObserverState.ON_CONTINUE
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.internals.ObserverState.ON_CONTINUE
+        </td>
+      </tr><tr>
+        <td>
+          48
+        </td>
+        <td>
+          2825
+        </td>
+        <td>
+          1682
+          -
+          1716
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.internals.FutureAckExtensions.onContinue
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.internals.`package`.FutureAckExtensions(o.onNext($anon.this.counter)).onContinue($anon.this)(s)
+        </td>
+      </tr><tr>
+        <td>
+          51
+        </td>
+        <td>
+          2827
+        </td>
+        <td>
+          1760
+          -
+          1775
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.builders.interval.$anon.state_=
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this.state_=(monifu.reactive.internals.ObserverState.ON_NEXT)
+        </td>
+      </tr><tr>
+        <td>
+          51
+        </td>
+        <td>
+          2826
+        </td>
+        <td>
+          1768
+          -
+          1775
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.ObserverState.ON_NEXT
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.internals.ObserverState.ON_NEXT
+        </td>
+      </tr><tr>
+        <td>
+          52
+        </td>
+        <td>
+          2828
+        </td>
+        <td>
+          1788
+          -
+          1800
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.+
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this.counter.+(1)
+        </td>
+      </tr><tr>
+        <td>
+          52
+        </td>
+        <td>
+          2829
+        </td>
+        <td>
+          1788
+          -
+          1800
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.builders.interval.$anon.counter_=
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this.counter_=($anon.this.counter.+(1))
+        </td>
+      </tr><tr>
+        <td>
+          53
+        </td>
+        <td>
+          2831
+        </td>
+        <td>
+          1827
+          -
+          1827
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          53
+        </td>
+        <td>
+          2830
+        </td>
+        <td>
+          1813
+          -
+          1840
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.scheduleOnce
+        </td>
+        <td style="background: #AEF1AE">
+          s.scheduleOnce(delay, $anon.this)
+        </td>
+      </tr><tr>
+        <td>
+          66
+        </td>
+        <td>
+          2859
+        </td>
+        <td>
+          2150
+          -
+          3117
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observable.create
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Observable.create[Long](((subscriber: monifu.reactive.Subscriber[Long]) =&gt; {
+  implicit val s: monifu.concurrent.Scheduler = subscriber.scheduler;
+  val o: monifu.reactive.Observer[Long] = subscriber.observer;
+  s.execute({
+    final class $anon extends Object with Runnable { self: &lt;$anon: Runnable&gt; =&gt; 
+      def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+        $anon.super.&lt;init&gt;();
+        ()
+      };
+      import monifu.reactive.internals.ObserverState.{ON_CONTINUE, ON_NEXT};
+      private[this] val periodMillis: Long = period.toMillis;
+      private[this] var state: monifu.reactive.internals.ObserverState.Value = monifu.reactive.internals.ObserverState.ON_NEXT;
+      private[this] var counter: Long = 0L;
+      private[this] var startedAt: Long = 0L;
+      def run(): Unit = $anon.this.state match {
+        case monifu.reactive.internals.ObserverState.ON_NEXT =&gt; {
+          $anon.this.state = monifu.reactive.internals.ObserverState.ON_CONTINUE;
+          $anon.this.startedAt = s.currentTimeMillis();
+          monifu.reactive.internals.`package`.FutureAckExtensions(o.onNext($anon.this.counter)).onContinue($anon.this)(s)
+        }
+        case monifu.reactive.internals.ObserverState.ON_CONTINUE =&gt; {
+          $anon.this.state = monifu.reactive.internals.ObserverState.ON_NEXT;
+          $anon.this.counter = $anon.this.counter.+(1);
+          val delay: Long = {
+            val durationMillis: Long = s.currentTimeMillis().-($anon.this.startedAt);
+            val d: Long = $anon.this.periodMillis.-(durationMillis);
+            if (d.&gt;=(0L))
+              d
+            else
+              0L
+          };
+          {
+            s.scheduleOnce(delay, MILLISECONDS, $anon.this);
+            ()
+          }
+        }
+      }
+    };
+    new $anon()
+  })
+}))
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          2835
+        </td>
+        <td>
+          2207
+          -
+          2227
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          68
+        </td>
+        <td>
+          2836
+        </td>
+        <td>
+          2242
+          -
+          2261
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.observer
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.observer
+        </td>
+      </tr><tr>
+        <td>
+          70
+        </td>
+        <td>
+          2858
+        </td>
+        <td>
+          2269
+          -
+          3111
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.execute
+        </td>
+        <td style="background: #AEF1AE">
+          s.execute({
+  final class $anon extends Object with Runnable { self: &lt;$anon: Runnable&gt; =&gt; 
+    def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    import monifu.reactive.internals.ObserverState.{ON_CONTINUE, ON_NEXT};
+    private[this] val periodMillis: Long = period.toMillis;
+    private[this] var state: monifu.reactive.internals.ObserverState.Value = monifu.reactive.internals.ObserverState.ON_NEXT;
+    private[this] var counter: Long = 0L;
+    private[this] var startedAt: Long = 0L;
+    def run(): Unit = $anon.this.state match {
+      case monifu.reactive.internals.ObserverState.ON_NEXT =&gt; {
+        $anon.this.state = monifu.reactive.internals.ObserverState.ON_CONTINUE;
+        $anon.this.startedAt = s.currentTimeMillis();
+        monifu.reactive.internals.`package`.FutureAckExtensions(o.onNext($anon.this.counter)).onContinue($anon.this)(s)
+      }
+      case monifu.reactive.internals.ObserverState.ON_CONTINUE =&gt; {
+        $anon.this.state = monifu.reactive.internals.ObserverState.ON_NEXT;
+        $anon.this.counter = $anon.this.counter.+(1);
+        val delay: Long = {
+          val durationMillis: Long = s.currentTimeMillis().-($anon.this.startedAt);
+          val d: Long = $anon.this.periodMillis.-(durationMillis);
+          if (d.&gt;=(0L))
+            d
+          else
+            0L
+        };
+        {
+          s.scheduleOnce(delay, MILLISECONDS, $anon.this);
+          ()
+        }
+      }
+    }
+  };
+  new $anon()
+})
+        </td>
+      </tr><tr>
+        <td>
+          70
+        </td>
+        <td>
+          2857
+        </td>
+        <td>
+          2279
+          -
+          2282
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.builders.interval.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          73
+        </td>
+        <td>
+          2837
+        </td>
+        <td>
+          2422
+          -
+          2437
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.duration.FiniteDuration.toMillis
+        </td>
+        <td style="background: #AEF1AE">
+          period.toMillis
+        </td>
+      </tr><tr>
+        <td>
+          74
+        </td>
+        <td>
+          2838
+        </td>
+        <td>
+          2472
+          -
+          2479
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.ObserverState.ON_NEXT
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.internals.ObserverState.ON_NEXT
+        </td>
+      </tr><tr>
+        <td>
+          75
+        </td>
+        <td>
+          2839
+        </td>
+        <td>
+          2516
+          -
+          2518
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          0L
+        </td>
+      </tr><tr>
+        <td>
+          76
+        </td>
+        <td>
+          2840
+        </td>
+        <td>
+          2557
+          -
+          2559
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          0L
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          2841
+        </td>
+        <td>
+          2581
+          -
+          2586
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.builders.interval.$anon.state
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this.state
+        </td>
+      </tr><tr>
+        <td>
+          80
+        </td>
+        <td>
+          2842
+        </td>
+        <td>
+          2641
+          -
+          2652
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.ObserverState.ON_CONTINUE
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.internals.ObserverState.ON_CONTINUE
+        </td>
+      </tr><tr>
+        <td>
+          81
+        </td>
+        <td>
+          2843
+        </td>
+        <td>
+          2677
+          -
+          2698
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.currentTimeMillis
+        </td>
+        <td style="background: #AEF1AE">
+          s.currentTimeMillis()
+        </td>
+      </tr><tr>
+        <td>
+          82
+        </td>
+        <td>
+          2844
+        </td>
+        <td>
+          2711
+          -
+          2745
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.internals.FutureAckExtensions.onContinue
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.internals.`package`.FutureAckExtensions(o.onNext($anon.this.counter)).onContinue($anon.this)(s)
+        </td>
+      </tr><tr>
+        <td>
+          85
+        </td>
+        <td>
+          2845
+        </td>
+        <td>
+          2797
+          -
+          2804
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.ObserverState.ON_NEXT
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.internals.ObserverState.ON_NEXT
+        </td>
+      </tr><tr>
+        <td>
+          86
+        </td>
+        <td>
+          2846
+        </td>
+        <td>
+          2817
+          -
+          2829
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.+
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this.counter.+(1)
+        </td>
+      </tr><tr>
+        <td>
+          89
+        </td>
+        <td>
+          2848
+        </td>
+        <td>
+          2892
+          -
+          2925
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.-
+        </td>
+        <td style="background: #AEF1AE">
+          s.currentTimeMillis().-($anon.this.startedAt)
+        </td>
+      </tr><tr>
+        <td>
+          89
+        </td>
+        <td>
+          2847
+        </td>
+        <td>
+          2916
+          -
+          2925
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.builders.interval.$anon.startedAt
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this.startedAt
+        </td>
+      </tr><tr>
+        <td>
+          90
+        </td>
+        <td>
+          2849
+        </td>
+        <td>
+          2948
+          -
+          2977
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.-
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this.periodMillis.-(durationMillis)
+        </td>
+      </tr><tr>
+        <td>
+          91
+        </td>
+        <td>
+          2852
+        </td>
+        <td>
+          3012
+          -
+          3014
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          0L
+        </td>
+      </tr><tr>
+        <td>
+          91
+        </td>
+        <td>
+          2851
+        </td>
+        <td>
+          3005
+          -
+          3006
+        </td>
+        <td>
+          Ident
+        </td>
+        <td>
+          monifu.reactive.builders.interval.$anon.d
+        </td>
+        <td style="background: #AEF1AE">
+          d
+        </td>
+      </tr><tr>
+        <td>
+          91
+        </td>
+        <td>
+          2850
+        </td>
+        <td>
+          2996
+          -
+          3003
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.&gt;=
+        </td>
+        <td style="background: #AEF1AE">
+          d.&gt;=(0L)
+        </td>
+      </tr><tr>
+        <td>
+          91
+        </td>
+        <td>
+          2853
+        </td>
+        <td>
+          3012
+          -
+          3014
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          0L
+        </td>
+      </tr><tr>
+        <td>
+          94
+        </td>
+        <td>
+          2855
+        </td>
+        <td>
+          3042
+          -
+          3092
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.scheduleOnce
+        </td>
+        <td style="background: #AEF1AE">
+          s.scheduleOnce(delay, MILLISECONDS, $anon.this)
+        </td>
+      </tr><tr>
+        <td>
+          94
+        </td>
+        <td>
+          2854
+        </td>
+        <td>
+          3064
+          -
+          3085
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          MILLISECONDS
+        </td>
+      </tr><tr>
+        <td>
+          94
+        </td>
+        <td>
+          2856
+        </td>
+        <td>
+          3056
+          -
+          3056
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

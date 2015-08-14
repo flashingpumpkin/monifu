@@ -1,0 +1,4365 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          monifu/concurrent/atomic/AtomicDouble.scala.html
+        </title>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *      http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''> 
+</span>17 <span style=''>package monifu.concurrent.atomic
+</span>18 <span style=''>
+</span>19 <span style=''>import scala.annotation.tailrec
+</span>20 <span style=''>import scala.concurrent._
+</span>21 <span style=''>import scala.concurrent.duration.FiniteDuration
+</span>22 <span style=''>import java.lang.Double.{longBitsToDouble, doubleToLongBits}
+</span>23 <span style=''>import java.util.concurrent.atomic.{AtomicLong => JavaAtomicLong}
+</span>24 <span style=''>
+</span>25 <span style=''>final class AtomicDouble private (ref: JavaAtomicLong)
+</span>26 <span style=''>  extends AtomicNumber[Double] with BlockableAtomic[Double] {
+</span>27 <span style=''>
+</span>28 <span style=''>  def get: Double =
+</span>29 <span style=''>    </span><span style='background: #AEF1AE'>longBitsToDouble(ref.get())</span><span style=''>
+</span>30 <span style=''>
+</span>31 <span style=''>  def set(update: Double) = {
+</span>32 <span style=''>    </span><span style='background: #AEF1AE'>ref.set(doubleToLongBits(update))</span><span style=''>
+</span>33 <span style=''>  }
+</span>34 <span style=''>
+</span>35 <span style=''>  def lazySet(update: Double) = {
+</span>36 <span style=''>    </span><span style='background: #F0ADAD'>ref.lazySet(doubleToLongBits(update))</span><span style=''>
+</span>37 <span style=''>  }
+</span>38 <span style=''>
+</span>39 <span style=''>  def compareAndSet(expect: Double, update: Double): Boolean = {
+</span>40 <span style=''>    val current = </span><span style='background: #AEF1AE'>ref.get()</span><span style=''>
+</span>41 <span style=''>    </span><span style='background: #AEF1AE'>current == doubleToLongBits(expect) && ref.compareAndSet(current, doubleToLongBits(update))</span><span style=''>
+</span>42 <span style=''>  }
+</span>43 <span style=''>
+</span>44 <span style=''>  def getAndSet(update: Double): Double = {
+</span>45 <span style=''>    </span><span style='background: #AEF1AE'>longBitsToDouble(ref.getAndSet(doubleToLongBits(update)))</span><span style=''>
+</span>46 <span style=''>  }
+</span>47 <span style=''>
+</span>48 <span style=''>  def update(value: Double): Unit = </span><span style='background: #F0ADAD'>set(value)</span><span style=''>
+</span>49 <span style=''>
+</span>50 <span style=''>  def `:=`(value: Double): Unit = </span><span style='background: #F0ADAD'>set(value)</span><span style=''>
+</span>51 <span style=''>
+</span>52 <span style=''>  @tailrec
+</span>53 <span style=''>  def transformAndExtract[U](cb: (Double) => (U, Double)): U = {
+</span>54 <span style=''>    val current = </span><span style='background: #AEF1AE'>get</span><span style=''>
+</span>55 <span style=''>    val (extract, update) = cb(current)
+</span>56 <span style=''>    if (</span><span style='background: #AEF1AE'>!compareAndSet(current, update)</span><span style=''>)
+</span>57 <span style=''>      </span><span style='background: #F0ADAD'>transformAndExtract(cb)</span><span style=''>
+</span>58 <span style=''>    else
+</span>59 <span style=''>      </span><span style='background: #AEF1AE'>extract</span><span style=''>
+</span>60 <span style=''>  }
+</span>61 <span style=''>
+</span>62 <span style=''>  @tailrec
+</span>63 <span style=''>  def transformAndGet(cb: (Double) => Double): Double = {
+</span>64 <span style=''>    val current = </span><span style='background: #AEF1AE'>get</span><span style=''>
+</span>65 <span style=''>    val update = </span><span style='background: #AEF1AE'>cb(current)</span><span style=''>
+</span>66 <span style=''>    if (</span><span style='background: #AEF1AE'>!compareAndSet(current, update)</span><span style=''>)
+</span>67 <span style=''>      </span><span style='background: #F0ADAD'>transformAndGet(cb)</span><span style=''>
+</span>68 <span style=''>    else
+</span>69 <span style=''>      </span><span style='background: #AEF1AE'>update</span><span style=''>
+</span>70 <span style=''>  }
+</span>71 <span style=''>
+</span>72 <span style=''>  @tailrec
+</span>73 <span style=''>  def getAndTransform(cb: (Double) => Double): Double = {
+</span>74 <span style=''>    val current = </span><span style='background: #AEF1AE'>get</span><span style=''>
+</span>75 <span style=''>    val update = </span><span style='background: #AEF1AE'>cb(current)</span><span style=''>
+</span>76 <span style=''>    if (</span><span style='background: #AEF1AE'>!compareAndSet(current, update)</span><span style=''>)
+</span>77 <span style=''>      </span><span style='background: #F0ADAD'>getAndTransform(cb)</span><span style=''>
+</span>78 <span style=''>    else
+</span>79 <span style=''>      </span><span style='background: #AEF1AE'>current</span><span style=''>
+</span>80 <span style=''>  }
+</span>81 <span style=''>
+</span>82 <span style=''>  @tailrec
+</span>83 <span style=''>  def transform(cb: (Double) => Double): Unit = {
+</span>84 <span style=''>    val current = </span><span style='background: #AEF1AE'>get</span><span style=''>
+</span>85 <span style=''>    val update = </span><span style='background: #AEF1AE'>cb(current)</span><span style=''>
+</span>86 <span style=''>    if (</span><span style='background: #AEF1AE'>!compareAndSet(current, update)</span><span style=''>)
+</span>87 <span style=''>      </span><span style='background: #AEF1AE'>transform(cb)</span><span style=''>
+</span>88 <span style=''>  }
+</span>89 <span style=''>
+</span>90 <span style=''>  @tailrec
+</span>91 <span style=''>  @throws(classOf[InterruptedException])
+</span>92 <span style=''>  def waitForCompareAndSet(expect: Double, update: Double): Unit =
+</span>93 <span style=''>    if (</span><span style='background: #AEF1AE'>!compareAndSet(expect, update)</span><span style=''>) </span><span style='background: #AEF1AE'>{
+</span>94 <span style=''></span><span style='background: #AEF1AE'>      interruptedCheck()
+</span>95 <span style=''></span><span style='background: #AEF1AE'>      waitForCompareAndSet(expect, update)
+</span>96 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>97 <span style=''>
+</span>98 <span style=''>  @tailrec
+</span>99 <span style=''>  @throws(classOf[InterruptedException])
+</span>100 <span style=''>  def waitForCompareAndSet(expect: Double, update: Double, maxRetries: Int): Boolean =
+</span>101 <span style=''>    if (</span><span style='background: #AEF1AE'>!compareAndSet(expect, update)</span><span style=''>)
+</span>102 <span style=''>      </span><span style='background: #AEF1AE'>if (maxRetries > 0) {
+</span>103 <span style=''></span><span style='background: #AEF1AE'>        interruptedCheck()
+</span>104 <span style=''></span><span style='background: #AEF1AE'>        waitForCompareAndSet(expect, update, maxRetries - 1)
+</span>105 <span style=''></span><span style='background: #AEF1AE'>      }
+</span>106 <span style=''></span><span style='background: #AEF1AE'>      else
+</span>107 <span style=''></span><span style='background: #AEF1AE'>        false</span><span style=''>
+</span>108 <span style=''>    else
+</span>109 <span style=''>      </span><span style='background: #AEF1AE'>true</span><span style=''>
+</span>110 <span style=''>
+</span>111 <span style=''>  @throws(classOf[InterruptedException])
+</span>112 <span style=''>  @throws(classOf[TimeoutException])
+</span>113 <span style=''>  def waitForCompareAndSet(expect: Double, update: Double, waitAtMost: FiniteDuration): Unit = {
+</span>114 <span style=''>    val waitUntil = </span><span style='background: #AEF1AE'>System.nanoTime + waitAtMost.toNanos</span><span style=''>
+</span>115 <span style=''>    </span><span style='background: #AEF1AE'>waitForCompareAndSet(expect, update, waitUntil)</span><span style=''>
+</span>116 <span style=''>  }
+</span>117 <span style=''>
+</span>118 <span style=''>  @tailrec
+</span>119 <span style=''>  @throws(classOf[InterruptedException])
+</span>120 <span style=''>  @throws(classOf[TimeoutException])
+</span>121 <span style=''>  private[monifu] def waitForCompareAndSet(expect: Double, update: Double, waitUntil: Long): Unit =
+</span>122 <span style=''>    if (</span><span style='background: #AEF1AE'>!compareAndSet(expect, update)</span><span style=''>) </span><span style='background: #AEF1AE'>{
+</span>123 <span style=''></span><span style='background: #AEF1AE'>      interruptedCheck()
+</span>124 <span style=''></span><span style='background: #AEF1AE'>      timeoutCheck(waitUntil)
+</span>125 <span style=''></span><span style='background: #AEF1AE'>      waitForCompareAndSet(expect, update, waitUntil)
+</span>126 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>127 <span style=''>
+</span>128 <span style=''>  @tailrec
+</span>129 <span style=''>  @throws(classOf[InterruptedException])
+</span>130 <span style=''>  def waitForValue(expect: Double): Unit =
+</span>131 <span style=''>    if (</span><span style='background: #AEF1AE'>get != expect</span><span style=''>) </span><span style='background: #AEF1AE'>{
+</span>132 <span style=''></span><span style='background: #AEF1AE'>      interruptedCheck()
+</span>133 <span style=''></span><span style='background: #AEF1AE'>      waitForValue(expect)
+</span>134 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>135 <span style=''>
+</span>136 <span style=''>  @throws(classOf[InterruptedException])
+</span>137 <span style=''>  @throws(classOf[TimeoutException])
+</span>138 <span style=''>  def waitForValue(expect: Double, waitAtMost: FiniteDuration): Unit = {
+</span>139 <span style=''>    val waitUntil = </span><span style='background: #AEF1AE'>System.nanoTime + waitAtMost.toNanos</span><span style=''>
+</span>140 <span style=''>    </span><span style='background: #AEF1AE'>waitForValue(expect, waitUntil)</span><span style=''>
+</span>141 <span style=''>  }
+</span>142 <span style=''>
+</span>143 <span style=''>  @tailrec
+</span>144 <span style=''>  @throws(classOf[InterruptedException])
+</span>145 <span style=''>  @throws(classOf[TimeoutException])
+</span>146 <span style=''>  private[monifu] def waitForValue(expect: Double, waitUntil: Long): Unit =
+</span>147 <span style=''>    if (</span><span style='background: #AEF1AE'>get != expect</span><span style=''>) </span><span style='background: #AEF1AE'>{
+</span>148 <span style=''></span><span style='background: #AEF1AE'>      interruptedCheck()
+</span>149 <span style=''></span><span style='background: #AEF1AE'>      timeoutCheck(waitUntil)
+</span>150 <span style=''></span><span style='background: #AEF1AE'>      waitForValue(expect, waitUntil)
+</span>151 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>152 <span style=''>
+</span>153 <span style=''>  @tailrec
+</span>154 <span style=''>  @throws(classOf[InterruptedException])
+</span>155 <span style=''>  def waitForCondition(p: Double => Boolean): Unit =
+</span>156 <span style=''>    if (</span><span style='background: #AEF1AE'>!p(get)</span><span style=''>) </span><span style='background: #AEF1AE'>{
+</span>157 <span style=''></span><span style='background: #AEF1AE'>      interruptedCheck()
+</span>158 <span style=''></span><span style='background: #AEF1AE'>      waitForCondition(p)
+</span>159 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>160 <span style=''>
+</span>161 <span style=''>  @throws(classOf[InterruptedException])
+</span>162 <span style=''>  @throws(classOf[TimeoutException])
+</span>163 <span style=''>  def waitForCondition(waitAtMost: FiniteDuration, p: Double => Boolean): Unit = {
+</span>164 <span style=''>    val waitUntil = </span><span style='background: #AEF1AE'>System.nanoTime + waitAtMost.toNanos</span><span style=''>
+</span>165 <span style=''>    </span><span style='background: #AEF1AE'>waitForCondition(waitUntil, p)</span><span style=''>
+</span>166 <span style=''>  }
+</span>167 <span style=''>
+</span>168 <span style=''>  @tailrec
+</span>169 <span style=''>  @throws(classOf[InterruptedException])
+</span>170 <span style=''>  @throws(classOf[TimeoutException])
+</span>171 <span style=''>  private[monifu] def waitForCondition(waitUntil: Long, p: Double => Boolean): Unit =
+</span>172 <span style=''>    if (</span><span style='background: #AEF1AE'>!p(get)</span><span style=''>) </span><span style='background: #AEF1AE'>{
+</span>173 <span style=''></span><span style='background: #AEF1AE'>      interruptedCheck()
+</span>174 <span style=''></span><span style='background: #AEF1AE'>      timeoutCheck(waitUntil)
+</span>175 <span style=''></span><span style='background: #AEF1AE'>      waitForCondition(waitUntil, p)
+</span>176 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>177 <span style=''>
+</span>178 <span style=''>  @tailrec
+</span>179 <span style=''>  def increment(v: Int = 1): Unit = {
+</span>180 <span style=''>    val current = </span><span style='background: #AEF1AE'>get</span><span style=''>
+</span>181 <span style=''>    val update = </span><span style='background: #AEF1AE'>incrOp(current, v)</span><span style=''>
+</span>182 <span style=''>    if (</span><span style='background: #AEF1AE'>!compareAndSet(current, update)</span><span style=''>)
+</span>183 <span style=''>      </span><span style='background: #AEF1AE'>increment(v)</span><span style=''>
+</span>184 <span style=''>  }
+</span>185 <span style=''>
+</span>186 <span style=''>  @tailrec
+</span>187 <span style=''>  def add(v: Double): Unit = {
+</span>188 <span style=''>    val current = </span><span style='background: #F0ADAD'>get</span><span style=''>
+</span>189 <span style=''>    val update = </span><span style='background: #F0ADAD'>plusOp(current, v)</span><span style=''>
+</span>190 <span style=''>    if (</span><span style='background: #F0ADAD'>!compareAndSet(current, update)</span><span style=''>)
+</span>191 <span style=''>      </span><span style='background: #F0ADAD'>add(v)</span><span style=''>
+</span>192 <span style=''>  }
+</span>193 <span style=''>
+</span>194 <span style=''>  @tailrec
+</span>195 <span style=''>  def incrementAndGet(v: Int = 1): Double = {
+</span>196 <span style=''>    val current = </span><span style='background: #AEF1AE'>get</span><span style=''>
+</span>197 <span style=''>    val update = </span><span style='background: #AEF1AE'>incrOp(current, v)</span><span style=''>
+</span>198 <span style=''>    if (</span><span style='background: #AEF1AE'>!compareAndSet(current, update)</span><span style=''>)
+</span>199 <span style=''>      </span><span style='background: #F0ADAD'>incrementAndGet(v)</span><span style=''>
+</span>200 <span style=''>    else
+</span>201 <span style=''>      </span><span style='background: #AEF1AE'>update</span><span style=''>
+</span>202 <span style=''>  }
+</span>203 <span style=''>
+</span>204 <span style=''>  @tailrec
+</span>205 <span style=''>  def addAndGet(v: Double): Double = {
+</span>206 <span style=''>    val current = </span><span style='background: #AEF1AE'>get</span><span style=''>
+</span>207 <span style=''>    val update = </span><span style='background: #AEF1AE'>plusOp(current, v)</span><span style=''>
+</span>208 <span style=''>    if (</span><span style='background: #AEF1AE'>!compareAndSet(current, update)</span><span style=''>)
+</span>209 <span style=''>      </span><span style='background: #F0ADAD'>addAndGet(v)</span><span style=''>
+</span>210 <span style=''>    else
+</span>211 <span style=''>      </span><span style='background: #AEF1AE'>update</span><span style=''>
+</span>212 <span style=''>  }
+</span>213 <span style=''>
+</span>214 <span style=''>  @tailrec
+</span>215 <span style=''>  def getAndIncrement(v: Int = 1): Double = {
+</span>216 <span style=''>    val current = </span><span style='background: #AEF1AE'>get</span><span style=''>
+</span>217 <span style=''>    val update = </span><span style='background: #AEF1AE'>incrOp(current, v)</span><span style=''>
+</span>218 <span style=''>    if (</span><span style='background: #AEF1AE'>!compareAndSet(current, update)</span><span style=''>)
+</span>219 <span style=''>      </span><span style='background: #F0ADAD'>getAndIncrement(v)</span><span style=''>
+</span>220 <span style=''>    else
+</span>221 <span style=''>      </span><span style='background: #AEF1AE'>current</span><span style=''>
+</span>222 <span style=''>  }
+</span>223 <span style=''>
+</span>224 <span style=''>  @tailrec
+</span>225 <span style=''>  def getAndAdd(v: Double): Double = {
+</span>226 <span style=''>    val current = </span><span style='background: #AEF1AE'>get</span><span style=''>
+</span>227 <span style=''>    val update = </span><span style='background: #AEF1AE'>plusOp(current, v)</span><span style=''>
+</span>228 <span style=''>    if (</span><span style='background: #AEF1AE'>!compareAndSet(current, update)</span><span style=''>)
+</span>229 <span style=''>      </span><span style='background: #F0ADAD'>getAndAdd(v)</span><span style=''>
+</span>230 <span style=''>    else
+</span>231 <span style=''>      </span><span style='background: #AEF1AE'>current</span><span style=''>
+</span>232 <span style=''>  }
+</span>233 <span style=''>
+</span>234 <span style=''>  @tailrec
+</span>235 <span style=''>  def subtract(v: Double): Unit = {
+</span>236 <span style=''>    val current = </span><span style='background: #F0ADAD'>get</span><span style=''>
+</span>237 <span style=''>    val update = </span><span style='background: #F0ADAD'>minusOp(current, v)</span><span style=''>
+</span>238 <span style=''>    if (</span><span style='background: #F0ADAD'>!compareAndSet(current, update)</span><span style=''>)
+</span>239 <span style=''>      </span><span style='background: #F0ADAD'>subtract(v)</span><span style=''>
+</span>240 <span style=''>  }
+</span>241 <span style=''>
+</span>242 <span style=''>  @tailrec
+</span>243 <span style=''>  def subtractAndGet(v: Double): Double = {
+</span>244 <span style=''>    val current = </span><span style='background: #AEF1AE'>get</span><span style=''>
+</span>245 <span style=''>    val update = </span><span style='background: #AEF1AE'>minusOp(current, v)</span><span style=''>
+</span>246 <span style=''>    if (</span><span style='background: #AEF1AE'>!compareAndSet(current, update)</span><span style=''>)
+</span>247 <span style=''>      </span><span style='background: #F0ADAD'>subtractAndGet(v)</span><span style=''>
+</span>248 <span style=''>    else
+</span>249 <span style=''>      </span><span style='background: #AEF1AE'>update</span><span style=''>
+</span>250 <span style=''>  }
+</span>251 <span style=''>
+</span>252 <span style=''>  @tailrec
+</span>253 <span style=''>  def getAndSubtract(v: Double): Double = {
+</span>254 <span style=''>    val current = </span><span style='background: #AEF1AE'>get</span><span style=''>
+</span>255 <span style=''>    val update = </span><span style='background: #AEF1AE'>minusOp(current, v)</span><span style=''>
+</span>256 <span style=''>    if (</span><span style='background: #AEF1AE'>!compareAndSet(current, update)</span><span style=''>)
+</span>257 <span style=''>      </span><span style='background: #F0ADAD'>getAndSubtract(v)</span><span style=''>
+</span>258 <span style=''>    else
+</span>259 <span style=''>      </span><span style='background: #AEF1AE'>current</span><span style=''>
+</span>260 <span style=''>  }
+</span>261 <span style=''>
+</span>262 <span style=''>  @tailrec
+</span>263 <span style=''>  def countDownToZero(v: Double = 1.0): Double = {
+</span>264 <span style=''>    val current = </span><span style='background: #AEF1AE'>get</span><span style=''>
+</span>265 <span style=''>    if (</span><span style='background: #AEF1AE'>current != 0.0</span><span style=''>) </span><span style='background: #AEF1AE'>{
+</span>266 <span style=''></span><span style='background: #AEF1AE'>      val decrement = if (current >= v) v else </span><span style='background: #F0ADAD'>current</span><span style='background: #AEF1AE'>
+</span>267 <span style=''></span><span style='background: #AEF1AE'>      val update = current - decrement
+</span>268 <span style=''></span><span style='background: #AEF1AE'>      if (!compareAndSet(current, update))
+</span>269 <span style=''></span><span style='background: #AEF1AE'>        </span><span style='background: #F0ADAD'>countDownToZero(v)</span><span style='background: #AEF1AE'>
+</span>270 <span style=''></span><span style='background: #AEF1AE'>      else
+</span>271 <span style=''></span><span style='background: #AEF1AE'>        decrement
+</span>272 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>273 <span style=''>    else
+</span>274 <span style=''>      </span><span style='background: #AEF1AE'>0.0</span><span style=''>
+</span>275 <span style=''>  }
+</span>276 <span style=''>
+</span>277 <span style=''>  def decrement(v: Int = 1): Unit = </span><span style='background: #AEF1AE'>increment(-v)</span><span style=''>
+</span>278 <span style=''>  def decrementAndGet(v: Int = 1): Double = </span><span style='background: #AEF1AE'>incrementAndGet(-v)</span><span style=''>
+</span>279 <span style=''>  def getAndDecrement(v: Int = 1): Double = </span><span style='background: #AEF1AE'>getAndIncrement(-v)</span><span style=''>
+</span>280 <span style=''>  def `+=`(v: Double): Unit = </span><span style='background: #F0ADAD'>addAndGet(v)</span><span style=''>
+</span>281 <span style=''>  def `-=`(v: Double): Unit = </span><span style='background: #F0ADAD'>subtractAndGet(v)</span><span style=''>
+</span>282 <span style=''>
+</span>283 <span style=''>  private[this] def plusOp(a: Double, b: Double): Double = </span><span style='background: #AEF1AE'>a + b</span><span style=''>
+</span>284 <span style=''>  private[this] def minusOp(a: Double, b: Double): Double = </span><span style='background: #AEF1AE'>a - b</span><span style=''>
+</span>285 <span style=''>  private[this] def incrOp(a: Double, b: Int): Double = </span><span style='background: #AEF1AE'>a + b</span><span style=''>
+</span>286 <span style=''>}
+</span>287 <span style=''>
+</span>288 <span style=''>object AtomicDouble {
+</span>289 <span style=''>  def apply(initialValue: Double): AtomicDouble =
+</span>290 <span style=''>    </span><span style='background: #AEF1AE'>new AtomicDouble(new JavaAtomicLong(doubleToLongBits(initialValue)))</span><span style=''>
+</span>291 <span style=''>
+</span>292 <span style=''>  def wrap(ref: JavaAtomicLong): AtomicDouble =
+</span>293 <span style=''>    </span><span style='background: #AEF1AE'>new AtomicDouble(ref)</span><span style=''>
+</span>294 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          29
+        </td>
+        <td>
+          633
+        </td>
+        <td>
+          1035
+          -
+          1044
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.util.concurrent.atomic.AtomicLong.get
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.ref.get()
+        </td>
+      </tr><tr>
+        <td>
+          29
+        </td>
+        <td>
+          634
+        </td>
+        <td>
+          1018
+          -
+          1045
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Double.longBitsToDouble
+        </td>
+        <td style="background: #AEF1AE">
+          java.lang.Double.longBitsToDouble(AtomicDouble.this.ref.get())
+        </td>
+      </tr><tr>
+        <td>
+          32
+        </td>
+        <td>
+          636
+        </td>
+        <td>
+          1081
+          -
+          1114
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.util.concurrent.atomic.AtomicLong.set
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.ref.set(java.lang.Double.doubleToLongBits(update))
+        </td>
+      </tr><tr>
+        <td>
+          32
+        </td>
+        <td>
+          635
+        </td>
+        <td>
+          1089
+          -
+          1113
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Double.doubleToLongBits
+        </td>
+        <td style="background: #AEF1AE">
+          java.lang.Double.doubleToLongBits(update)
+        </td>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          638
+        </td>
+        <td>
+          1158
+          -
+          1195
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.util.concurrent.atomic.AtomicLong.lazySet
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.ref.lazySet(java.lang.Double.doubleToLongBits(update))
+        </td>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          637
+        </td>
+        <td>
+          1170
+          -
+          1194
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Double.doubleToLongBits
+        </td>
+        <td style="background: #F0ADAD">
+          java.lang.Double.doubleToLongBits(update)
+        </td>
+      </tr><tr>
+        <td>
+          40
+        </td>
+        <td>
+          639
+        </td>
+        <td>
+          1284
+          -
+          1293
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.util.concurrent.atomic.AtomicLong.get
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.ref.get()
+        </td>
+      </tr><tr>
+        <td>
+          41
+        </td>
+        <td>
+          642
+        </td>
+        <td>
+          1337
+          -
+          1389
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.util.concurrent.atomic.AtomicLong.compareAndSet
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.ref.compareAndSet(current, java.lang.Double.doubleToLongBits(update))
+        </td>
+      </tr><tr>
+        <td>
+          41
+        </td>
+        <td>
+          641
+        </td>
+        <td>
+          1364
+          -
+          1388
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Double.doubleToLongBits
+        </td>
+        <td style="background: #AEF1AE">
+          java.lang.Double.doubleToLongBits(update)
+        </td>
+      </tr><tr>
+        <td>
+          41
+        </td>
+        <td>
+          640
+        </td>
+        <td>
+          1309
+          -
+          1333
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Double.doubleToLongBits
+        </td>
+        <td style="background: #AEF1AE">
+          java.lang.Double.doubleToLongBits(expect)
+        </td>
+      </tr><tr>
+        <td>
+          41
+        </td>
+        <td>
+          643
+        </td>
+        <td>
+          1298
+          -
+          1389
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Boolean.&amp;&amp;
+        </td>
+        <td style="background: #AEF1AE">
+          current.==(java.lang.Double.doubleToLongBits(expect)).&amp;&amp;(AtomicDouble.this.ref.compareAndSet(current, java.lang.Double.doubleToLongBits(update)))
+        </td>
+      </tr><tr>
+        <td>
+          45
+        </td>
+        <td>
+          645
+        </td>
+        <td>
+          1460
+          -
+          1499
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.util.concurrent.atomic.AtomicLong.getAndSet
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.ref.getAndSet(java.lang.Double.doubleToLongBits(update))
+        </td>
+      </tr><tr>
+        <td>
+          45
+        </td>
+        <td>
+          644
+        </td>
+        <td>
+          1474
+          -
+          1498
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Double.doubleToLongBits
+        </td>
+        <td style="background: #AEF1AE">
+          java.lang.Double.doubleToLongBits(update)
+        </td>
+      </tr><tr>
+        <td>
+          45
+        </td>
+        <td>
+          646
+        </td>
+        <td>
+          1443
+          -
+          1500
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Double.longBitsToDouble
+        </td>
+        <td style="background: #AEF1AE">
+          java.lang.Double.longBitsToDouble(AtomicDouble.this.ref.getAndSet(java.lang.Double.doubleToLongBits(update)))
+        </td>
+      </tr><tr>
+        <td>
+          48
+        </td>
+        <td>
+          647
+        </td>
+        <td>
+          1542
+          -
+          1552
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.set
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.set(value)
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          648
+        </td>
+        <td>
+          1588
+          -
+          1598
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.set
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.set(value)
+        </td>
+      </tr><tr>
+        <td>
+          54
+        </td>
+        <td>
+          649
+        </td>
+        <td>
+          1694
+          -
+          1697
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.get
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.get
+        </td>
+      </tr><tr>
+        <td>
+          55
+        </td>
+        <td>
+          651
+        </td>
+        <td>
+          1716
+          -
+          1716
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Tuple2._2
+        </td>
+        <td style="background: #AEF1AE">
+          x$1._2
+        </td>
+      </tr><tr>
+        <td>
+          55
+        </td>
+        <td>
+          650
+        </td>
+        <td>
+          1707
+          -
+          1707
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Tuple2._1
+        </td>
+        <td style="background: #AEF1AE">
+          x$1._1
+        </td>
+      </tr><tr>
+        <td>
+          56
+        </td>
+        <td>
+          652
+        </td>
+        <td>
+          1746
+          -
+          1777
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.compareAndSet(current, update).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          57
+        </td>
+        <td>
+          654
+        </td>
+        <td>
+          1785
+          -
+          1808
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.transformAndExtract
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.transformAndExtract[U](cb)
+        </td>
+      </tr><tr>
+        <td>
+          57
+        </td>
+        <td>
+          653
+        </td>
+        <td>
+          1785
+          -
+          1808
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.transformAndExtract
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.transformAndExtract[U](cb)
+        </td>
+      </tr><tr>
+        <td>
+          59
+        </td>
+        <td>
+          655
+        </td>
+        <td>
+          1824
+          -
+          1831
+        </td>
+        <td>
+          Ident
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.extract
+        </td>
+        <td style="background: #AEF1AE">
+          extract
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          656
+        </td>
+        <td>
+          1924
+          -
+          1927
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.get
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.get
+        </td>
+      </tr><tr>
+        <td>
+          65
+        </td>
+        <td>
+          657
+        </td>
+        <td>
+          1945
+          -
+          1956
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Function1.apply
+        </td>
+        <td style="background: #AEF1AE">
+          cb.apply(current)
+        </td>
+      </tr><tr>
+        <td>
+          66
+        </td>
+        <td>
+          658
+        </td>
+        <td>
+          1965
+          -
+          1996
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.compareAndSet(current, update).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          660
+        </td>
+        <td>
+          2004
+          -
+          2023
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.transformAndGet
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.transformAndGet(cb)
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          659
+        </td>
+        <td>
+          2004
+          -
+          2023
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.transformAndGet
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.transformAndGet(cb)
+        </td>
+      </tr><tr>
+        <td>
+          69
+        </td>
+        <td>
+          661
+        </td>
+        <td>
+          2039
+          -
+          2045
+        </td>
+        <td>
+          Ident
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.update
+        </td>
+        <td style="background: #AEF1AE">
+          update
+        </td>
+      </tr><tr>
+        <td>
+          74
+        </td>
+        <td>
+          662
+        </td>
+        <td>
+          2138
+          -
+          2141
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.get
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.get
+        </td>
+      </tr><tr>
+        <td>
+          75
+        </td>
+        <td>
+          663
+        </td>
+        <td>
+          2159
+          -
+          2170
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Function1.apply
+        </td>
+        <td style="background: #AEF1AE">
+          cb.apply(current)
+        </td>
+      </tr><tr>
+        <td>
+          76
+        </td>
+        <td>
+          664
+        </td>
+        <td>
+          2179
+          -
+          2210
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.compareAndSet(current, update).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          77
+        </td>
+        <td>
+          666
+        </td>
+        <td>
+          2218
+          -
+          2237
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.getAndTransform
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.getAndTransform(cb)
+        </td>
+      </tr><tr>
+        <td>
+          77
+        </td>
+        <td>
+          665
+        </td>
+        <td>
+          2218
+          -
+          2237
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.getAndTransform
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.getAndTransform(cb)
+        </td>
+      </tr><tr>
+        <td>
+          79
+        </td>
+        <td>
+          667
+        </td>
+        <td>
+          2253
+          -
+          2260
+        </td>
+        <td>
+          Ident
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.current
+        </td>
+        <td style="background: #AEF1AE">
+          current
+        </td>
+      </tr><tr>
+        <td>
+          84
+        </td>
+        <td>
+          668
+        </td>
+        <td>
+          2345
+          -
+          2348
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.get
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.get
+        </td>
+      </tr><tr>
+        <td>
+          85
+        </td>
+        <td>
+          669
+        </td>
+        <td>
+          2366
+          -
+          2377
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Function1.apply
+        </td>
+        <td style="background: #AEF1AE">
+          cb.apply(current)
+        </td>
+      </tr><tr>
+        <td>
+          86
+        </td>
+        <td>
+          674
+        </td>
+        <td>
+          2382
+          -
+          2382
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          86
+        </td>
+        <td>
+          673
+        </td>
+        <td>
+          2382
+          -
+          2382
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          86
+        </td>
+        <td>
+          670
+        </td>
+        <td>
+          2386
+          -
+          2417
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.compareAndSet(current, update).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          87
+        </td>
+        <td>
+          672
+        </td>
+        <td>
+          2425
+          -
+          2438
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.transform
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.transform(cb)
+        </td>
+      </tr><tr>
+        <td>
+          87
+        </td>
+        <td>
+          671
+        </td>
+        <td>
+          2425
+          -
+          2438
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.transform
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.transform(cb)
+        </td>
+      </tr><tr>
+        <td>
+          93
+        </td>
+        <td>
+          678
+        </td>
+        <td>
+          2603
+          -
+          2678
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  atomic.this.`package`.interruptedCheck();
+  AtomicDouble.this.waitForCompareAndSet(expect, update)
+}
+        </td>
+      </tr><tr>
+        <td>
+          93
+        </td>
+        <td>
+          675
+        </td>
+        <td>
+          2571
+          -
+          2601
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.compareAndSet(expect, update).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          93
+        </td>
+        <td>
+          680
+        </td>
+        <td>
+          2567
+          -
+          2567
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          93
+        </td>
+        <td>
+          679
+        </td>
+        <td>
+          2567
+          -
+          2567
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          94
+        </td>
+        <td>
+          676
+        </td>
+        <td>
+          2611
+          -
+          2629
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.interruptedCheck
+        </td>
+        <td style="background: #AEF1AE">
+          atomic.this.`package`.interruptedCheck()
+        </td>
+      </tr><tr>
+        <td>
+          95
+        </td>
+        <td>
+          677
+        </td>
+        <td>
+          2636
+          -
+          2672
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.waitForCompareAndSet
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.waitForCompareAndSet(expect, update)
+        </td>
+      </tr><tr>
+        <td>
+          101
+        </td>
+        <td>
+          681
+        </td>
+        <td>
+          2827
+          -
+          2857
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.compareAndSet(expect, update).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          102
+        </td>
+        <td>
+          686
+        </td>
+        <td>
+          2885
+          -
+          2982
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  atomic.this.`package`.interruptedCheck();
+  AtomicDouble.this.waitForCompareAndSet(expect, update, maxRetries.-(1))
+}
+        </td>
+      </tr><tr>
+        <td>
+          102
+        </td>
+        <td>
+          689
+        </td>
+        <td>
+          2865
+          -
+          3007
+        </td>
+        <td>
+          If
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          if (maxRetries.&gt;(0))
+  {
+    atomic.this.`package`.interruptedCheck();
+    AtomicDouble.this.waitForCompareAndSet(expect, update, maxRetries.-(1))
+  }
+else
+  false
+        </td>
+      </tr><tr>
+        <td>
+          102
+        </td>
+        <td>
+          682
+        </td>
+        <td>
+          2869
+          -
+          2883
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          maxRetries.&gt;(0)
+        </td>
+      </tr><tr>
+        <td>
+          103
+        </td>
+        <td>
+          683
+        </td>
+        <td>
+          2895
+          -
+          2913
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.interruptedCheck
+        </td>
+        <td style="background: #AEF1AE">
+          atomic.this.`package`.interruptedCheck()
+        </td>
+      </tr><tr>
+        <td>
+          104
+        </td>
+        <td>
+          684
+        </td>
+        <td>
+          2959
+          -
+          2973
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.-
+        </td>
+        <td style="background: #AEF1AE">
+          maxRetries.-(1)
+        </td>
+      </tr><tr>
+        <td>
+          104
+        </td>
+        <td>
+          685
+        </td>
+        <td>
+          2922
+          -
+          2974
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.waitForCompareAndSet
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.waitForCompareAndSet(expect, update, maxRetries.-(1))
+        </td>
+      </tr><tr>
+        <td>
+          107
+        </td>
+        <td>
+          687
+        </td>
+        <td>
+          3002
+          -
+          3007
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          false
+        </td>
+      </tr><tr>
+        <td>
+          107
+        </td>
+        <td>
+          688
+        </td>
+        <td>
+          3002
+          -
+          3007
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          false
+        </td>
+      </tr><tr>
+        <td>
+          109
+        </td>
+        <td>
+          690
+        </td>
+        <td>
+          3023
+          -
+          3027
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          109
+        </td>
+        <td>
+          691
+        </td>
+        <td>
+          3023
+          -
+          3027
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          114
+        </td>
+        <td>
+          693
+        </td>
+        <td>
+          3224
+          -
+          3260
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.+
+        </td>
+        <td style="background: #AEF1AE">
+          java.this.lang.System.nanoTime().+(waitAtMost.toNanos)
+        </td>
+      </tr><tr>
+        <td>
+          114
+        </td>
+        <td>
+          692
+        </td>
+        <td>
+          3242
+          -
+          3260
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.duration.FiniteDuration.toNanos
+        </td>
+        <td style="background: #AEF1AE">
+          waitAtMost.toNanos
+        </td>
+      </tr><tr>
+        <td>
+          115
+        </td>
+        <td>
+          694
+        </td>
+        <td>
+          3265
+          -
+          3312
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.waitForCompareAndSet
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.waitForCompareAndSet(expect, update, waitUntil)
+        </td>
+      </tr><tr>
+        <td>
+          122
+        </td>
+        <td>
+          699
+        </td>
+        <td>
+          3547
+          -
+          3663
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  atomic.this.`package`.interruptedCheck();
+  atomic.this.`package`.timeoutCheck(waitUntil);
+  AtomicDouble.this.waitForCompareAndSet(expect, update, waitUntil)
+}
+        </td>
+      </tr><tr>
+        <td>
+          122
+        </td>
+        <td>
+          701
+        </td>
+        <td>
+          3511
+          -
+          3511
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          122
+        </td>
+        <td>
+          695
+        </td>
+        <td>
+          3515
+          -
+          3545
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.compareAndSet(expect, update).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          122
+        </td>
+        <td>
+          700
+        </td>
+        <td>
+          3511
+          -
+          3511
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          123
+        </td>
+        <td>
+          696
+        </td>
+        <td>
+          3555
+          -
+          3573
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.interruptedCheck
+        </td>
+        <td style="background: #AEF1AE">
+          atomic.this.`package`.interruptedCheck()
+        </td>
+      </tr><tr>
+        <td>
+          124
+        </td>
+        <td>
+          697
+        </td>
+        <td>
+          3580
+          -
+          3603
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.timeoutCheck
+        </td>
+        <td style="background: #AEF1AE">
+          atomic.this.`package`.timeoutCheck(waitUntil)
+        </td>
+      </tr><tr>
+        <td>
+          125
+        </td>
+        <td>
+          698
+        </td>
+        <td>
+          3610
+          -
+          3657
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.waitForCompareAndSet
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.waitForCompareAndSet(expect, update, waitUntil)
+        </td>
+      </tr><tr>
+        <td>
+          131
+        </td>
+        <td>
+          705
+        </td>
+        <td>
+          3783
+          -
+          3842
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  atomic.this.`package`.interruptedCheck();
+  AtomicDouble.this.waitForValue(expect)
+}
+        </td>
+      </tr><tr>
+        <td>
+          131
+        </td>
+        <td>
+          702
+        </td>
+        <td>
+          3768
+          -
+          3781
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Double.!=
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.get.!=(expect)
+        </td>
+      </tr><tr>
+        <td>
+          131
+        </td>
+        <td>
+          707
+        </td>
+        <td>
+          3764
+          -
+          3764
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          131
+        </td>
+        <td>
+          706
+        </td>
+        <td>
+          3764
+          -
+          3764
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          132
+        </td>
+        <td>
+          703
+        </td>
+        <td>
+          3791
+          -
+          3809
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.interruptedCheck
+        </td>
+        <td style="background: #AEF1AE">
+          atomic.this.`package`.interruptedCheck()
+        </td>
+      </tr><tr>
+        <td>
+          133
+        </td>
+        <td>
+          704
+        </td>
+        <td>
+          3816
+          -
+          3836
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.waitForValue
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.waitForValue(expect)
+        </td>
+      </tr><tr>
+        <td>
+          139
+        </td>
+        <td>
+          708
+        </td>
+        <td>
+          4033
+          -
+          4051
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.duration.FiniteDuration.toNanos
+        </td>
+        <td style="background: #AEF1AE">
+          waitAtMost.toNanos
+        </td>
+      </tr><tr>
+        <td>
+          139
+        </td>
+        <td>
+          709
+        </td>
+        <td>
+          4015
+          -
+          4051
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.+
+        </td>
+        <td style="background: #AEF1AE">
+          java.this.lang.System.nanoTime().+(waitAtMost.toNanos)
+        </td>
+      </tr><tr>
+        <td>
+          140
+        </td>
+        <td>
+          710
+        </td>
+        <td>
+          4056
+          -
+          4087
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.waitForValue
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.waitForValue(expect, waitUntil)
+        </td>
+      </tr><tr>
+        <td>
+          147
+        </td>
+        <td>
+          717
+        </td>
+        <td>
+          4262
+          -
+          4262
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          147
+        </td>
+        <td>
+          711
+        </td>
+        <td>
+          4266
+          -
+          4279
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Double.!=
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.get.!=(expect)
+        </td>
+      </tr><tr>
+        <td>
+          147
+        </td>
+        <td>
+          716
+        </td>
+        <td>
+          4262
+          -
+          4262
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          147
+        </td>
+        <td>
+          715
+        </td>
+        <td>
+          4281
+          -
+          4381
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  atomic.this.`package`.interruptedCheck();
+  atomic.this.`package`.timeoutCheck(waitUntil);
+  AtomicDouble.this.waitForValue(expect, waitUntil)
+}
+        </td>
+      </tr><tr>
+        <td>
+          148
+        </td>
+        <td>
+          712
+        </td>
+        <td>
+          4289
+          -
+          4307
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.interruptedCheck
+        </td>
+        <td style="background: #AEF1AE">
+          atomic.this.`package`.interruptedCheck()
+        </td>
+      </tr><tr>
+        <td>
+          149
+        </td>
+        <td>
+          713
+        </td>
+        <td>
+          4314
+          -
+          4337
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.timeoutCheck
+        </td>
+        <td style="background: #AEF1AE">
+          atomic.this.`package`.timeoutCheck(waitUntil)
+        </td>
+      </tr><tr>
+        <td>
+          150
+        </td>
+        <td>
+          714
+        </td>
+        <td>
+          4344
+          -
+          4375
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.waitForValue
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.waitForValue(expect, waitUntil)
+        </td>
+      </tr><tr>
+        <td>
+          156
+        </td>
+        <td>
+          723
+        </td>
+        <td>
+          4492
+          -
+          4492
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          156
+        </td>
+        <td>
+          719
+        </td>
+        <td>
+          4496
+          -
+          4503
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          p.apply(AtomicDouble.this.get).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          156
+        </td>
+        <td>
+          722
+        </td>
+        <td>
+          4505
+          -
+          4563
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  atomic.this.`package`.interruptedCheck();
+  AtomicDouble.this.waitForCondition(p)
+}
+        </td>
+      </tr><tr>
+        <td>
+          156
+        </td>
+        <td>
+          724
+        </td>
+        <td>
+          4492
+          -
+          4492
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          156
+        </td>
+        <td>
+          718
+        </td>
+        <td>
+          4499
+          -
+          4502
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.get
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.get
+        </td>
+      </tr><tr>
+        <td>
+          157
+        </td>
+        <td>
+          720
+        </td>
+        <td>
+          4513
+          -
+          4531
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.interruptedCheck
+        </td>
+        <td style="background: #AEF1AE">
+          atomic.this.`package`.interruptedCheck()
+        </td>
+      </tr><tr>
+        <td>
+          158
+        </td>
+        <td>
+          721
+        </td>
+        <td>
+          4538
+          -
+          4557
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.waitForCondition
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.waitForCondition(p)
+        </td>
+      </tr><tr>
+        <td>
+          164
+        </td>
+        <td>
+          726
+        </td>
+        <td>
+          4746
+          -
+          4782
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.+
+        </td>
+        <td style="background: #AEF1AE">
+          java.this.lang.System.nanoTime().+(waitAtMost.toNanos)
+        </td>
+      </tr><tr>
+        <td>
+          164
+        </td>
+        <td>
+          725
+        </td>
+        <td>
+          4764
+          -
+          4782
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.duration.FiniteDuration.toNanos
+        </td>
+        <td style="background: #AEF1AE">
+          waitAtMost.toNanos
+        </td>
+      </tr><tr>
+        <td>
+          165
+        </td>
+        <td>
+          727
+        </td>
+        <td>
+          4787
+          -
+          4817
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.waitForCondition
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.waitForCondition(waitUntil, p)
+        </td>
+      </tr><tr>
+        <td>
+          172
+        </td>
+        <td>
+          729
+        </td>
+        <td>
+          5006
+          -
+          5013
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          p.apply(AtomicDouble.this.get).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          172
+        </td>
+        <td>
+          735
+        </td>
+        <td>
+          5002
+          -
+          5002
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          172
+        </td>
+        <td>
+          728
+        </td>
+        <td>
+          5009
+          -
+          5012
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.get
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.get
+        </td>
+      </tr><tr>
+        <td>
+          172
+        </td>
+        <td>
+          734
+        </td>
+        <td>
+          5002
+          -
+          5002
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          172
+        </td>
+        <td>
+          733
+        </td>
+        <td>
+          5015
+          -
+          5114
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  atomic.this.`package`.interruptedCheck();
+  atomic.this.`package`.timeoutCheck(waitUntil);
+  AtomicDouble.this.waitForCondition(waitUntil, p)
+}
+        </td>
+      </tr><tr>
+        <td>
+          173
+        </td>
+        <td>
+          730
+        </td>
+        <td>
+          5023
+          -
+          5041
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.interruptedCheck
+        </td>
+        <td style="background: #AEF1AE">
+          atomic.this.`package`.interruptedCheck()
+        </td>
+      </tr><tr>
+        <td>
+          174
+        </td>
+        <td>
+          731
+        </td>
+        <td>
+          5048
+          -
+          5071
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.timeoutCheck
+        </td>
+        <td style="background: #AEF1AE">
+          atomic.this.`package`.timeoutCheck(waitUntil)
+        </td>
+      </tr><tr>
+        <td>
+          175
+        </td>
+        <td>
+          732
+        </td>
+        <td>
+          5078
+          -
+          5108
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.waitForCondition
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.waitForCondition(waitUntil, p)
+        </td>
+      </tr><tr>
+        <td>
+          180
+        </td>
+        <td>
+          736
+        </td>
+        <td>
+          5183
+          -
+          5186
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.get
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.get
+        </td>
+      </tr><tr>
+        <td>
+          181
+        </td>
+        <td>
+          737
+        </td>
+        <td>
+          5204
+          -
+          5222
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.incrOp
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.incrOp(current, v)
+        </td>
+      </tr><tr>
+        <td>
+          182
+        </td>
+        <td>
+          738
+        </td>
+        <td>
+          5231
+          -
+          5262
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.compareAndSet(current, update).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          182
+        </td>
+        <td>
+          741
+        </td>
+        <td>
+          5227
+          -
+          5227
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          182
+        </td>
+        <td>
+          742
+        </td>
+        <td>
+          5227
+          -
+          5227
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          183
+        </td>
+        <td>
+          740
+        </td>
+        <td>
+          5270
+          -
+          5282
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.increment
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.increment(v)
+        </td>
+      </tr><tr>
+        <td>
+          183
+        </td>
+        <td>
+          739
+        </td>
+        <td>
+          5270
+          -
+          5282
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.increment
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.increment(v)
+        </td>
+      </tr><tr>
+        <td>
+          188
+        </td>
+        <td>
+          743
+        </td>
+        <td>
+          5348
+          -
+          5351
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.get
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.get
+        </td>
+      </tr><tr>
+        <td>
+          189
+        </td>
+        <td>
+          744
+        </td>
+        <td>
+          5369
+          -
+          5387
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.plusOp
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.plusOp(current, v)
+        </td>
+      </tr><tr>
+        <td>
+          190
+        </td>
+        <td>
+          749
+        </td>
+        <td>
+          5392
+          -
+          5392
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          190
+        </td>
+        <td>
+          745
+        </td>
+        <td>
+          5396
+          -
+          5427
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.compareAndSet(current, update).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          190
+        </td>
+        <td>
+          748
+        </td>
+        <td>
+          5392
+          -
+          5392
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          191
+        </td>
+        <td>
+          747
+        </td>
+        <td>
+          5435
+          -
+          5441
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.add
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.add(v)
+        </td>
+      </tr><tr>
+        <td>
+          191
+        </td>
+        <td>
+          746
+        </td>
+        <td>
+          5435
+          -
+          5441
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.add
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.add(v)
+        </td>
+      </tr><tr>
+        <td>
+          196
+        </td>
+        <td>
+          750
+        </td>
+        <td>
+          5522
+          -
+          5525
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.get
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.get
+        </td>
+      </tr><tr>
+        <td>
+          197
+        </td>
+        <td>
+          751
+        </td>
+        <td>
+          5543
+          -
+          5561
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.incrOp
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.incrOp(current, v)
+        </td>
+      </tr><tr>
+        <td>
+          198
+        </td>
+        <td>
+          752
+        </td>
+        <td>
+          5570
+          -
+          5601
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.compareAndSet(current, update).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          199
+        </td>
+        <td>
+          753
+        </td>
+        <td>
+          5609
+          -
+          5627
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.incrementAndGet
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.incrementAndGet(v)
+        </td>
+      </tr><tr>
+        <td>
+          199
+        </td>
+        <td>
+          754
+        </td>
+        <td>
+          5609
+          -
+          5627
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.incrementAndGet
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.incrementAndGet(v)
+        </td>
+      </tr><tr>
+        <td>
+          201
+        </td>
+        <td>
+          755
+        </td>
+        <td>
+          5643
+          -
+          5649
+        </td>
+        <td>
+          Ident
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.update
+        </td>
+        <td style="background: #AEF1AE">
+          update
+        </td>
+      </tr><tr>
+        <td>
+          206
+        </td>
+        <td>
+          756
+        </td>
+        <td>
+          5723
+          -
+          5726
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.get
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.get
+        </td>
+      </tr><tr>
+        <td>
+          207
+        </td>
+        <td>
+          757
+        </td>
+        <td>
+          5744
+          -
+          5762
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.plusOp
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.plusOp(current, v)
+        </td>
+      </tr><tr>
+        <td>
+          208
+        </td>
+        <td>
+          758
+        </td>
+        <td>
+          5771
+          -
+          5802
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.compareAndSet(current, update).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          209
+        </td>
+        <td>
+          759
+        </td>
+        <td>
+          5810
+          -
+          5822
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.addAndGet
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.addAndGet(v)
+        </td>
+      </tr><tr>
+        <td>
+          209
+        </td>
+        <td>
+          760
+        </td>
+        <td>
+          5810
+          -
+          5822
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.addAndGet
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.addAndGet(v)
+        </td>
+      </tr><tr>
+        <td>
+          211
+        </td>
+        <td>
+          761
+        </td>
+        <td>
+          5838
+          -
+          5844
+        </td>
+        <td>
+          Ident
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.update
+        </td>
+        <td style="background: #AEF1AE">
+          update
+        </td>
+      </tr><tr>
+        <td>
+          216
+        </td>
+        <td>
+          762
+        </td>
+        <td>
+          5925
+          -
+          5928
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.get
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.get
+        </td>
+      </tr><tr>
+        <td>
+          217
+        </td>
+        <td>
+          763
+        </td>
+        <td>
+          5946
+          -
+          5964
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.incrOp
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.incrOp(current, v)
+        </td>
+      </tr><tr>
+        <td>
+          218
+        </td>
+        <td>
+          764
+        </td>
+        <td>
+          5973
+          -
+          6004
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.compareAndSet(current, update).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          219
+        </td>
+        <td>
+          765
+        </td>
+        <td>
+          6012
+          -
+          6030
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.getAndIncrement
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.getAndIncrement(v)
+        </td>
+      </tr><tr>
+        <td>
+          219
+        </td>
+        <td>
+          766
+        </td>
+        <td>
+          6012
+          -
+          6030
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.getAndIncrement
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.getAndIncrement(v)
+        </td>
+      </tr><tr>
+        <td>
+          221
+        </td>
+        <td>
+          767
+        </td>
+        <td>
+          6046
+          -
+          6053
+        </td>
+        <td>
+          Ident
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.current
+        </td>
+        <td style="background: #AEF1AE">
+          current
+        </td>
+      </tr><tr>
+        <td>
+          226
+        </td>
+        <td>
+          768
+        </td>
+        <td>
+          6127
+          -
+          6130
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.get
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.get
+        </td>
+      </tr><tr>
+        <td>
+          227
+        </td>
+        <td>
+          769
+        </td>
+        <td>
+          6148
+          -
+          6166
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.plusOp
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.plusOp(current, v)
+        </td>
+      </tr><tr>
+        <td>
+          228
+        </td>
+        <td>
+          770
+        </td>
+        <td>
+          6175
+          -
+          6206
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.compareAndSet(current, update).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          229
+        </td>
+        <td>
+          771
+        </td>
+        <td>
+          6214
+          -
+          6226
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.getAndAdd
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.getAndAdd(v)
+        </td>
+      </tr><tr>
+        <td>
+          229
+        </td>
+        <td>
+          772
+        </td>
+        <td>
+          6214
+          -
+          6226
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.getAndAdd
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.getAndAdd(v)
+        </td>
+      </tr><tr>
+        <td>
+          231
+        </td>
+        <td>
+          773
+        </td>
+        <td>
+          6242
+          -
+          6249
+        </td>
+        <td>
+          Ident
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.current
+        </td>
+        <td style="background: #AEF1AE">
+          current
+        </td>
+      </tr><tr>
+        <td>
+          236
+        </td>
+        <td>
+          774
+        </td>
+        <td>
+          6320
+          -
+          6323
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.get
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.get
+        </td>
+      </tr><tr>
+        <td>
+          237
+        </td>
+        <td>
+          775
+        </td>
+        <td>
+          6341
+          -
+          6360
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.minusOp
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.minusOp(current, v)
+        </td>
+      </tr><tr>
+        <td>
+          238
+        </td>
+        <td>
+          779
+        </td>
+        <td>
+          6365
+          -
+          6365
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          238
+        </td>
+        <td>
+          776
+        </td>
+        <td>
+          6369
+          -
+          6400
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.compareAndSet(current, update).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          238
+        </td>
+        <td>
+          780
+        </td>
+        <td>
+          6365
+          -
+          6365
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          239
+        </td>
+        <td>
+          777
+        </td>
+        <td>
+          6408
+          -
+          6419
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.subtract
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.subtract(v)
+        </td>
+      </tr><tr>
+        <td>
+          239
+        </td>
+        <td>
+          778
+        </td>
+        <td>
+          6408
+          -
+          6419
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.subtract
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.subtract(v)
+        </td>
+      </tr><tr>
+        <td>
+          244
+        </td>
+        <td>
+          781
+        </td>
+        <td>
+          6498
+          -
+          6501
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.get
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.get
+        </td>
+      </tr><tr>
+        <td>
+          245
+        </td>
+        <td>
+          782
+        </td>
+        <td>
+          6519
+          -
+          6538
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.minusOp
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.minusOp(current, v)
+        </td>
+      </tr><tr>
+        <td>
+          246
+        </td>
+        <td>
+          783
+        </td>
+        <td>
+          6547
+          -
+          6578
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.compareAndSet(current, update).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          247
+        </td>
+        <td>
+          785
+        </td>
+        <td>
+          6586
+          -
+          6603
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.subtractAndGet
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.subtractAndGet(v)
+        </td>
+      </tr><tr>
+        <td>
+          247
+        </td>
+        <td>
+          784
+        </td>
+        <td>
+          6586
+          -
+          6603
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.subtractAndGet
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.subtractAndGet(v)
+        </td>
+      </tr><tr>
+        <td>
+          249
+        </td>
+        <td>
+          786
+        </td>
+        <td>
+          6619
+          -
+          6625
+        </td>
+        <td>
+          Ident
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.update
+        </td>
+        <td style="background: #AEF1AE">
+          update
+        </td>
+      </tr><tr>
+        <td>
+          254
+        </td>
+        <td>
+          787
+        </td>
+        <td>
+          6704
+          -
+          6707
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.get
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.get
+        </td>
+      </tr><tr>
+        <td>
+          255
+        </td>
+        <td>
+          788
+        </td>
+        <td>
+          6725
+          -
+          6744
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.minusOp
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.minusOp(current, v)
+        </td>
+      </tr><tr>
+        <td>
+          256
+        </td>
+        <td>
+          789
+        </td>
+        <td>
+          6753
+          -
+          6784
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.compareAndSet(current, update).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          257
+        </td>
+        <td>
+          791
+        </td>
+        <td>
+          6792
+          -
+          6809
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.getAndSubtract
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.getAndSubtract(v)
+        </td>
+      </tr><tr>
+        <td>
+          257
+        </td>
+        <td>
+          790
+        </td>
+        <td>
+          6792
+          -
+          6809
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.getAndSubtract
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.getAndSubtract(v)
+        </td>
+      </tr><tr>
+        <td>
+          259
+        </td>
+        <td>
+          792
+        </td>
+        <td>
+          6825
+          -
+          6832
+        </td>
+        <td>
+          Ident
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.current
+        </td>
+        <td style="background: #AEF1AE">
+          current
+        </td>
+      </tr><tr>
+        <td>
+          264
+        </td>
+        <td>
+          793
+        </td>
+        <td>
+          6918
+          -
+          6921
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.get
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.get
+        </td>
+      </tr><tr>
+        <td>
+          265
+        </td>
+        <td>
+          803
+        </td>
+        <td>
+          6946
+          -
+          7146
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  val decrement: Double = if (current.&gt;=(v))
+    v
+  else
+    current;
+  val update: Double = current.-(decrement);
+  if (AtomicDouble.this.compareAndSet(current, update).unary_!)
+    AtomicDouble.this.countDownToZero(v)
+  else
+    decrement
+}
+        </td>
+      </tr><tr>
+        <td>
+          265
+        </td>
+        <td>
+          794
+        </td>
+        <td>
+          6930
+          -
+          6944
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Double.!=
+        </td>
+        <td style="background: #AEF1AE">
+          current.!=(0.0)
+        </td>
+      </tr><tr>
+        <td>
+          266
+        </td>
+        <td>
+          795
+        </td>
+        <td>
+          6974
+          -
+          6986
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Double.&gt;=
+        </td>
+        <td style="background: #AEF1AE">
+          current.&gt;=(v)
+        </td>
+      </tr><tr>
+        <td>
+          266
+        </td>
+        <td>
+          797
+        </td>
+        <td>
+          6995
+          -
+          7002
+        </td>
+        <td>
+          Ident
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.current
+        </td>
+        <td style="background: #F0ADAD">
+          current
+        </td>
+      </tr><tr>
+        <td>
+          266
+        </td>
+        <td>
+          796
+        </td>
+        <td>
+          6988
+          -
+          6989
+        </td>
+        <td>
+          Ident
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.v
+        </td>
+        <td style="background: #AEF1AE">
+          v
+        </td>
+      </tr><tr>
+        <td>
+          267
+        </td>
+        <td>
+          798
+        </td>
+        <td>
+          7022
+          -
+          7041
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Double.-
+        </td>
+        <td style="background: #AEF1AE">
+          current.-(decrement)
+        </td>
+      </tr><tr>
+        <td>
+          268
+        </td>
+        <td>
+          799
+        </td>
+        <td>
+          7052
+          -
+          7083
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.compareAndSet(current, update).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          269
+        </td>
+        <td>
+          801
+        </td>
+        <td>
+          7093
+          -
+          7111
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.countDownToZero
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.countDownToZero(v)
+        </td>
+      </tr><tr>
+        <td>
+          269
+        </td>
+        <td>
+          800
+        </td>
+        <td>
+          7093
+          -
+          7111
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.countDownToZero
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.countDownToZero(v)
+        </td>
+      </tr><tr>
+        <td>
+          271
+        </td>
+        <td>
+          802
+        </td>
+        <td>
+          7131
+          -
+          7140
+        </td>
+        <td>
+          Ident
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.decrement
+        </td>
+        <td style="background: #AEF1AE">
+          decrement
+        </td>
+      </tr><tr>
+        <td>
+          274
+        </td>
+        <td>
+          804
+        </td>
+        <td>
+          7162
+          -
+          7165
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          0.0
+        </td>
+      </tr><tr>
+        <td>
+          274
+        </td>
+        <td>
+          805
+        </td>
+        <td>
+          7162
+          -
+          7165
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          0.0
+        </td>
+      </tr><tr>
+        <td>
+          277
+        </td>
+        <td>
+          806
+        </td>
+        <td>
+          7217
+          -
+          7219
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Int.unary_-
+        </td>
+        <td style="background: #AEF1AE">
+          v.unary_-
+        </td>
+      </tr><tr>
+        <td>
+          277
+        </td>
+        <td>
+          807
+        </td>
+        <td>
+          7207
+          -
+          7220
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.increment
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.increment(v.unary_-)
+        </td>
+      </tr><tr>
+        <td>
+          278
+        </td>
+        <td>
+          809
+        </td>
+        <td>
+          7265
+          -
+          7284
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.incrementAndGet
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.incrementAndGet(v.unary_-)
+        </td>
+      </tr><tr>
+        <td>
+          278
+        </td>
+        <td>
+          808
+        </td>
+        <td>
+          7281
+          -
+          7283
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Int.unary_-
+        </td>
+        <td style="background: #AEF1AE">
+          v.unary_-
+        </td>
+      </tr><tr>
+        <td>
+          279
+        </td>
+        <td>
+          810
+        </td>
+        <td>
+          7345
+          -
+          7347
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Int.unary_-
+        </td>
+        <td style="background: #AEF1AE">
+          v.unary_-
+        </td>
+      </tr><tr>
+        <td>
+          279
+        </td>
+        <td>
+          811
+        </td>
+        <td>
+          7329
+          -
+          7348
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.getAndIncrement
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.this.getAndIncrement(v.unary_-)
+        </td>
+      </tr><tr>
+        <td>
+          280
+        </td>
+        <td>
+          813
+        </td>
+        <td>
+          7388
+          -
+          7388
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          280
+        </td>
+        <td>
+          812
+        </td>
+        <td>
+          7379
+          -
+          7391
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.addAndGet
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.addAndGet(v)
+        </td>
+      </tr><tr>
+        <td>
+          281
+        </td>
+        <td>
+          815
+        </td>
+        <td>
+          7436
+          -
+          7436
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          281
+        </td>
+        <td>
+          814
+        </td>
+        <td>
+          7422
+          -
+          7439
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.subtractAndGet
+        </td>
+        <td style="background: #F0ADAD">
+          AtomicDouble.this.subtractAndGet(v)
+        </td>
+      </tr><tr>
+        <td>
+          283
+        </td>
+        <td>
+          816
+        </td>
+        <td>
+          7500
+          -
+          7505
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Double.+
+        </td>
+        <td style="background: #AEF1AE">
+          a.+(b)
+        </td>
+      </tr><tr>
+        <td>
+          284
+        </td>
+        <td>
+          817
+        </td>
+        <td>
+          7566
+          -
+          7571
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Double.-
+        </td>
+        <td style="background: #AEF1AE">
+          a.-(b)
+        </td>
+      </tr><tr>
+        <td>
+          285
+        </td>
+        <td>
+          818
+        </td>
+        <td>
+          7628
+          -
+          7633
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Double.+
+        </td>
+        <td style="background: #AEF1AE">
+          a.+(b)
+        </td>
+      </tr><tr>
+        <td>
+          290
+        </td>
+        <td>
+          819
+        </td>
+        <td>
+          7749
+          -
+          7779
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Double.doubleToLongBits
+        </td>
+        <td style="background: #AEF1AE">
+          java.lang.Double.doubleToLongBits(initialValue)
+        </td>
+      </tr><tr>
+        <td>
+          290
+        </td>
+        <td>
+          821
+        </td>
+        <td>
+          7713
+          -
+          7781
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new AtomicDouble(new java.util.concurrent.atomic.AtomicLong(java.lang.Double.doubleToLongBits(initialValue)))
+        </td>
+      </tr><tr>
+        <td>
+          290
+        </td>
+        <td>
+          820
+        </td>
+        <td>
+          7730
+          -
+          7780
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.util.concurrent.atomic.AtomicLong.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new java.util.concurrent.atomic.AtomicLong(java.lang.Double.doubleToLongBits(initialValue))
+        </td>
+      </tr><tr>
+        <td>
+          293
+        </td>
+        <td>
+          822
+        </td>
+        <td>
+          7835
+          -
+          7856
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new AtomicDouble(ref)
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

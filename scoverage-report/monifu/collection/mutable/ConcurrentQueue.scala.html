@@ -1,0 +1,696 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          monifu/collection/mutable/ConcurrentQueue.scala.html
+        </title>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''>
+</span>17 <span style=''>package monifu.collection.mutable
+</span>18 <span style=''>
+</span>19 <span style=''>import java.util.concurrent.ConcurrentLinkedQueue
+</span>20 <span style=''>
+</span>21 <span style=''>import scala.collection.JavaConverters._
+</span>22 <span style=''>import scala.collection.generic.{GenericTraversableTemplate, CanBuildFrom, GenericCompanion, TraversableFactory}
+</span>23 <span style=''>import scala.collection.{mutable, Iterable}
+</span>24 <span style=''>
+</span>25 <span style=''>
+</span>26 <span style=''>/**
+</span>27 <span style=''> * An efficient queue data-structure.
+</span>28 <span style=''> *
+</span>29 <span style=''> * On top of the JVM it is backed by a `java.util.concurrent.ConcurrentLinkedQueue`
+</span>30 <span style=''> * so it can be used in a multi-threading context. On top of Scala.js / Javascript
+</span>31 <span style=''> * it is backed by a `scala.collection.mutable.Queue`.
+</span>32 <span style=''> *
+</span>33 <span style=''> * Contrary to Scala best-practices, the `poll()` method that pulls elements from our
+</span>34 <span style=''> * queue is returning `null` in case the queue is empty.
+</span>35 <span style=''> */
+</span>36 <span style=''>final class ConcurrentQueue[A](elems: A*)
+</span>37 <span style=''>  extends Iterable[A]
+</span>38 <span style=''>  with GenericTraversableTemplate[A, ConcurrentQueue]
+</span>39 <span style=''>  with mutable.Cloneable[ConcurrentQueue[A]]
+</span>40 <span style=''>  with Serializable {
+</span>41 <span style=''>
+</span>42 <span style=''>  private[this] val underlying = {
+</span>43 <span style=''>    val instance = </span><span style='background: #AEF1AE'>new ConcurrentLinkedQueue[A]()</span><span style=''>
+</span>44 <span style=''>    </span><span style='background: #AEF1AE'>instance.addAll(elems.asJava)</span><span style=''>
+</span>45 <span style=''>    instance
+</span>46 <span style=''>  }
+</span>47 <span style=''>
+</span>48 <span style=''>  override def companion: GenericCompanion[ConcurrentQueue] =
+</span>49 <span style=''>    ConcurrentQueue
+</span>50 <span style=''>
+</span>51 <span style=''>  override def newBuilder: mutable.Builder[A, ConcurrentQueue[A]] =
+</span>52 <span style=''>    </span><span style='background: #F0ADAD'>companion.newBuilder[A]</span><span style=''>
+</span>53 <span style=''>
+</span>54 <span style=''>  /**
+</span>55 <span style=''>   * Enqueues one element in this queue
+</span>56 <span style=''>   *
+</span>57 <span style=''>   * @throws NullPointerException if the specified element is null
+</span>58 <span style=''>   */
+</span>59 <span style=''>  def offer(elem: A): Unit = {
+</span>60 <span style=''>    </span><span style='background: #AEF1AE'>underlying.offer(elem)</span><span style=''>
+</span>61 <span style=''>  }
+</span>62 <span style=''>
+</span>63 <span style=''>  /**
+</span>64 <span style=''>   * Appends all of the elements in the specified collection to the end of
+</span>65 <span style=''>   * this queue, in the order that they are returned by the specified
+</span>66 <span style=''>   * collection's iterator. Attempts to `addAll` of a queue to
+</span>67 <span style=''>   * itself result in `IllegalArgumentException`.
+</span>68 <span style=''>   *
+</span>69 <span style=''>   * @param elems the elements to be inserted into this queue
+</span>70 <span style=''>   * @return `true` if this queue changed as a result of the call
+</span>71 <span style=''>   *
+</span>72 <span style=''>   * @throws `NullPointerException` if the specified collection or any
+</span>73 <span style=''>   *         of its elements are null
+</span>74 <span style=''>   */
+</span>75 <span style=''>  def addAll(elems: A*): Unit = {
+</span>76 <span style=''>    </span><span style='background: #F0ADAD'>underlying.addAll(elems.asJava)</span><span style=''>
+</span>77 <span style=''>  }
+</span>78 <span style=''>
+</span>79 <span style=''>  /**
+</span>80 <span style=''>   * Returns the first element in the queue, and removes this element
+</span>81 <span style=''>   * from the queue.
+</span>82 <span style=''>   *
+</span>83 <span style=''>   * @return the first element of the queue or `null` in case the
+</span>84 <span style=''>   *         queue is empty.
+</span>85 <span style=''>   */
+</span>86 <span style=''>  def poll(): A = {
+</span>87 <span style=''>    </span><span style='background: #AEF1AE'>underlying.poll()</span><span style=''>
+</span>88 <span style=''>  }
+</span>89 <span style=''>
+</span>90 <span style=''>  /**
+</span>91 <span style=''>   * Removes all of the elements from this queue.
+</span>92 <span style=''>   * The queue will be empty after this call returns.
+</span>93 <span style=''>   *
+</span>94 <span style=''>   * This implementation repeatedly invokes [[poll]] until it
+</span>95 <span style=''>   * returns `null`.
+</span>96 <span style=''>   */
+</span>97 <span style=''>  def clear(): Unit = {
+</span>98 <span style=''>    </span><span style='background: #AEF1AE'>underlying.clear()</span><span style=''>
+</span>99 <span style=''>  }
+</span>100 <span style=''>
+</span>101 <span style=''>  def iterator: Iterator[A] = {
+</span>102 <span style=''>    </span><span style='background: #F0ADAD'>underlying.iterator().asScala</span><span style=''>
+</span>103 <span style=''>  }
+</span>104 <span style=''>
+</span>105 <span style=''>  override def seq: Iterable[A] = this
+</span>106 <span style=''>
+</span>107 <span style=''>  override def clone(): ConcurrentQueue[A] = {
+</span>108 <span style=''>    </span><span style='background: #F0ADAD'>new ConcurrentQueue[A](toSeq : _*)</span><span style=''>
+</span>109 <span style=''>  }
+</span>110 <span style=''>
+</span>111 <span style=''>  override def isEmpty: Boolean = {
+</span>112 <span style=''>    </span><span style='background: #AEF1AE'>underlying.isEmpty</span><span style=''>
+</span>113 <span style=''>  }
+</span>114 <span style=''>
+</span>115 <span style=''>  override def nonEmpty: Boolean = {
+</span>116 <span style=''>    </span><span style='background: #F0ADAD'>!underlying.isEmpty</span><span style=''>
+</span>117 <span style=''>  }
+</span>118 <span style=''>}
+</span>119 <span style=''>
+</span>120 <span style=''>/**
+</span>121 <span style=''> * An efficient queue data-structure.
+</span>122 <span style=''> *
+</span>123 <span style=''> * On top of the JVM it is backed by a `java.util.concurrent.ConcurrentLinkedQueue`
+</span>124 <span style=''> * so it can be used in a multi-threading context. On top of Scala.js / Javascript
+</span>125 <span style=''> * it is backed by a `scala.collection.mutable.Queue`.
+</span>126 <span style=''> *
+</span>127 <span style=''> * Contrary to Scala best-practices, the `poll()` method that pulls elements from our
+</span>128 <span style=''> * queue is returning `null` in case the queue is empty.
+</span>129 <span style=''> */
+</span>130 <span style=''>object ConcurrentQueue extends TraversableFactory[ConcurrentQueue] {
+</span>131 <span style=''>  implicit def canBuildFrom[A]: CanBuildFrom[Coll, A, ConcurrentQueue[A]] =
+</span>132 <span style=''>    </span><span style='background: #F0ADAD'>ReusableCBF.asInstanceOf[GenericCanBuildFrom[A]]</span><span style=''>
+</span>133 <span style=''>
+</span>134 <span style=''>  def newBuilder[A]: mutable.Builder[A, ConcurrentQueue[A]] =
+</span>135 <span style=''>    </span><span style='background: #AEF1AE'>new</span><span style=''> mutable.Builder[A, ConcurrentQueue[A]] {
+</span>136 <span style=''>      private[this] val queue = </span><span style='background: #AEF1AE'>new ConcurrentQueue[A]()</span><span style=''>
+</span>137 <span style=''>
+</span>138 <span style=''>      def +=(elem: A): this.type = {
+</span>139 <span style=''>        </span><span style='background: #F0ADAD'>queue.offer(elem)</span><span style=''>
+</span>140 <span style=''>        this
+</span>141 <span style=''>      }
+</span>142 <span style=''>
+</span>143 <span style=''>      def result(): ConcurrentQueue[A] = {
+</span>144 <span style=''>        </span><span style='background: #AEF1AE'>queue</span><span style=''>
+</span>145 <span style=''>      }
+</span>146 <span style=''>
+</span>147 <span style=''>      def clear(): Unit = {
+</span>148 <span style=''>        </span><span style='background: #F0ADAD'>queue.clear()</span><span style=''>
+</span>149 <span style=''>      }
+</span>150 <span style=''>    }
+</span>151 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          43
+        </td>
+        <td>
+          1
+        </td>
+        <td>
+          1554
+          -
+          1584
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.util.concurrent.ConcurrentLinkedQueue.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new java.util.concurrent.ConcurrentLinkedQueue[A]()
+        </td>
+      </tr><tr>
+        <td>
+          44
+        </td>
+        <td>
+          2
+        </td>
+        <td>
+          1605
+          -
+          1610
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.collection.mutable.ConcurrentQueue.elems
+        </td>
+        <td style="background: #AEF1AE">
+          ConcurrentQueue.this.elems
+        </td>
+      </tr><tr>
+        <td>
+          44
+        </td>
+        <td>
+          4
+        </td>
+        <td>
+          1589
+          -
+          1618
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.util.concurrent.ConcurrentLinkedQueue.addAll
+        </td>
+        <td style="background: #AEF1AE">
+          instance.addAll(scala.collection.JavaConverters.seqAsJavaListConverter[A](ConcurrentQueue.this.elems).asJava)
+        </td>
+      </tr><tr>
+        <td>
+          44
+        </td>
+        <td>
+          3
+        </td>
+        <td>
+          1605
+          -
+          1617
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.collection.convert.Decorators.AsJava.asJava
+        </td>
+        <td style="background: #AEF1AE">
+          scala.collection.JavaConverters.seqAsJavaListConverter[A](ConcurrentQueue.this.elems).asJava
+        </td>
+      </tr><tr>
+        <td>
+          52
+        </td>
+        <td>
+          5
+        </td>
+        <td>
+          1792
+          -
+          1815
+        </td>
+        <td>
+          TypeApply
+        </td>
+        <td>
+          scala.collection.generic.GenericCompanion.newBuilder
+        </td>
+        <td style="background: #F0ADAD">
+          ConcurrentQueue.this.companion.newBuilder[A]
+        </td>
+      </tr><tr>
+        <td>
+          60
+        </td>
+        <td>
+          7
+        </td>
+        <td>
+          1992
+          -
+          1992
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          60
+        </td>
+        <td>
+          6
+        </td>
+        <td>
+          1976
+          -
+          1998
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.util.concurrent.ConcurrentLinkedQueue.offer
+        </td>
+        <td style="background: #AEF1AE">
+          ConcurrentQueue.this.underlying.offer(elem)
+        </td>
+      </tr><tr>
+        <td>
+          76
+        </td>
+        <td>
+          8
+        </td>
+        <td>
+          2577
+          -
+          2589
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.collection.convert.Decorators.AsJava.asJava
+        </td>
+        <td style="background: #F0ADAD">
+          scala.collection.JavaConverters.seqAsJavaListConverter[A](elems).asJava
+        </td>
+      </tr><tr>
+        <td>
+          76
+        </td>
+        <td>
+          10
+        </td>
+        <td>
+          2576
+          -
+          2576
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          76
+        </td>
+        <td>
+          9
+        </td>
+        <td>
+          2559
+          -
+          2590
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.util.concurrent.ConcurrentLinkedQueue.addAll
+        </td>
+        <td style="background: #F0ADAD">
+          ConcurrentQueue.this.underlying.addAll(scala.collection.JavaConverters.seqAsJavaListConverter[A](elems).asJava)
+        </td>
+      </tr><tr>
+        <td>
+          87
+        </td>
+        <td>
+          11
+        </td>
+        <td>
+          2823
+          -
+          2840
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.util.concurrent.ConcurrentLinkedQueue.poll
+        </td>
+        <td style="background: #AEF1AE">
+          ConcurrentQueue.this.underlying.poll()
+        </td>
+      </tr><tr>
+        <td>
+          98
+        </td>
+        <td>
+          12
+        </td>
+        <td>
+          3078
+          -
+          3096
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.util.AbstractQueue.clear
+        </td>
+        <td style="background: #AEF1AE">
+          ConcurrentQueue.this.underlying.clear()
+        </td>
+      </tr><tr>
+        <td>
+          102
+        </td>
+        <td>
+          14
+        </td>
+        <td>
+          3138
+          -
+          3167
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.collection.convert.Decorators.AsScala.asScala
+        </td>
+        <td style="background: #F0ADAD">
+          scala.collection.JavaConverters.asScalaIteratorConverter[A](ConcurrentQueue.this.underlying.iterator()).asScala
+        </td>
+      </tr><tr>
+        <td>
+          102
+        </td>
+        <td>
+          13
+        </td>
+        <td>
+          3138
+          -
+          3159
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.util.concurrent.ConcurrentLinkedQueue.iterator
+        </td>
+        <td style="background: #F0ADAD">
+          ConcurrentQueue.this.underlying.iterator()
+        </td>
+      </tr><tr>
+        <td>
+          108
+        </td>
+        <td>
+          16
+        </td>
+        <td>
+          3264
+          -
+          3298
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.collection.mutable.ConcurrentQueue.&lt;init&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          new monifu.collection.mutable.ConcurrentQueue[A]((ConcurrentQueue.this.toSeq: _*))
+        </td>
+      </tr><tr>
+        <td>
+          108
+        </td>
+        <td>
+          15
+        </td>
+        <td>
+          3287
+          -
+          3292
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.collection.TraversableOnce.toSeq
+        </td>
+        <td style="background: #F0ADAD">
+          ConcurrentQueue.this.toSeq
+        </td>
+      </tr><tr>
+        <td>
+          112
+        </td>
+        <td>
+          17
+        </td>
+        <td>
+          3344
+          -
+          3362
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.util.concurrent.ConcurrentLinkedQueue.isEmpty
+        </td>
+        <td style="background: #AEF1AE">
+          ConcurrentQueue.this.underlying.isEmpty()
+        </td>
+      </tr><tr>
+        <td>
+          116
+        </td>
+        <td>
+          18
+        </td>
+        <td>
+          3409
+          -
+          3428
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #F0ADAD">
+          ConcurrentQueue.this.underlying.isEmpty().unary_!
+        </td>
+      </tr><tr>
+        <td>
+          132
+        </td>
+        <td>
+          19
+        </td>
+        <td>
+          4002
+          -
+          4050
+        </td>
+        <td>
+          TypeApply
+        </td>
+        <td>
+          scala.Any.asInstanceOf
+        </td>
+        <td style="background: #F0ADAD">
+          ConcurrentQueue.this.ReusableCBF.asInstanceOf[monifu.collection.mutable.ConcurrentQueue.GenericCanBuildFrom[A]]
+        </td>
+      </tr><tr>
+        <td>
+          135
+        </td>
+        <td>
+          24
+        </td>
+        <td>
+          4118
+          -
+          4121
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.collection.mutable.ConcurrentQueue.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          136
+        </td>
+        <td>
+          20
+        </td>
+        <td>
+          4195
+          -
+          4219
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.collection.mutable.ConcurrentQueue.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new monifu.collection.mutable.ConcurrentQueue[A]()
+        </td>
+      </tr><tr>
+        <td>
+          139
+        </td>
+        <td>
+          21
+        </td>
+        <td>
+          4266
+          -
+          4283
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.collection.mutable.ConcurrentQueue.offer
+        </td>
+        <td style="background: #F0ADAD">
+          $anon.this.queue.offer(elem)
+        </td>
+      </tr><tr>
+        <td>
+          144
+        </td>
+        <td>
+          22
+        </td>
+        <td>
+          4357
+          -
+          4362
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.collection.mutable.ConcurrentQueue.$anon.queue
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this.queue
+        </td>
+      </tr><tr>
+        <td>
+          148
+        </td>
+        <td>
+          23
+        </td>
+        <td>
+          4408
+          -
+          4421
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.collection.mutable.ConcurrentQueue.clear
+        </td>
+        <td style="background: #F0ADAD">
+          $anon.this.queue.clear()
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

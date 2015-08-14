@@ -1,0 +1,1359 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          monifu/reactive/observers/SafeObserver.scala.html
+        </title>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''>
+</span>17 <span style=''>package monifu.reactive.observers
+</span>18 <span style=''>
+</span>19 <span style=''>import monifu.concurrent.Scheduler
+</span>20 <span style=''>import monifu.reactive.Ack.{Cancel, Continue}
+</span>21 <span style=''>import monifu.reactive.{Ack, Observer}
+</span>22 <span style=''>
+</span>23 <span style=''>import scala.concurrent.{Future, Promise}
+</span>24 <span style=''>import scala.util.Failure
+</span>25 <span style=''>import scala.util.control.NonFatal
+</span>26 <span style=''>
+</span>27 <span style=''>
+</span>28 <span style=''>/**
+</span>29 <span style=''> * A safe observer ensures too things:
+</span>30 <span style=''> *
+</span>31 <span style=''> * - errors triggered by downstream observers are caught and streamed to `onError`,
+</span>32 <span style=''> *   while the upstream gets an `Ack.Cancel`, to stop sending events
+</span>33 <span style=''> *
+</span>34 <span style=''> * - once an `onError` or `onComplete` was emitted, the observer no longer accepts
+</span>35 <span style=''> *   `onNext` events, ensuring that the Rx grammar is respected.
+</span>36 <span style=''> *
+</span>37 <span style=''> * - if downstream signals a `Cancel`, the observer no longer accepts any events,
+</span>38 <span style=''> *   ensuring that the Rx grammar is respected.
+</span>39 <span style=''> *
+</span>40 <span style=''> * This implementation doesn't address multi-threading concerns in any way.
+</span>41 <span style=''> */
+</span>42 <span style=''>final class SafeObserver[-T] private (observer: Observer[T])(implicit s: Scheduler)
+</span>43 <span style=''>  extends Observer[T] {
+</span>44 <span style=''>
+</span>45 <span style=''>  @volatile
+</span>46 <span style=''>  private[this] var isDone = </span><span style='background: #AEF1AE'>false</span><span style=''>
+</span>47 <span style=''>
+</span>48 <span style=''>  def onNext(elem: T): Future[Ack] = {
+</span>49 <span style=''>    if (</span><span style='background: #AEF1AE'>!isDone</span><span style=''>)
+</span>50 <span style=''>      </span><span style='background: #AEF1AE'>try {
+</span>51 <span style=''></span><span style='background: #AEF1AE'>        val r = observer.onNext(elem)
+</span>52 <span style=''></span><span style='background: #AEF1AE'>        onCancelMarkDone(r)
+</span>53 <span style=''></span><span style='background: #AEF1AE'>      }
+</span>54 <span style=''></span><span style='background: #AEF1AE'>      catch {
+</span>55 <span style=''></span><span style='background: #AEF1AE'>        case NonFatal(ex) =>
+</span>56 <span style=''></span><span style='background: #AEF1AE'>          onError(ex)
+</span>57 <span style=''></span><span style='background: #AEF1AE'>          Cancel
+</span>58 <span style=''></span><span style='background: #AEF1AE'>      }</span><span style=''>
+</span>59 <span style=''>    else
+</span>60 <span style=''>      </span><span style='background: #AEF1AE'>Cancel</span><span style=''>
+</span>61 <span style=''>  }
+</span>62 <span style=''>
+</span>63 <span style=''>  def onError(ex: Throwable) = {
+</span>64 <span style=''>    if (</span><span style='background: #AEF1AE'>!isDone</span><span style=''>) </span><span style='background: #AEF1AE'>{
+</span>65 <span style=''></span><span style='background: #AEF1AE'>      isDone = true
+</span>66 <span style=''></span><span style='background: #AEF1AE'>
+</span>67 <span style=''></span><span style='background: #AEF1AE'>      try observer.onError(ex) catch {
+</span>68 <span style=''></span><span style='background: #AEF1AE'>        case NonFatal(err) =>
+</span>69 <span style=''></span><span style='background: #AEF1AE'>          s.reportFailure(err)
+</span>70 <span style=''></span><span style='background: #AEF1AE'>      }
+</span>71 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>72 <span style=''>  }
+</span>73 <span style=''>
+</span>74 <span style=''>  def onComplete() = {
+</span>75 <span style=''>    if (</span><span style='background: #AEF1AE'>!isDone</span><span style=''>) </span><span style='background: #AEF1AE'>{
+</span>76 <span style=''></span><span style='background: #AEF1AE'>      isDone = true
+</span>77 <span style=''></span><span style='background: #AEF1AE'>
+</span>78 <span style=''></span><span style='background: #AEF1AE'>      try observer.onComplete() catch {
+</span>79 <span style=''></span><span style='background: #AEF1AE'>        case NonFatal(ex) =>
+</span>80 <span style=''></span><span style='background: #AEF1AE'>          try observer.onError(ex) catch {
+</span>81 <span style=''></span><span style='background: #AEF1AE'>            case NonFatal(err) =>
+</span>82 <span style=''></span><span style='background: #AEF1AE'>              s.reportFailure(ex)
+</span>83 <span style=''></span><span style='background: #AEF1AE'>              s.reportFailure(err)
+</span>84 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>85 <span style=''></span><span style='background: #AEF1AE'>      }
+</span>86 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>87 <span style=''>  }
+</span>88 <span style=''>
+</span>89 <span style=''>  private[this] def onCancelMarkDone(source: Future[Ack]): Future[Ack] = {
+</span>90 <span style=''>    source match {
+</span>91 <span style=''>      case sync if </span><span style='background: #AEF1AE'>sync.isCompleted</span><span style=''> =>
+</span>92 <span style=''>        </span><span style='background: #AEF1AE'>sync.value.get</span><span style=''> match {
+</span>93 <span style=''>          case Continue.IsSuccess =>
+</span>94 <span style=''>            </span><span style='background: #AEF1AE'>Continue</span><span style=''>
+</span>95 <span style=''>
+</span>96 <span style=''>          case Cancel.IsSuccess =>
+</span>97 <span style=''>            isDone = </span><span style='background: #AEF1AE'>true</span><span style=''>
+</span>98 <span style=''>            </span><span style='background: #AEF1AE'>Cancel</span><span style=''>
+</span>99 <span style=''>
+</span>100 <span style=''>          case Failure(ex) =>
+</span>101 <span style=''>            </span><span style='background: #AEF1AE'>onError(sync.value.get.failed.get)</span><span style=''>
+</span>102 <span style=''>            </span><span style='background: #AEF1AE'>Cancel</span><span style=''>
+</span>103 <span style=''>
+</span>104 <span style=''>          case _ =>
+</span>105 <span style=''>            </span><span style='background: #F0ADAD'>Continue</span><span style=''>
+</span>106 <span style=''>        }
+</span>107 <span style=''>
+</span>108 <span style=''>      case async =>
+</span>109 <span style=''>        val p = </span><span style='background: #AEF1AE'>Promise[Ack]()</span><span style=''>
+</span>110 <span style=''>
+</span>111 <span style=''>        </span><span style='background: #AEF1AE'>source.onComplete {
+</span>112 <span style=''></span><span style='background: #AEF1AE'>          case Continue.IsSuccess =>
+</span>113 <span style=''></span><span style='background: #AEF1AE'>            p.success(Continue)
+</span>114 <span style=''></span><span style='background: #AEF1AE'>
+</span>115 <span style=''></span><span style='background: #AEF1AE'>          case Cancel.IsSuccess =>
+</span>116 <span style=''></span><span style='background: #AEF1AE'>            isDone = true
+</span>117 <span style=''></span><span style='background: #AEF1AE'>            p.success(Cancel)
+</span>118 <span style=''></span><span style='background: #AEF1AE'>
+</span>119 <span style=''></span><span style='background: #AEF1AE'>          case Failure(ex) =>
+</span>120 <span style=''></span><span style='background: #AEF1AE'>            onError(ex)
+</span>121 <span style=''></span><span style='background: #AEF1AE'>            p.success(Cancel)
+</span>122 <span style=''></span><span style='background: #AEF1AE'>
+</span>123 <span style=''></span><span style='background: #AEF1AE'>          case _ =>
+</span>124 <span style=''></span><span style='background: #AEF1AE'>            </span><span style='background: #F0ADAD'>p.success(Continue)</span><span style='background: #AEF1AE'>
+</span>125 <span style=''></span><span style='background: #AEF1AE'>        }</span><span style=''>
+</span>126 <span style=''>
+</span>127 <span style=''>        </span><span style='background: #AEF1AE'>p.future</span><span style=''>
+</span>128 <span style=''>    }
+</span>129 <span style=''>  }
+</span>130 <span style=''>}
+</span>131 <span style=''>
+</span>132 <span style=''>object SafeObserver {
+</span>133 <span style=''>  /**
+</span>134 <span style=''>   * Wraps an Observer instance into a SafeObserver.
+</span>135 <span style=''>   */
+</span>136 <span style=''>  def apply[T](observer: Observer[T])(implicit s: Scheduler): SafeObserver[T] =
+</span>137 <span style=''>    observer match {
+</span>138 <span style=''>      case ref: SafeObserver[_] => </span><span style='background: #F0ADAD'>ref.asInstanceOf[SafeObserver[T]]</span><span style=''>
+</span>139 <span style=''>      case _ => </span><span style='background: #AEF1AE'>new SafeObserver[T](observer)</span><span style=''>
+</span>140 <span style=''>    }
+</span>141 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          46
+        </td>
+        <td>
+          3596
+        </td>
+        <td>
+          1588
+          -
+          1593
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          false
+        </td>
+      </tr><tr>
+        <td>
+          49
+        </td>
+        <td>
+          3597
+        </td>
+        <td>
+          1642
+          -
+          1649
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          SafeObserver.this.isDone.unary_!
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          3600
+        </td>
+        <td>
+          1671
+          -
+          1728
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  val r: scala.concurrent.Future[monifu.reactive.Ack] = SafeObserver.this.observer.onNext(elem);
+  SafeObserver.this.onCancelMarkDone(r)
+}
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          3603
+        </td>
+        <td>
+          1657
+          -
+          1826
+        </td>
+        <td>
+          Try
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          try {
+  val r: scala.concurrent.Future[monifu.reactive.Ack] = SafeObserver.this.observer.onNext(elem);
+  SafeObserver.this.onCancelMarkDone(r)
+} catch {
+  case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((ex @ _)) =&gt; {
+    SafeObserver.this.onError(ex);
+    monifu.reactive.Ack.Cancel
+  }
+}
+        </td>
+      </tr><tr>
+        <td>
+          51
+        </td>
+        <td>
+          3598
+        </td>
+        <td>
+          1679
+          -
+          1700
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onNext
+        </td>
+        <td style="background: #AEF1AE">
+          SafeObserver.this.observer.onNext(elem)
+        </td>
+      </tr><tr>
+        <td>
+          52
+        </td>
+        <td>
+          3599
+        </td>
+        <td>
+          1709
+          -
+          1728
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.SafeObserver.onCancelMarkDone
+        </td>
+        <td style="background: #AEF1AE">
+          SafeObserver.this.onCancelMarkDone(r)
+        </td>
+      </tr><tr>
+        <td>
+          56
+        </td>
+        <td>
+          3601
+        </td>
+        <td>
+          1790
+          -
+          1801
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.SafeObserver.onError
+        </td>
+        <td style="background: #AEF1AE">
+          SafeObserver.this.onError(ex)
+        </td>
+      </tr><tr>
+        <td>
+          57
+        </td>
+        <td>
+          3602
+        </td>
+        <td>
+          1812
+          -
+          1818
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          60
+        </td>
+        <td>
+          3605
+        </td>
+        <td>
+          1842
+          -
+          1848
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          60
+        </td>
+        <td>
+          3604
+        </td>
+        <td>
+          1842
+          -
+          1848
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          3612
+        </td>
+        <td>
+          1891
+          -
+          1891
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          3606
+        </td>
+        <td>
+          1895
+          -
+          1902
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          SafeObserver.this.isDone.unary_!
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          3611
+        </td>
+        <td>
+          1904
+          -
+          2040
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  SafeObserver.this.isDone = true;
+  try {
+    SafeObserver.this.observer.onError(ex)
+  } catch {
+    case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((err @ _)) =&gt; SafeObserver.this.s.reportFailure(err)
+  }
+}
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          3613
+        </td>
+        <td>
+          1891
+          -
+          1891
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          65
+        </td>
+        <td>
+          3607
+        </td>
+        <td>
+          1921
+          -
+          1925
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          3609
+        </td>
+        <td>
+          1937
+          -
+          1957
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #AEF1AE">
+          SafeObserver.this.observer.onError(ex)
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          3608
+        </td>
+        <td>
+          1937
+          -
+          1957
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #AEF1AE">
+          SafeObserver.this.observer.onError(ex)
+        </td>
+      </tr><tr>
+        <td>
+          69
+        </td>
+        <td>
+          3610
+        </td>
+        <td>
+          2006
+          -
+          2026
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.reportFailure
+        </td>
+        <td style="background: #AEF1AE">
+          SafeObserver.this.s.reportFailure(err)
+        </td>
+      </tr><tr>
+        <td>
+          75
+        </td>
+        <td>
+          3624
+        </td>
+        <td>
+          2073
+          -
+          2073
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          75
+        </td>
+        <td>
+          3614
+        </td>
+        <td>
+          2077
+          -
+          2084
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          SafeObserver.this.isDone.unary_!
+        </td>
+      </tr><tr>
+        <td>
+          75
+        </td>
+        <td>
+          3623
+        </td>
+        <td>
+          2073
+          -
+          2073
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          75
+        </td>
+        <td>
+          3622
+        </td>
+        <td>
+          2086
+          -
+          2349
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  SafeObserver.this.isDone = true;
+  try {
+    SafeObserver.this.observer.onComplete()
+  } catch {
+    case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((ex @ _)) =&gt; try {
+      SafeObserver.this.observer.onError(ex)
+    } catch {
+      case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((err @ _)) =&gt; {
+        SafeObserver.this.s.reportFailure(ex);
+        SafeObserver.this.s.reportFailure(err)
+      }
+    }
+  }
+}
+        </td>
+      </tr><tr>
+        <td>
+          76
+        </td>
+        <td>
+          3615
+        </td>
+        <td>
+          2103
+          -
+          2107
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          3617
+        </td>
+        <td>
+          2119
+          -
+          2140
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Observer.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          SafeObserver.this.observer.onComplete()
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          3616
+        </td>
+        <td>
+          2119
+          -
+          2140
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          SafeObserver.this.observer.onComplete()
+        </td>
+      </tr><tr>
+        <td>
+          80
+        </td>
+        <td>
+          3618
+        </td>
+        <td>
+          2192
+          -
+          2212
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #AEF1AE">
+          SafeObserver.this.observer.onError(ex)
+        </td>
+      </tr><tr>
+        <td>
+          80
+        </td>
+        <td>
+          3619
+        </td>
+        <td>
+          2192
+          -
+          2212
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #AEF1AE">
+          SafeObserver.this.observer.onError(ex)
+        </td>
+      </tr><tr>
+        <td>
+          82
+        </td>
+        <td>
+          3620
+        </td>
+        <td>
+          2269
+          -
+          2288
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.reportFailure
+        </td>
+        <td style="background: #AEF1AE">
+          SafeObserver.this.s.reportFailure(ex)
+        </td>
+      </tr><tr>
+        <td>
+          83
+        </td>
+        <td>
+          3621
+        </td>
+        <td>
+          2303
+          -
+          2323
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.reportFailure
+        </td>
+        <td style="background: #AEF1AE">
+          SafeObserver.this.s.reportFailure(err)
+        </td>
+      </tr><tr>
+        <td>
+          91
+        </td>
+        <td>
+          3625
+        </td>
+        <td>
+          2468
+          -
+          2484
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.Future.isCompleted
+        </td>
+        <td style="background: #AEF1AE">
+          sync.isCompleted
+        </td>
+      </tr><tr>
+        <td>
+          92
+        </td>
+        <td>
+          3626
+        </td>
+        <td>
+          2496
+          -
+          2510
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Option.get
+        </td>
+        <td style="background: #AEF1AE">
+          sync.value.get
+        </td>
+      </tr><tr>
+        <td>
+          94
+        </td>
+        <td>
+          3627
+        </td>
+        <td>
+          2568
+          -
+          2576
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Continue
+        </td>
+      </tr><tr>
+        <td>
+          97
+        </td>
+        <td>
+          3628
+        </td>
+        <td>
+          2634
+          -
+          2638
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          98
+        </td>
+        <td>
+          3629
+        </td>
+        <td>
+          2651
+          -
+          2657
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          101
+        </td>
+        <td>
+          3630
+        </td>
+        <td>
+          2709
+          -
+          2734
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.util.Try.get
+        </td>
+        <td style="background: #AEF1AE">
+          sync.value.get.failed.get
+        </td>
+      </tr><tr>
+        <td>
+          101
+        </td>
+        <td>
+          3631
+        </td>
+        <td>
+          2701
+          -
+          2735
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.SafeObserver.onError
+        </td>
+        <td style="background: #AEF1AE">
+          SafeObserver.this.onError(sync.value.get.failed.get)
+        </td>
+      </tr><tr>
+        <td>
+          102
+        </td>
+        <td>
+          3632
+        </td>
+        <td>
+          2748
+          -
+          2754
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          105
+        </td>
+        <td>
+          3633
+        </td>
+        <td>
+          2788
+          -
+          2796
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Ack.Continue
+        </td>
+      </tr><tr>
+        <td>
+          109
+        </td>
+        <td>
+          3634
+        </td>
+        <td>
+          2844
+          -
+          2858
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Promise.apply
+        </td>
+        <td style="background: #AEF1AE">
+          scala.concurrent.Promise.apply[monifu.reactive.Ack]()
+        </td>
+      </tr><tr>
+        <td>
+          111
+        </td>
+        <td>
+          3645
+        </td>
+        <td>
+          2886
+          -
+          2886
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.observers.SafeObserver.s
+        </td>
+        <td style="background: #AEF1AE">
+          SafeObserver.this.s
+        </td>
+      </tr><tr>
+        <td>
+          111
+        </td>
+        <td>
+          3646
+        </td>
+        <td>
+          2868
+          -
+          3196
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.concurrent.Future.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          source.onComplete[scala.concurrent.Promise[monifu.reactive.Ack]](((x0$1: scala.util.Try[monifu.reactive.Ack]) =&gt; x0$1 match {
+  case monifu.reactive.Ack.Continue.IsSuccess =&gt; p.success(monifu.reactive.Ack.Continue)
+  case monifu.reactive.Ack.Cancel.IsSuccess =&gt; {
+    SafeObserver.this.isDone = true;
+    p.success(monifu.reactive.Ack.Cancel)
+  }
+  case (exception: Throwable)scala.util.Failure[monifu.reactive.Ack]((ex @ _)) =&gt; {
+    SafeObserver.this.onError(ex);
+    p.success(monifu.reactive.Ack.Cancel)
+  }
+  case _ =&gt; p.success(monifu.reactive.Ack.Continue)
+}))(SafeObserver.this.s)
+        </td>
+      </tr><tr>
+        <td>
+          113
+        </td>
+        <td>
+          3636
+        </td>
+        <td>
+          2937
+          -
+          2956
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Promise.success
+        </td>
+        <td style="background: #AEF1AE">
+          p.success(monifu.reactive.Ack.Continue)
+        </td>
+      </tr><tr>
+        <td>
+          113
+        </td>
+        <td>
+          3635
+        </td>
+        <td>
+          2947
+          -
+          2955
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Continue
+        </td>
+      </tr><tr>
+        <td>
+          116
+        </td>
+        <td>
+          3637
+        </td>
+        <td>
+          3014
+          -
+          3018
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          117
+        </td>
+        <td>
+          3639
+        </td>
+        <td>
+          3031
+          -
+          3048
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Promise.success
+        </td>
+        <td style="background: #AEF1AE">
+          p.success(monifu.reactive.Ack.Cancel)
+        </td>
+      </tr><tr>
+        <td>
+          117
+        </td>
+        <td>
+          3638
+        </td>
+        <td>
+          3041
+          -
+          3047
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          120
+        </td>
+        <td>
+          3640
+        </td>
+        <td>
+          3092
+          -
+          3103
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.SafeObserver.onError
+        </td>
+        <td style="background: #AEF1AE">
+          SafeObserver.this.onError(ex)
+        </td>
+      </tr><tr>
+        <td>
+          121
+        </td>
+        <td>
+          3642
+        </td>
+        <td>
+          3116
+          -
+          3133
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Promise.success
+        </td>
+        <td style="background: #AEF1AE">
+          p.success(monifu.reactive.Ack.Cancel)
+        </td>
+      </tr><tr>
+        <td>
+          121
+        </td>
+        <td>
+          3641
+        </td>
+        <td>
+          3126
+          -
+          3132
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          124
+        </td>
+        <td>
+          3644
+        </td>
+        <td>
+          3167
+          -
+          3186
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Promise.success
+        </td>
+        <td style="background: #F0ADAD">
+          p.success(monifu.reactive.Ack.Continue)
+        </td>
+      </tr><tr>
+        <td>
+          124
+        </td>
+        <td>
+          3643
+        </td>
+        <td>
+          3177
+          -
+          3185
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Ack.Continue
+        </td>
+      </tr><tr>
+        <td>
+          127
+        </td>
+        <td>
+          3647
+        </td>
+        <td>
+          3206
+          -
+          3214
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.Promise.future
+        </td>
+        <td style="background: #AEF1AE">
+          p.future
+        </td>
+      </tr><tr>
+        <td>
+          138
+        </td>
+        <td>
+          3648
+        </td>
+        <td>
+          3451
+          -
+          3484
+        </td>
+        <td>
+          TypeApply
+        </td>
+        <td>
+          scala.Any.asInstanceOf
+        </td>
+        <td style="background: #F0ADAD">
+          ref.asInstanceOf[monifu.reactive.observers.SafeObserver[T]]
+        </td>
+      </tr><tr>
+        <td>
+          139
+        </td>
+        <td>
+          3649
+        </td>
+        <td>
+          3501
+          -
+          3530
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.observers.SafeObserver.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new monifu.reactive.observers.SafeObserver[T](observer)(s)
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

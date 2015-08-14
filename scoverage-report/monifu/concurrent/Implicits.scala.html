@@ -1,0 +1,163 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          monifu/concurrent/Implicits.scala.html
+        </title>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''>
+</span>17 <span style=''>package monifu.concurrent
+</span>18 <span style=''>
+</span>19 <span style=''>import monifu.concurrent.schedulers.AsyncScheduler
+</span>20 <span style=''>
+</span>21 <span style=''>import scala.concurrent.ExecutionContext
+</span>22 <span style=''>
+</span>23 <span style=''>/**
+</span>24 <span style=''> * Defines implicit values that can be used by importing in the 
+</span>25 <span style=''> * current context.
+</span>26 <span style=''> * 
+</span>27 <span style=''> * Example:
+</span>28 <span style=''> * {{{
+</span>29 <span style=''> *   import monifu.concurrent.Implicits.globalScheduler
+</span>30 <span style=''> * }}}
+</span>31 <span style=''> */
+</span>32 <span style=''>object Implicits {
+</span>33 <span style=''>  /**
+</span>34 <span style=''>   * A global [[Scheduler]] instance, provided for convenience, piggy-backing
+</span>35 <span style=''>   * on top of Scala's own `concurrent.ExecutionContext.global`, which is a
+</span>36 <span style=''>   * `ForkJoinPool`.
+</span>37 <span style=''>   *
+</span>38 <span style=''>   * It can be tuned by setting the following JVM system properties:
+</span>39 <span style=''>   *
+</span>40 <span style=''>   * - "scala.concurrent.context.minThreads" an integer specifying the minimum
+</span>41 <span style=''>   *   number of active threads in the pool
+</span>42 <span style=''>   *
+</span>43 <span style=''>   * - "scala.concurrent.context.maxThreads" an integer specifying the maximum
+</span>44 <span style=''>   *   number of active threads in the pool
+</span>45 <span style=''>   *
+</span>46 <span style=''>   * - "scala.concurrent.context.numThreads" can be either an integer,
+</span>47 <span style=''>   *   specifying the parallelism directly or a string with the format "xNUM"
+</span>48 <span style=''>   *   (e.g. "x1.5") specifying the multiplication factor of the number of
+</span>49 <span style=''>   *   available processors (taken with `Runtime.availableProcessors`)
+</span>50 <span style=''>   *
+</span>51 <span style=''>   * The formula for calculating the parallelism in our pool is
+</span>52 <span style=''>   * `min(maxThreads, max(minThreads, numThreads))`.
+</span>53 <span style=''>   *
+</span>54 <span style=''>   * To set a system property from the command line, a JVM parameter must be
+</span>55 <span style=''>   * given to the `java` command as `-Dname=value`. So as an example, to customize
+</span>56 <span style=''>   * this global scheduler, we could start our process like this:
+</span>57 <span style=''>   *
+</span>58 <span style=''>   * <pre>
+</span>59 <span style=''>   *   java -Dscala.concurrent.context.minThreads=2 \
+</span>60 <span style=''>   *        -Dscala.concurrent.context.maxThreads=30 \
+</span>61 <span style=''>   *        -Dscala.concurrent.context.numThreads=x1.5 \
+</span>62 <span style=''>   *        ...
+</span>63 <span style=''>   * </pre>
+</span>64 <span style=''>   *
+</span>65 <span style=''>   * As a note, this being backed by Scala's own global execution context,
+</span>66 <span style=''>   * it is cooperating with Scala's BlockContext, so when operations marked
+</span>67 <span style=''>   * with `scala.concurrent.blocking` are encountered, the thread-pool may
+</span>68 <span style=''>   * decide to add extra threads in the pool. However this is not a thread-pool
+</span>69 <span style=''>   * that is optimal for doing blocking operations, so for example if you want
+</span>70 <span style=''>   * to do a lot of blocking I/O, then use a Scheduler backed by a
+</span>71 <span style=''>   * thread-pool that is more optimal for blocking. See for example
+</span>72 <span style=''>   * [[Scheduler.io]].
+</span>73 <span style=''>   */
+</span>74 <span style=''>  implicit lazy val globalScheduler: Scheduler =
+</span>75 <span style=''>    </span><span style='background: #AEF1AE'>AsyncScheduler(
+</span>76 <span style=''></span><span style='background: #AEF1AE'>      Scheduler.defaultScheduledExecutor,
+</span>77 <span style=''></span><span style='background: #AEF1AE'>      ExecutionContext.Implicits.global,
+</span>78 <span style=''></span><span style='background: #AEF1AE'>      UncaughtExceptionReporter.LogExceptionsToStandardErr
+</span>79 <span style=''></span><span style='background: #AEF1AE'>    )</span><span style=''>
+</span>80 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          75
+        </td>
+        <td>
+          26
+        </td>
+        <td>
+          2911
+          -
+          3074
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.AsyncScheduler.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.schedulers.AsyncScheduler.apply(Scheduler.defaultScheduledExecutor, scala.concurrent.ExecutionContext.Implicits.global, UncaughtExceptionReporter.LogExceptionsToStandardErr)
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          25
+        </td>
+        <td>
+          3016
+          -
+          3068
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.UncaughtExceptionReporter.LogExceptionsToStandardErr
+        </td>
+        <td style="background: #AEF1AE">
+          UncaughtExceptionReporter.LogExceptionsToStandardErr
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

@@ -1,0 +1,526 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          monifu/reactive/Subscriber.scala.html
+        </title>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''>
+</span>17 <span style=''>package monifu.reactive
+</span>18 <span style=''>
+</span>19 <span style=''>import monifu.concurrent.Scheduler
+</span>20 <span style=''>
+</span>21 <span style=''>/**
+</span>22 <span style=''> * A `Subscriber` value is a named tuple of an observer and a scheduler,
+</span>23 <span style=''> * whose usage is in [[Observable.create]].
+</span>24 <span style=''> *
+</span>25 <span style=''> * An `Observable.subscribe` takes as parameters both an [[Observer]]
+</span>26 <span style=''> * and a [[Scheduler]] and the purpose of a `Subscriber` is convenient
+</span>27 <span style=''> * grouping in `Observable.create`.
+</span>28 <span style=''> *
+</span>29 <span style=''> * A `Subscriber` value is basically an address that the data source needs
+</span>30 <span style=''> * in order to send events.
+</span>31 <span style=''> */
+</span>32 <span style=''>trait Subscriber[-T] {
+</span>33 <span style=''>  def observer: Observer[T]
+</span>34 <span style=''>  def scheduler: Scheduler
+</span>35 <span style=''>}
+</span>36 <span style=''>
+</span>37 <span style=''>object Subscriber {
+</span>38 <span style=''>  /** Subscriber builder */
+</span>39 <span style=''>  def apply[T](observer: Observer[T], scheduler: Scheduler): Subscriber[T] =
+</span>40 <span style=''>    </span><span style='background: #AEF1AE'>new Implementation[T](observer, scheduler)</span><span style=''>
+</span>41 <span style=''>
+</span>42 <span style=''>  /** Utility for pattern matching */
+</span>43 <span style=''>  def unapply[T](ref: Subscriber[T]): Some[(Observer[T], Scheduler)] =
+</span>44 <span style=''>    </span><span style='background: #F0ADAD'>Some((ref.observer, ref.scheduler))</span><span style=''>
+</span>45 <span style=''>
+</span>46 <span style=''>  private[this] final class Implementation[-T]
+</span>47 <span style=''>      (val observer: Observer[T], val scheduler: Scheduler)
+</span>48 <span style=''>    extends Subscriber[T] {
+</span>49 <span style=''>
+</span>50 <span style=''>    </span><span style='background: #AEF1AE'>require(observer != null, </span><span style='background: #F0ADAD'>"Observer should not be null"</span><span style='background: #AEF1AE'>)</span><span style=''>
+</span>51 <span style=''>    </span><span style='background: #AEF1AE'>require(scheduler != null, </span><span style='background: #F0ADAD'>"Scheduler should not be null"</span><span style='background: #AEF1AE'>)</span><span style=''>
+</span>52 <span style=''>
+</span>53 <span style=''>    override def equals(other: Any): Boolean = other match {
+</span>54 <span style=''>      case that: Implementation[_] =>
+</span>55 <span style=''>        </span><span style='background: #AEF1AE'>observer == that.observer &&
+</span>56 <span style=''></span><span style='background: #AEF1AE'>        scheduler == that.scheduler</span><span style=''>
+</span>57 <span style=''>      case _ =>
+</span>58 <span style=''>        </span><span style='background: #F0ADAD'>false</span><span style=''>
+</span>59 <span style=''>    }
+</span>60 <span style=''>
+</span>61 <span style=''>    override val hashCode: Int = {
+</span>62 <span style=''>      </span><span style='background: #AEF1AE'>31 * observer.hashCode() + scheduler.hashCode()</span><span style=''>
+</span>63 <span style=''>    }
+</span>64 <span style=''>  }
+</span>65 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          40
+        </td>
+        <td>
+          2735
+        </td>
+        <td>
+          1293
+          -
+          1335
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Subscriber.Implementation.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new monifu.reactive.Subscriber.Implementation[T](observer, scheduler)
+        </td>
+      </tr><tr>
+        <td>
+          44
+        </td>
+        <td>
+          2739
+        </td>
+        <td>
+          1450
+          -
+          1485
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Some.apply
+        </td>
+        <td style="background: #F0ADAD">
+          scala.Some.apply[(monifu.reactive.Observer[T], monifu.concurrent.Scheduler)](scala.Tuple2.apply[monifu.reactive.Observer[T], monifu.concurrent.Scheduler](ref.observer, ref.scheduler))
+        </td>
+      </tr><tr>
+        <td>
+          44
+        </td>
+        <td>
+          2738
+        </td>
+        <td>
+          1455
+          -
+          1484
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Tuple2.apply
+        </td>
+        <td style="background: #F0ADAD">
+          scala.Tuple2.apply[monifu.reactive.Observer[T], monifu.concurrent.Scheduler](ref.observer, ref.scheduler)
+        </td>
+      </tr><tr>
+        <td>
+          44
+        </td>
+        <td>
+          2737
+        </td>
+        <td>
+          1470
+          -
+          1483
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.scheduler
+        </td>
+        <td style="background: #F0ADAD">
+          ref.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          44
+        </td>
+        <td>
+          2736
+        </td>
+        <td>
+          1456
+          -
+          1468
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.observer
+        </td>
+        <td style="background: #F0ADAD">
+          ref.observer
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          2742
+        </td>
+        <td>
+          1627
+          -
+          1683
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Predef.require
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.require(Implementation.this.observer.!=(null), &quot;Observer should not be null&quot;)
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          2741
+        </td>
+        <td>
+          1653
+          -
+          1682
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          &quot;Observer should not be null&quot;
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          2740
+        </td>
+        <td>
+          1635
+          -
+          1651
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.!=
+        </td>
+        <td style="background: #AEF1AE">
+          Implementation.this.observer.!=(null)
+        </td>
+      </tr><tr>
+        <td>
+          51
+        </td>
+        <td>
+          2744
+        </td>
+        <td>
+          1715
+          -
+          1745
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          &quot;Scheduler should not be null&quot;
+        </td>
+      </tr><tr>
+        <td>
+          51
+        </td>
+        <td>
+          2743
+        </td>
+        <td>
+          1696
+          -
+          1713
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.!=
+        </td>
+        <td style="background: #AEF1AE">
+          Implementation.this.scheduler.!=(null)
+        </td>
+      </tr><tr>
+        <td>
+          51
+        </td>
+        <td>
+          2745
+        </td>
+        <td>
+          1688
+          -
+          1746
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Predef.require
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.require(Implementation.this.scheduler.!=(null), &quot;Scheduler should not be null&quot;)
+        </td>
+      </tr><tr>
+        <td>
+          55
+        </td>
+        <td>
+          2746
+        </td>
+        <td>
+          1867
+          -
+          1880
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.Implementation.observer
+        </td>
+        <td style="background: #AEF1AE">
+          that.observer
+        </td>
+      </tr><tr>
+        <td>
+          55
+        </td>
+        <td>
+          2749
+        </td>
+        <td>
+          1855
+          -
+          1919
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Boolean.&amp;&amp;
+        </td>
+        <td style="background: #AEF1AE">
+          Implementation.this.observer.==(that.observer).&amp;&amp;(Implementation.this.scheduler.==(that.scheduler))
+        </td>
+      </tr><tr>
+        <td>
+          56
+        </td>
+        <td>
+          2748
+        </td>
+        <td>
+          1892
+          -
+          1919
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.==
+        </td>
+        <td style="background: #AEF1AE">
+          Implementation.this.scheduler.==(that.scheduler)
+        </td>
+      </tr><tr>
+        <td>
+          56
+        </td>
+        <td>
+          2747
+        </td>
+        <td>
+          1905
+          -
+          1919
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.Implementation.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          that.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          58
+        </td>
+        <td>
+          2750
+        </td>
+        <td>
+          1944
+          -
+          1949
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          false
+        </td>
+      </tr><tr>
+        <td>
+          62
+        </td>
+        <td>
+          2753
+        </td>
+        <td>
+          2025
+          -
+          2045
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.hashCode
+        </td>
+        <td style="background: #AEF1AE">
+          Implementation.this.scheduler.hashCode()
+        </td>
+      </tr><tr>
+        <td>
+          62
+        </td>
+        <td>
+          2752
+        </td>
+        <td>
+          2003
+          -
+          2022
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.hashCode
+        </td>
+        <td style="background: #AEF1AE">
+          Implementation.this.observer.hashCode()
+        </td>
+      </tr><tr>
+        <td>
+          62
+        </td>
+        <td>
+          2751
+        </td>
+        <td>
+          1998
+          -
+          2000
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          31
+        </td>
+      </tr><tr>
+        <td>
+          62
+        </td>
+        <td>
+          2754
+        </td>
+        <td>
+          1998
+          -
+          2045
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.+
+        </td>
+        <td style="background: #AEF1AE">
+          31.*(Implementation.this.observer.hashCode()).+(Implementation.this.scheduler.hashCode())
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

@@ -1,0 +1,399 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          /Users/alex/Projects/org.monifu/monifu/shared/src/main/scala/monifu/reactive/operators/timeout.scala.html
+        </title>
+        <link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css"/>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+        <script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script>
+        <script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.18.3/addons/pager/jquery.tablesorter.pager.min.js"></script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''>
+</span>17 <span style=''>package monifu.reactive.operators
+</span>18 <span style=''>
+</span>19 <span style=''>import java.util.concurrent.TimeUnit
+</span>20 <span style=''>
+</span>21 <span style=''>import monifu.concurrent.cancelables.MultiAssignmentCancelable
+</span>22 <span style=''>import monifu.reactive.Ack.{Cancel, Continue}
+</span>23 <span style=''>import monifu.reactive.internals._
+</span>24 <span style=''>import monifu.reactive.{Ack, Observable, Observer}
+</span>25 <span style=''>import scala.concurrent.duration._
+</span>26 <span style=''>import scala.concurrent.{Future, TimeoutException}
+</span>27 <span style=''>
+</span>28 <span style=''>
+</span>29 <span style=''>object timeout {
+</span>30 <span style=''>  def emitError[T](source: Observable[T], timeout: FiniteDuration): Observable[T] =
+</span>31 <span style=''>    </span><span style='background: #AEF1AE'>switchToBackup(source, timeout, Observable.error(
+</span>32 <span style=''></span><span style='background: #AEF1AE'>      new TimeoutException(s"Observable timed-out after $timeout of inactivity")
+</span>33 <span style=''></span><span style='background: #AEF1AE'>    ))</span><span style=''>
+</span>34 <span style=''>
+</span>35 <span style=''>  def switchToBackup[T](source: Observable[T], timeout: FiniteDuration, backup: Observable[T]) =
+</span>36 <span style=''>    </span><span style='background: #AEF1AE'>Observable.create[T] { subscriber =>
+</span>37 <span style=''></span><span style='background: #AEF1AE'>      implicit val s = subscriber.scheduler
+</span>38 <span style=''></span><span style='background: #AEF1AE'>
+</span>39 <span style=''></span><span style='background: #AEF1AE'>      source.unsafeSubscribe(new Observer[T] with Runnable { self =>
+</span>40 <span style=''></span><span style='background: #AEF1AE'>        private[this] val downstream = subscriber.observer
+</span>41 <span style=''></span><span style='background: #AEF1AE'>        private[this] val timeoutMillis = timeout.toMillis
+</span>42 <span style=''></span><span style='background: #AEF1AE'>        private[this] val task = MultiAssignmentCancelable()
+</span>43 <span style=''></span><span style='background: #AEF1AE'>        private[this] var ack: Future[Ack] = Continue
+</span>44 <span style=''></span><span style='background: #AEF1AE'>        // MUST BE synchronized by `self`
+</span>45 <span style=''></span><span style='background: #AEF1AE'>        private[this] var isDone = false
+</span>46 <span style=''></span><span style='background: #AEF1AE'>        // MUST BE synchronized by `self`
+</span>47 <span style=''></span><span style='background: #AEF1AE'>        private[this] var lastEmittedMillis: Long = s.currentTimeMillis()
+</span>48 <span style=''></span><span style='background: #AEF1AE'>
+</span>49 <span style=''></span><span style='background: #AEF1AE'>        locally {
+</span>50 <span style=''></span><span style='background: #AEF1AE'>          task := s.scheduleOnce(timeout, self)
+</span>51 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>52 <span style=''></span><span style='background: #AEF1AE'>
+</span>53 <span style=''></span><span style='background: #AEF1AE'>        def run(): Unit = self.synchronized {
+</span>54 <span style=''></span><span style='background: #AEF1AE'>          if (!isDone) {
+</span>55 <span style=''></span><span style='background: #AEF1AE'>            val rightNow = s.currentTimeMillis()
+</span>56 <span style=''></span><span style='background: #AEF1AE'>            val sinceLastOnNextInMillis = rightNow - lastEmittedMillis
+</span>57 <span style=''></span><span style='background: #AEF1AE'>
+</span>58 <span style=''></span><span style='background: #AEF1AE'>            if (sinceLastOnNextInMillis >= timeoutMillis) {
+</span>59 <span style=''></span><span style='background: #AEF1AE'>              isDone = true
+</span>60 <span style=''></span><span style='background: #AEF1AE'>              ack.onContinue {
+</span>61 <span style=''></span><span style='background: #AEF1AE'>                // subscribing our downstream observer to the backup observable
+</span>62 <span style=''></span><span style='background: #AEF1AE'>                backup.unsafeSubscribe(subscriber)
+</span>63 <span style=''></span><span style='background: #AEF1AE'>              }
+</span>64 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>65 <span style=''></span><span style='background: #AEF1AE'>            else {
+</span>66 <span style=''></span><span style='background: #AEF1AE'>              val remainingTimeMillis = timeoutMillis - sinceLastOnNextInMillis
+</span>67 <span style=''></span><span style='background: #AEF1AE'>              task := s.scheduleOnce(remainingTimeMillis, TimeUnit.MILLISECONDS, self)
+</span>68 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>69 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>70 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>71 <span style=''></span><span style='background: #AEF1AE'>
+</span>72 <span style=''></span><span style='background: #AEF1AE'>        def onNext(elem: T): Future[Ack] = {
+</span>73 <span style=''></span><span style='background: #AEF1AE'>          // unfortunately we can't get away of this synchronization
+</span>74 <span style=''></span><span style='background: #AEF1AE'>          // as the scheduler is contending on the same downstream
+</span>75 <span style=''></span><span style='background: #AEF1AE'>          self.synchronized {
+</span>76 <span style=''></span><span style='background: #AEF1AE'>            if (isDone) Cancel else {
+</span>77 <span style=''></span><span style='background: #AEF1AE'>              lastEmittedMillis = s.currentTimeMillis()
+</span>78 <span style=''></span><span style='background: #AEF1AE'>              ack = downstream.onNext(elem)
+</span>79 <span style=''></span><span style='background: #AEF1AE'>              ack
+</span>80 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>81 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>82 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>83 <span style=''></span><span style='background: #AEF1AE'>
+</span>84 <span style=''></span><span style='background: #AEF1AE'>        def onError(ex: Throwable) = self.synchronized {
+</span>85 <span style=''></span><span style='background: #AEF1AE'>          if (!isDone) {
+</span>86 <span style=''></span><span style='background: #AEF1AE'>            isDone = true
+</span>87 <span style=''></span><span style='background: #AEF1AE'>            ack.onContinueSignalError(downstream, ex)
+</span>88 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>89 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>90 <span style=''></span><span style='background: #AEF1AE'>
+</span>91 <span style=''></span><span style='background: #AEF1AE'>        def onComplete() = self.synchronized {
+</span>92 <span style=''></span><span style='background: #AEF1AE'>          if (!isDone) {
+</span>93 <span style=''></span><span style='background: #AEF1AE'>            isDone = true
+</span>94 <span style=''></span><span style='background: #AEF1AE'>            ack.onContinueSignalComplete(downstream)
+</span>95 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>96 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>97 <span style=''></span><span style='background: #AEF1AE'>      })
+</span>98 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>99 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          31
+        </td>
+        <td>
+          4325
+        </td>
+        <td>
+          1072
+          -
+          1209
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.operators.timeout.switchToBackup
+        </td>
+        <td style="background: #AEF1AE">
+          timeout.this.switchToBackup[T](source, timeout, monifu.reactive.Observable.error(new scala.concurrent.`package`.TimeoutException(scala.StringContext.apply(&quot;Observable timed-out after &quot;, &quot; of inactivity&quot;).s(timeout))))
+        </td>
+      </tr><tr>
+        <td>
+          31
+        </td>
+        <td>
+          4324
+        </td>
+        <td>
+          1104
+          -
+          1208
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observable.error
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Observable.error(new scala.concurrent.`package`.TimeoutException(scala.StringContext.apply(&quot;Observable timed-out after &quot;, &quot; of inactivity&quot;).s(timeout)))
+        </td>
+      </tr><tr>
+        <td>
+          32
+        </td>
+        <td>
+          4323
+        </td>
+        <td>
+          1128
+          -
+          1202
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.util.concurrent.TimeoutException.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new scala.concurrent.`package`.TimeoutException(scala.StringContext.apply(&quot;Observable timed-out after &quot;, &quot; of inactivity&quot;).s(timeout))
+        </td>
+      </tr><tr>
+        <td>
+          32
+        </td>
+        <td>
+          4322
+        </td>
+        <td>
+          1149
+          -
+          1201
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.StringContext.s
+        </td>
+        <td style="background: #AEF1AE">
+          scala.StringContext.apply(&quot;Observable timed-out after &quot;, &quot; of inactivity&quot;).s(timeout)
+        </td>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          4328
+        </td>
+        <td>
+          1312
+          -
+          3444
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observable.create
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Observable.create[T](((subscriber: monifu.reactive.Subscriber[T]) =&gt; {
+  implicit val s: monifu.concurrent.Scheduler = subscriber.scheduler;
+  source.unsafeSubscribe({
+    final class $anon extends AnyRef with monifu.reactive.Observer[T] with Runnable { self: &lt;$anon: monifu.reactive.Observer[T] with Runnable&gt; =&gt; 
+      def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[T] with Runnable&gt; = {
+        $anon.super.&lt;init&gt;();
+        ()
+      };
+      private[this] val downstream: monifu.reactive.Observer[T] = subscriber.observer;
+      private[this] val timeoutMillis: Long = timeout.toMillis;
+      private[this] val task: monifu.concurrent.cancelables.MultiAssignmentCancelable = monifu.concurrent.cancelables.MultiAssignmentCancelable.apply();
+      private[this] var ack: scala.concurrent.Future[monifu.reactive.Ack] = monifu.reactive.Ack.Continue;
+      private[this] var isDone: Boolean = false;
+      private[this] var lastEmittedMillis: Long = s.currentTimeMillis();
+      scala.this.Predef.locally[Unit]($anon.this.task.:=(s.scheduleOnce(timeout, $anon.this)));
+      def run(): Unit = $anon.this.synchronized[Unit](if ($anon.this.isDone.unary_!)
+        {
+          val rightNow: Long = s.currentTimeMillis();
+          val sinceLastOnNextInMillis: Long = rightNow.-($anon.this.lastEmittedMillis);
+          if (sinceLastOnNextInMillis.&gt;=($anon.this.timeoutMillis))
+            {
+              $anon.this.isDone = true;
+              monifu.reactive.internals.`package`.FutureAckExtensions($anon.this.ack).onContinue(backup.unsafeSubscribe(subscriber))(s)
+            }
+          else
+            {
+              val remainingTimeMillis: Long = $anon.this.timeoutMillis.-(sinceLastOnNextInMillis);
+              $anon.this.task.:=(s.scheduleOnce(remainingTimeMillis, MILLISECONDS, $anon.this))
+            }
+        }
+      else
+        ());
+      def onNext(elem: T): scala.concurrent.Future[monifu.reactive.Ack] = $anon.this.synchronized[scala.concurrent.Future[monifu.reactive.Ack]](if ($anon.this.isDone)
+        monifu.reactive.Ack.Cancel
+      else
+        {
+          $anon.this.lastEmittedMillis = s.currentTimeMillis();
+          $anon.this.ack = $anon.this.downstream.onNext(elem);
+          $anon.this.ack
+        });
+      def onError(ex: Throwable): Unit = $anon.this.synchronized[Unit](if ($anon.this.isDone.unary_!)
+        {
+          $anon.this.isDone = true;
+          monifu.reactive.internals.`package`.FutureAckExtensions($anon.this.ack).onContinueSignalError[T]($anon.this.downstream, ex)(s)
+        }
+      else
+        ());
+      def onComplete(): Unit = $anon.this.synchronized[Unit](if ($anon.this.isDone.unary_!)
+        {
+          $anon.this.isDone = true;
+          monifu.reactive.internals.`package`.FutureAckExtensions($anon.this.ack).onContinueSignalComplete[T]($anon.this.downstream)(s)
+        }
+      else
+        ())
+    };
+    new $anon()
+  })(s)
+}))
+        </td>
+      </tr><tr>
+        <td>
+          37
+        </td>
+        <td>
+          4326
+        </td>
+        <td>
+          1372
+          -
+          1392
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          39
+        </td>
+        <td>
+          4327
+        </td>
+        <td>
+          1400
+          -
+          3438
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.Observable.unsafeSubscribe
+        </td>
+        <td style="background: #AEF1AE">
+          source.unsafeSubscribe({
+  final class $anon extends AnyRef with monifu.reactive.Observer[T] with Runnable { self: &lt;$anon: monifu.reactive.Observer[T] with Runnable&gt; =&gt; 
+    def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[T] with Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    private[this] val downstream: monifu.reactive.Observer[T] = subscriber.observer;
+    private[this] val timeoutMillis: Long = timeout.toMillis;
+    private[this] val task: monifu.concurrent.cancelables.MultiAssignmentCancelable = monifu.concurrent.cancelables.MultiAssignmentCancelable.apply();
+    private[this] var ack: scala.concurrent.Future[monifu.reactive.Ack] = monifu.reactive.Ack.Continue;
+    private[this] var isDone: Boolean = false;
+    private[this] var lastEmittedMillis: Long = s.currentTimeMillis();
+    scala.this.Predef.locally[Unit]($anon.this.task.:=(s.scheduleOnce(timeout, $anon.this)));
+    def run(): Unit = $anon.this.synchronized[Unit](if ($anon.this.isDone.unary_!)
+      {
+        val rightNow: Long = s.currentTimeMillis();
+        val sinceLastOnNextInMillis: Long = rightNow.-($anon.this.lastEmittedMillis);
+        if (sinceLastOnNextInMillis.&gt;=($anon.this.timeoutMillis))
+          {
+            $anon.this.isDone = true;
+            monifu.reactive.internals.`package`.FutureAckExtensions($anon.this.ack).onContinue(backup.unsafeSubscribe(subscriber))(s)
+          }
+        else
+          {
+            val remainingTimeMillis: Long = $anon.this.timeoutMillis.-(sinceLastOnNextInMillis);
+            $anon.this.task.:=(s.scheduleOnce(remainingTimeMillis, MILLISECONDS, $anon.this))
+          }
+      }
+    else
+      ());
+    def onNext(elem: T): scala.concurrent.Future[monifu.reactive.Ack] = $anon.this.synchronized[scala.concurrent.Future[monifu.reactive.Ack]](if ($anon.this.isDone)
+      monifu.reactive.Ack.Cancel
+    else
+      {
+        $anon.this.lastEmittedMillis = s.currentTimeMillis();
+        $anon.this.ack = $anon.this.downstream.onNext(elem);
+        $anon.this.ack
+      });
+    def onError(ex: Throwable): Unit = $anon.this.synchronized[Unit](if ($anon.this.isDone.unary_!)
+      {
+        $anon.this.isDone = true;
+        monifu.reactive.internals.`package`.FutureAckExtensions($anon.this.ack).onContinueSignalError[T]($anon.this.downstream, ex)(s)
+      }
+    else
+      ());
+    def onComplete(): Unit = $anon.this.synchronized[Unit](if ($anon.this.isDone.unary_!)
+      {
+        $anon.this.isDone = true;
+        monifu.reactive.internals.`package`.FutureAckExtensions($anon.this.ack).onContinueSignalComplete[T]($anon.this.downstream)(s)
+      }
+    else
+      ())
+  };
+  new $anon()
+})(s)
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

@@ -1,0 +1,821 @@
+<html>
+      <head>
+      <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+      <title id="title">Scoverage Code Coverage</title>
+      <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+      <style>
+        .meter {
+        height: 14px;
+        position: relative;
+        background: #BB2020;
+}
+
+.meter span {
+	display: block;
+	height: 100%;
+	background-color: rgb(43,194,83);
+	background-image: -webkit-gradient(
+	  linear,
+	  left bottom,
+	  left top,
+	  color-stop(0, rgb(43,194,83)),
+	  color-stop(1, rgb(84,240,84))
+	 );
+	background-image: -webkit-linear-gradient(
+	  center bottom,
+	  rgb(43,194,83) 37%,
+	  rgb(84,240,84) 69%
+	 );
+	background-image: -moz-linear-gradient(
+	  center bottom,
+	  rgb(43,194,83) 37%,
+	  rgb(84,240,84) 69%
+	 );
+	background-image: -ms-linear-gradient(
+	  center bottom,
+	  rgb(43,194,83) 37%,
+	  rgb(84,240,84) 69%
+	 );
+	background-image: -o-linear-gradient(
+	  center bottom,
+	  rgb(43,194,83) 37%,
+	  rgb(84,240,84) 69%
+	 );
+	-webkit-box-shadow:
+	  inset 0 2px 9px  rgba(255,255,255,0.3),
+	  inset 0 -2px 6px rgba(0,0,0,0.4);
+	-moz-box-shadow:
+	  inset 0 2px 9px  rgba(255,255,255,0.3),
+	  inset 0 -2px 6px rgba(0,0,0,0.4);
+	position: relative;
+	overflow: hidden;
+}
+      </style>
+    </head><body style="font-family: monospace;">
+      <table class="tablesorter table table-striped" style="font-size:13px">
+      <thead>
+        <tr>
+          <th>
+            Class
+          </th>
+          <th>
+            Source file
+          </th>
+          <th>
+            Lines
+          </th>
+          <th>
+            Methods
+          </th>
+          <th>
+            Statements
+          </th>
+          <th>
+            Invoked
+          </th>
+          <th>
+            Coverage
+          </th>
+          <th>
+          </th>
+          <th>
+            Branches
+          </th>
+          <th>
+            Invoked
+          </th>
+          <th>
+            Coverage
+          </th>
+          <th>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+      <td>
+        <a href="monifu/concurrent/atomic/Atomic.scala.html">
+          Atomic
+        </a>
+      </td>
+      <td>
+        Atomic.scala
+      </td>
+      <td>
+        141
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicAny.scala.html">
+          AtomicAny
+        </a>
+      </td>
+      <td>
+        AtomicAny.scala
+      </td>
+      <td>
+        180
+      </td>
+      <td>
+        16
+      </td>
+      <td>
+        99
+      </td>
+      <td>
+        90
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 91%"></span>
+        </div>
+      </td>
+      <td>
+        90.91
+        %
+      </td>
+      <td>
+        24
+      </td>
+      <td>
+        21
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 88%"></span>
+        </div>
+      </td>
+      <td>
+        87.50
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicBoolean.scala.html">
+          AtomicBoolean
+        </a>
+      </td>
+      <td>
+        AtomicBoolean.scala
+      </td>
+      <td>
+        182
+      </td>
+      <td>
+        17
+      </td>
+      <td>
+        101
+      </td>
+      <td>
+        88
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 87%"></span>
+        </div>
+      </td>
+      <td>
+        87.13
+        %
+      </td>
+      <td>
+        24
+      </td>
+      <td>
+        21
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 88%"></span>
+        </div>
+      </td>
+      <td>
+        87.50
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicByte.scala.html">
+          AtomicByte
+        </a>
+      </td>
+      <td>
+        AtomicByte.scala
+      </td>
+      <td>
+        297
+      </td>
+      <td>
+        35
+      </td>
+      <td>
+        192
+      </td>
+      <td>
+        149
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 78%"></span>
+        </div>
+      </td>
+      <td>
+        77.60
+        %
+      </td>
+      <td>
+        48
+      </td>
+      <td>
+        33
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 69%"></span>
+        </div>
+      </td>
+      <td>
+        68.75
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicChar.scala.html">
+          AtomicChar
+        </a>
+      </td>
+      <td>
+        AtomicChar.scala
+      </td>
+      <td>
+        298
+      </td>
+      <td>
+        35
+      </td>
+      <td>
+        192
+      </td>
+      <td>
+        149
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 78%"></span>
+        </div>
+      </td>
+      <td>
+        77.60
+        %
+      </td>
+      <td>
+        48
+      </td>
+      <td>
+        33
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 69%"></span>
+        </div>
+      </td>
+      <td>
+        68.75
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicDouble.scala.html">
+          AtomicDouble
+        </a>
+      </td>
+      <td>
+        AtomicDouble.scala
+      </td>
+      <td>
+        293
+      </td>
+      <td>
+        34
+      </td>
+      <td>
+        190
+      </td>
+      <td>
+        147
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 77%"></span>
+        </div>
+      </td>
+      <td>
+        77.37
+        %
+      </td>
+      <td>
+        48
+      </td>
+      <td>
+        33
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 69%"></span>
+        </div>
+      </td>
+      <td>
+        68.75
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicFloat.scala.html">
+          AtomicFloat
+        </a>
+      </td>
+      <td>
+        AtomicFloat.scala
+      </td>
+      <td>
+        293
+      </td>
+      <td>
+        34
+      </td>
+      <td>
+        190
+      </td>
+      <td>
+        147
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 77%"></span>
+        </div>
+      </td>
+      <td>
+        77.37
+        %
+      </td>
+      <td>
+        48
+      </td>
+      <td>
+        33
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 69%"></span>
+        </div>
+      </td>
+      <td>
+        68.75
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicInt.scala.html">
+          AtomicInt
+        </a>
+      </td>
+      <td>
+        AtomicInt.scala
+      </td>
+      <td>
+        267
+      </td>
+      <td>
+        32
+      </td>
+      <td>
+        168
+      </td>
+      <td>
+        133
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 79%"></span>
+        </div>
+      </td>
+      <td>
+        79.17
+        %
+      </td>
+      <td>
+        42
+      </td>
+      <td>
+        32
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 76%"></span>
+        </div>
+      </td>
+      <td>
+        76.19
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicLong.scala.html">
+          AtomicLong
+        </a>
+      </td>
+      <td>
+        AtomicLong.scala
+      </td>
+      <td>
+        267
+      </td>
+      <td>
+        32
+      </td>
+      <td>
+        168
+      </td>
+      <td>
+        136
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 81%"></span>
+        </div>
+      </td>
+      <td>
+        80.95
+        %
+      </td>
+      <td>
+        42
+      </td>
+      <td>
+        32
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 76%"></span>
+        </div>
+      </td>
+      <td>
+        76.19
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicNumber.scala.html">
+          AtomicNumber
+        </a>
+      </td>
+      <td>
+        AtomicNumber.scala
+      </td>
+      <td>
+        54
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 0%"></span>
+        </div>
+      </td>
+      <td>
+        0.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 0%"></span>
+        </div>
+      </td>
+      <td>
+        0.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicNumberAny.scala.html">
+          AtomicNumberAny
+        </a>
+      </td>
+      <td>
+        AtomicNumberAny.scala
+      </td>
+      <td>
+        287
+      </td>
+      <td>
+        32
+      </td>
+      <td>
+        184
+      </td>
+      <td>
+        142
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 77%"></span>
+        </div>
+      </td>
+      <td>
+        77.17
+        %
+      </td>
+      <td>
+        48
+      </td>
+      <td>
+        33
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 69%"></span>
+        </div>
+      </td>
+      <td>
+        68.75
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicShort.scala.html">
+          AtomicShort
+        </a>
+      </td>
+      <td>
+        AtomicShort.scala
+      </td>
+      <td>
+        292
+      </td>
+      <td>
+        35
+      </td>
+      <td>
+        192
+      </td>
+      <td>
+        149
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 78%"></span>
+        </div>
+      </td>
+      <td>
+        77.60
+        %
+      </td>
+      <td>
+        48
+      </td>
+      <td>
+        33
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 69%"></span>
+        </div>
+      </td>
+      <td>
+        68.75
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicBuilder.scala.html">
+          Level1
+        </a>
+      </td>
+      <td>
+        AtomicBuilder.scala
+      </td>
+      <td>
+        27
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicBuilder.scala.html">
+          Level2
+        </a>
+      </td>
+      <td>
+        AtomicBuilder.scala
+      </td>
+      <td>
+        35
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicBuilder.scala.html">
+          Level3
+        </a>
+      </td>
+      <td>
+        AtomicBuilder.scala
+      </td>
+      <td>
+        85
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        16
+      </td>
+      <td>
+        16
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/package.scala.html">
+          package
+        </a>
+      </td>
+      <td>
+        package.scala
+      </td>
+      <td>
+        76
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        10
+      </td>
+      <td>
+        8
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 80%"></span>
+        </div>
+      </td>
+      <td>
+        80.00
+        %
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        3
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 75%"></span>
+        </div>
+      </td>
+      <td>
+        75.00
+        %
+      </td>
+    </tr>
+      </tbody>
+    </table>
+    </body>
+    </html>

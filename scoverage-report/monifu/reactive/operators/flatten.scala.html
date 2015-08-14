@@ -1,0 +1,682 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          monifu/reactive/operators/flatten.scala.html
+        </title>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''>
+</span>17 <span style=''>package monifu.reactive.operators
+</span>18 <span style=''>
+</span>19 <span style=''>import monifu.concurrent.cancelables.{BooleanCancelable, RefCountCancelable}
+</span>20 <span style=''>import monifu.reactive.Ack.{Cancel, Continue}
+</span>21 <span style=''>import monifu.reactive.internals._
+</span>22 <span style=''>import monifu.reactive.observers.{BufferedSubscriber, SynchronousObserver}
+</span>23 <span style=''>import monifu.reactive._
+</span>24 <span style=''>import scala.collection.mutable
+</span>25 <span style=''>import scala.concurrent.Promise
+</span>26 <span style=''>
+</span>27 <span style=''>object flatten {
+</span>28 <span style=''>  /**
+</span>29 <span style=''>   * Implementation for [[Observable.concat]].
+</span>30 <span style=''>   */
+</span>31 <span style=''>  def concat[T,U](source: Observable[T], delayErrors: Boolean)(implicit ev: T <:< Observable[U]): Observable[U] = {
+</span>32 <span style=''>    </span><span style='background: #AEF1AE'>Observable.create[U] { subscriber =>
+</span>33 <span style=''></span><span style='background: #AEF1AE'>      implicit val s = subscriber.scheduler
+</span>34 <span style=''></span><span style='background: #AEF1AE'>      val observerU = subscriber.observer
+</span>35 <span style=''></span><span style='background: #AEF1AE'>
+</span>36 <span style=''></span><span style='background: #AEF1AE'>      source.unsafeSubscribe(new Observer[T] {
+</span>37 <span style=''></span><span style='background: #AEF1AE'>        private[this] val errors = if (delayErrors)
+</span>38 <span style=''></span><span style='background: #AEF1AE'>          mutable.ArrayBuffer.empty[Throwable] else null
+</span>39 <span style=''></span><span style='background: #AEF1AE'>
+</span>40 <span style=''></span><span style='background: #AEF1AE'>        private[this] val refCount = RefCountCancelable {
+</span>41 <span style=''></span><span style='background: #AEF1AE'>          if (delayErrors && errors.nonEmpty)
+</span>42 <span style=''></span><span style='background: #AEF1AE'>            observerU.onError(CompositeException(errors))
+</span>43 <span style=''></span><span style='background: #AEF1AE'>          else
+</span>44 <span style=''></span><span style='background: #AEF1AE'>            observerU.onComplete()
+</span>45 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>46 <span style=''></span><span style='background: #AEF1AE'>
+</span>47 <span style=''></span><span style='background: #AEF1AE'>        def onNext(childObservable: T) = {
+</span>48 <span style=''></span><span style='background: #AEF1AE'>          val upstreamPromise = Promise[Ack]()
+</span>49 <span style=''></span><span style='background: #AEF1AE'>          val refID = refCount.acquire()
+</span>50 <span style=''></span><span style='background: #AEF1AE'>
+</span>51 <span style=''></span><span style='background: #AEF1AE'>          childObservable.unsafeSubscribe(new Observer[U] {
+</span>52 <span style=''></span><span style='background: #AEF1AE'>            def onNext(elem: U) = {
+</span>53 <span style=''></span><span style='background: #AEF1AE'>              observerU.onNext(elem)
+</span>54 <span style=''></span><span style='background: #AEF1AE'>                .ifCancelTryCanceling(upstreamPromise)
+</span>55 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>56 <span style=''></span><span style='background: #AEF1AE'>
+</span>57 <span style=''></span><span style='background: #AEF1AE'>            def onError(ex: Throwable): Unit = {
+</span>58 <span style=''></span><span style='background: #AEF1AE'>              if (delayErrors) {
+</span>59 <span style=''></span><span style='background: #AEF1AE'>                errors += ex
+</span>60 <span style=''></span><span style='background: #AEF1AE'>                onComplete()
+</span>61 <span style=''></span><span style='background: #AEF1AE'>              }
+</span>62 <span style=''></span><span style='background: #AEF1AE'>              else {
+</span>63 <span style=''></span><span style='background: #AEF1AE'>                // error happened, so signaling both the main thread that it should stop
+</span>64 <span style=''></span><span style='background: #AEF1AE'>                // and the downstream consumer of the error
+</span>65 <span style=''></span><span style='background: #AEF1AE'>                upstreamPromise.trySuccess(Cancel)
+</span>66 <span style=''></span><span style='background: #AEF1AE'>                observerU.onError(ex)
+</span>67 <span style=''></span><span style='background: #AEF1AE'>              }
+</span>68 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>69 <span style=''></span><span style='background: #AEF1AE'>
+</span>70 <span style=''></span><span style='background: #AEF1AE'>            def onComplete(): Unit = {
+</span>71 <span style=''></span><span style='background: #AEF1AE'>              // NOTE: we aren't sending this onComplete signal downstream to our observerU
+</span>72 <span style=''></span><span style='background: #AEF1AE'>              // instead we are just instructing upstream to send the next observable
+</span>73 <span style=''></span><span style='background: #AEF1AE'>              upstreamPromise.trySuccess(Continue)
+</span>74 <span style=''></span><span style='background: #AEF1AE'>              refID.cancel()
+</span>75 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>76 <span style=''></span><span style='background: #AEF1AE'>          })
+</span>77 <span style=''></span><span style='background: #AEF1AE'>
+</span>78 <span style=''></span><span style='background: #AEF1AE'>          upstreamPromise.future
+</span>79 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>80 <span style=''></span><span style='background: #AEF1AE'>
+</span>81 <span style=''></span><span style='background: #AEF1AE'>        def onError(ex: Throwable) = {
+</span>82 <span style=''></span><span style='background: #AEF1AE'>          if (delayErrors) {
+</span>83 <span style=''></span><span style='background: #AEF1AE'>            errors += ex
+</span>84 <span style=''></span><span style='background: #AEF1AE'>            onComplete()
+</span>85 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>86 <span style=''></span><span style='background: #AEF1AE'>          else {
+</span>87 <span style=''></span><span style='background: #AEF1AE'>            // oops, error happened on main thread, piping that
+</span>88 <span style=''></span><span style='background: #AEF1AE'>            // along should cancel everything
+</span>89 <span style=''></span><span style='background: #AEF1AE'>            observerU.onError(ex)
+</span>90 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>91 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>92 <span style=''></span><span style='background: #AEF1AE'>
+</span>93 <span style=''></span><span style='background: #AEF1AE'>        def onComplete() = {
+</span>94 <span style=''></span><span style='background: #AEF1AE'>          refCount.cancel()
+</span>95 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>96 <span style=''></span><span style='background: #AEF1AE'>      })
+</span>97 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>98 <span style=''>  }
+</span>99 <span style=''>
+</span>100 <span style=''>  /**
+</span>101 <span style=''>   * Implementation for [[Observable.merge]].
+</span>102 <span style=''>   */
+</span>103 <span style=''>  def merge[T,U](source: Observable[T], bufferPolicy: BufferPolicy[U], delayErrors: Boolean)
+</span>104 <span style=''>      (implicit ev: T <:< Observable[U]): Observable[U] = {
+</span>105 <span style=''>
+</span>106 <span style=''>    </span><span style='background: #AEF1AE'>Observable.create { subscriber =>
+</span>107 <span style=''></span><span style='background: #AEF1AE'>      implicit val s = subscriber.scheduler
+</span>108 <span style=''></span><span style='background: #AEF1AE'>      val buffer = BufferedSubscriber(subscriber.observer, bufferPolicy)
+</span>109 <span style=''></span><span style='background: #AEF1AE'>      val observerU = buffer.observer
+</span>110 <span style=''></span><span style='background: #AEF1AE'>
+</span>111 <span style=''></span><span style='background: #AEF1AE'>      source.unsafeSubscribe(new SynchronousObserver[T] {
+</span>112 <span style=''></span><span style='background: #AEF1AE'>        private[this] val streamActivity =
+</span>113 <span style=''></span><span style='background: #AEF1AE'>          BooleanCancelable()
+</span>114 <span style=''></span><span style='background: #AEF1AE'>        private[this] val errors = if (delayErrors)
+</span>115 <span style=''></span><span style='background: #AEF1AE'>          mutable.ArrayBuffer.empty[Throwable] else null
+</span>116 <span style=''></span><span style='background: #AEF1AE'>
+</span>117 <span style=''></span><span style='background: #AEF1AE'>        private[this] val refCount = RefCountCancelable {
+</span>118 <span style=''></span><span style='background: #AEF1AE'>          if (delayErrors)
+</span>119 <span style=''></span><span style='background: #AEF1AE'>            errors.synchronized {
+</span>120 <span style=''></span><span style='background: #AEF1AE'>              if (errors.nonEmpty)
+</span>121 <span style=''></span><span style='background: #AEF1AE'>                observerU.onError(CompositeException(errors))
+</span>122 <span style=''></span><span style='background: #AEF1AE'>              else
+</span>123 <span style=''></span><span style='background: #AEF1AE'>                observerU.onComplete()
+</span>124 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>125 <span style=''></span><span style='background: #AEF1AE'>          else
+</span>126 <span style=''></span><span style='background: #AEF1AE'>            observerU.onComplete()
+</span>127 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>128 <span style=''></span><span style='background: #AEF1AE'>
+</span>129 <span style=''></span><span style='background: #AEF1AE'>        def onNext(childObservable: T) = {
+</span>130 <span style=''></span><span style='background: #AEF1AE'>          val refID = refCount.acquire()
+</span>131 <span style=''></span><span style='background: #AEF1AE'>
+</span>132 <span style=''></span><span style='background: #AEF1AE'>          childObservable.unsafeSubscribe(new Observer[U] {
+</span>133 <span style=''></span><span style='background: #AEF1AE'>            def onNext(elem: U) = {
+</span>134 <span style=''></span><span style='background: #AEF1AE'>              if (streamActivity.isCanceled)
+</span>135 <span style=''></span><span style='background: #AEF1AE'>                Cancel
+</span>136 <span style=''></span><span style='background: #AEF1AE'>              else
+</span>137 <span style=''></span><span style='background: #AEF1AE'>                observerU.onNext(elem)
+</span>138 <span style=''></span><span style='background: #AEF1AE'>                  .ifCanceledDoCancel(streamActivity)
+</span>139 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>140 <span style=''></span><span style='background: #AEF1AE'>
+</span>141 <span style=''></span><span style='background: #AEF1AE'>            def onError(ex: Throwable): Unit = {
+</span>142 <span style=''></span><span style='background: #AEF1AE'>              if (delayErrors) errors.synchronized {
+</span>143 <span style=''></span><span style='background: #AEF1AE'>                errors += ex
+</span>144 <span style=''></span><span style='background: #AEF1AE'>                refID.cancel()
+</span>145 <span style=''></span><span style='background: #AEF1AE'>              }
+</span>146 <span style=''></span><span style='background: #AEF1AE'>              else {
+</span>147 <span style=''></span><span style='background: #AEF1AE'>                streamActivity.cancel()
+</span>148 <span style=''></span><span style='background: #AEF1AE'>                observerU.onError(ex)
+</span>149 <span style=''></span><span style='background: #AEF1AE'>              }
+</span>150 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>151 <span style=''></span><span style='background: #AEF1AE'>
+</span>152 <span style=''></span><span style='background: #AEF1AE'>            def onComplete(): Unit = {
+</span>153 <span style=''></span><span style='background: #AEF1AE'>              // NOTE: we aren't sending this onComplete signal downstream to our observerU
+</span>154 <span style=''></span><span style='background: #AEF1AE'>              // we will eventually do that after all of them are complete
+</span>155 <span style=''></span><span style='background: #AEF1AE'>              refID.cancel()
+</span>156 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>157 <span style=''></span><span style='background: #AEF1AE'>          })
+</span>158 <span style=''></span><span style='background: #AEF1AE'>
+</span>159 <span style=''></span><span style='background: #AEF1AE'>          if (streamActivity.isCanceled)
+</span>160 <span style=''></span><span style='background: #AEF1AE'>            Cancel
+</span>161 <span style=''></span><span style='background: #AEF1AE'>          else
+</span>162 <span style=''></span><span style='background: #AEF1AE'>            Continue
+</span>163 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>164 <span style=''></span><span style='background: #AEF1AE'>
+</span>165 <span style=''></span><span style='background: #AEF1AE'>        def onError(ex: Throwable) = {
+</span>166 <span style=''></span><span style='background: #AEF1AE'>          if (delayErrors) errors.synchronized {
+</span>167 <span style=''></span><span style='background: #AEF1AE'>            errors += ex
+</span>168 <span style=''></span><span style='background: #AEF1AE'>            refCount.cancel()
+</span>169 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>170 <span style=''></span><span style='background: #AEF1AE'>          else {
+</span>171 <span style=''></span><span style='background: #AEF1AE'>            // oops, error happened on main thread,
+</span>172 <span style=''></span><span style='background: #AEF1AE'>            // piping that along should cancel everything
+</span>173 <span style=''></span><span style='background: #AEF1AE'>            observerU.onError(ex)
+</span>174 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>175 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>176 <span style=''></span><span style='background: #AEF1AE'>
+</span>177 <span style=''></span><span style='background: #AEF1AE'>        def onComplete() = {
+</span>178 <span style=''></span><span style='background: #AEF1AE'>          refCount.cancel()
+</span>179 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>180 <span style=''></span><span style='background: #AEF1AE'>      })
+</span>181 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>182 <span style=''>  }
+</span>183 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          32
+        </td>
+        <td>
+          4146
+        </td>
+        <td>
+          1165
+          -
+          3214
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observable.create
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Observable.create[U](((subscriber: monifu.reactive.Subscriber[U]) =&gt; {
+  implicit val s: monifu.concurrent.Scheduler = subscriber.scheduler;
+  val observerU: monifu.reactive.Observer[U] = subscriber.observer;
+  source.unsafeSubscribe({
+    final class $anon extends AnyRef with monifu.reactive.Observer[T] {
+      def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[T]&gt; = {
+        $anon.super.&lt;init&gt;();
+        ()
+      };
+      private[this] val errors: scala.collection.mutable.ArrayBuffer[Throwable] = if (delayErrors)
+        scala.collection.mutable.ArrayBuffer.empty[Throwable]
+      else
+        null;
+      private[this] val refCount: monifu.concurrent.cancelables.RefCountCancelable = monifu.concurrent.cancelables.RefCountCancelable.apply(if (delayErrors.&amp;&amp;($anon.this.errors.nonEmpty))
+        observerU.onError(monifu.reactive.CompositeException.apply($anon.this.errors))
+      else
+        observerU.onComplete());
+      def onNext(childObservable: T): scala.concurrent.Future[monifu.reactive.Ack] = {
+        val upstreamPromise: scala.concurrent.Promise[monifu.reactive.Ack] = scala.concurrent.Promise.apply[monifu.reactive.Ack]();
+        val refID: monifu.concurrent.Cancelable = $anon.this.refCount.acquire();
+        ev.apply(childObservable).unsafeSubscribe({
+          final class $anon extends AnyRef with monifu.reactive.Observer[U] {
+            def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[U]&gt; = {
+              $anon.super.&lt;init&gt;();
+              ()
+            };
+            def onNext(elem: U): scala.concurrent.Future[monifu.reactive.Ack] = monifu.reactive.internals.`package`.FutureAckExtensions(observerU.onNext(elem)).ifCancelTryCanceling(upstreamPromise)(s);
+            def onError(ex: Throwable): Unit = if (delayErrors)
+              {
+                $anon.this.errors.+=(ex);
+                $anon.this.onComplete()
+              }
+            else
+              {
+                upstreamPromise.trySuccess(monifu.reactive.Ack.Cancel);
+                observerU.onError(ex)
+              };
+            def onComplete(): Unit = {
+              upstreamPromise.trySuccess(monifu.reactive.Ack.Continue);
+              {
+                refID.cancel();
+                ()
+              }
+            }
+          };
+          new $anon()
+        })(s);
+        upstreamPromise.future
+      };
+      def onError(ex: Throwable): Unit = if (delayErrors)
+        {
+          $anon.this.errors.+=(ex);
+          $anon.this.onComplete()
+        }
+      else
+        observerU.onError(ex);
+      def onComplete(): Unit = {
+        $anon.this.refCount.cancel();
+        ()
+      }
+    };
+    new $anon()
+  })(s)
+}))
+        </td>
+      </tr><tr>
+        <td>
+          33
+        </td>
+        <td>
+          4143
+        </td>
+        <td>
+          1225
+          -
+          1245
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          34
+        </td>
+        <td>
+          4144
+        </td>
+        <td>
+          1268
+          -
+          1287
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.observer
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.observer
+        </td>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          4145
+        </td>
+        <td>
+          1295
+          -
+          3208
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.Observable.unsafeSubscribe
+        </td>
+        <td style="background: #AEF1AE">
+          source.unsafeSubscribe({
+  final class $anon extends AnyRef with monifu.reactive.Observer[T] {
+    def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[T]&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    private[this] val errors: scala.collection.mutable.ArrayBuffer[Throwable] = if (delayErrors)
+      scala.collection.mutable.ArrayBuffer.empty[Throwable]
+    else
+      null;
+    private[this] val refCount: monifu.concurrent.cancelables.RefCountCancelable = monifu.concurrent.cancelables.RefCountCancelable.apply(if (delayErrors.&amp;&amp;($anon.this.errors.nonEmpty))
+      observerU.onError(monifu.reactive.CompositeException.apply($anon.this.errors))
+    else
+      observerU.onComplete());
+    def onNext(childObservable: T): scala.concurrent.Future[monifu.reactive.Ack] = {
+      val upstreamPromise: scala.concurrent.Promise[monifu.reactive.Ack] = scala.concurrent.Promise.apply[monifu.reactive.Ack]();
+      val refID: monifu.concurrent.Cancelable = $anon.this.refCount.acquire();
+      ev.apply(childObservable).unsafeSubscribe({
+        final class $anon extends AnyRef with monifu.reactive.Observer[U] {
+          def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[U]&gt; = {
+            $anon.super.&lt;init&gt;();
+            ()
+          };
+          def onNext(elem: U): scala.concurrent.Future[monifu.reactive.Ack] = monifu.reactive.internals.`package`.FutureAckExtensions(observerU.onNext(elem)).ifCancelTryCanceling(upstreamPromise)(s);
+          def onError(ex: Throwable): Unit = if (delayErrors)
+            {
+              $anon.this.errors.+=(ex);
+              $anon.this.onComplete()
+            }
+          else
+            {
+              upstreamPromise.trySuccess(monifu.reactive.Ack.Cancel);
+              observerU.onError(ex)
+            };
+          def onComplete(): Unit = {
+            upstreamPromise.trySuccess(monifu.reactive.Ack.Continue);
+            {
+              refID.cancel();
+              ()
+            }
+          }
+        };
+        new $anon()
+      })(s);
+      upstreamPromise.future
+    };
+    def onError(ex: Throwable): Unit = if (delayErrors)
+      {
+        $anon.this.errors.+=(ex);
+        $anon.this.onComplete()
+      }
+    else
+      observerU.onError(ex);
+    def onComplete(): Unit = {
+      $anon.this.refCount.cancel();
+      ()
+    }
+  };
+  new $anon()
+})(s)
+        </td>
+      </tr><tr>
+        <td>
+          106
+        </td>
+        <td>
+          4151
+        </td>
+        <td>
+          3436
+          -
+          5690
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observable.create
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Observable.create[U](((subscriber: monifu.reactive.Subscriber[U]) =&gt; {
+  implicit val s: monifu.concurrent.Scheduler = subscriber.scheduler;
+  val buffer: monifu.reactive.observers.BufferedSubscriber[U] = monifu.reactive.observers.BufferedSubscriber.apply[U](subscriber.observer, bufferPolicy)(s);
+  val observerU: monifu.reactive.Observer[U] = buffer.observer;
+  source.unsafeSubscribe({
+    final class $anon extends AnyRef with monifu.reactive.observers.SynchronousObserver[T] {
+      def &lt;init&gt;(): &lt;$anon: monifu.reactive.observers.SynchronousObserver[T]&gt; = {
+        $anon.super.&lt;init&gt;();
+        ()
+      };
+      private[this] val streamActivity: monifu.concurrent.cancelables.BooleanCancelable = monifu.concurrent.cancelables.BooleanCancelable.apply();
+      private[this] val errors: scala.collection.mutable.ArrayBuffer[Throwable] = if (delayErrors)
+        scala.collection.mutable.ArrayBuffer.empty[Throwable]
+      else
+        null;
+      private[this] val refCount: monifu.concurrent.cancelables.RefCountCancelable = monifu.concurrent.cancelables.RefCountCancelable.apply(if (delayErrors)
+        $anon.this.errors.synchronized[Unit](if ($anon.this.errors.nonEmpty)
+          observerU.onError(monifu.reactive.CompositeException.apply($anon.this.errors))
+        else
+          observerU.onComplete())
+      else
+        observerU.onComplete());
+      def onNext(childObservable: T): monifu.reactive.Ack = {
+        val refID: monifu.concurrent.Cancelable = $anon.this.refCount.acquire();
+        ev.apply(childObservable).unsafeSubscribe({
+          final class $anon extends AnyRef with monifu.reactive.Observer[U] {
+            def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[U]&gt; = {
+              $anon.super.&lt;init&gt;();
+              ()
+            };
+            def onNext(elem: U): scala.concurrent.Future[monifu.reactive.Ack] = if ($anon.this.streamActivity.isCanceled)
+              monifu.reactive.Ack.Cancel
+            else
+              monifu.reactive.internals.`package`.FutureAckExtensions(observerU.onNext(elem)).ifCanceledDoCancel($anon.this.streamActivity)(s);
+            def onError(ex: Throwable): Unit = if (delayErrors)
+              {
+                $anon.this.errors.synchronized[Boolean]({
+                  $anon.this.errors.+=(ex);
+                  refID.cancel()
+                });
+                ()
+              }
+            else
+              {
+                $anon.this.streamActivity.cancel();
+                observerU.onError(ex)
+              };
+            def onComplete(): Unit = {
+              refID.cancel();
+              ()
+            }
+          };
+          new $anon()
+        })(s);
+        if ($anon.this.streamActivity.isCanceled)
+          monifu.reactive.Ack.Cancel
+        else
+          monifu.reactive.Ack.Continue
+      };
+      def onError(ex: Throwable): Unit = if (delayErrors)
+        {
+          $anon.this.errors.synchronized[Boolean]({
+            $anon.this.errors.+=(ex);
+            $anon.this.refCount.cancel()
+          });
+          ()
+        }
+      else
+        observerU.onError(ex);
+      def onComplete(): Unit = {
+        $anon.this.refCount.cancel();
+        ()
+      }
+    };
+    new $anon()
+  })(s)
+}))
+        </td>
+      </tr><tr>
+        <td>
+          107
+        </td>
+        <td>
+          4147
+        </td>
+        <td>
+          3493
+          -
+          3513
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          108
+        </td>
+        <td>
+          4148
+        </td>
+        <td>
+          3533
+          -
+          3586
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.observers.BufferedSubscriber.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.observers.BufferedSubscriber.apply[U](subscriber.observer, bufferPolicy)(s)
+        </td>
+      </tr><tr>
+        <td>
+          109
+        </td>
+        <td>
+          4149
+        </td>
+        <td>
+          3609
+          -
+          3624
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.observer
+        </td>
+        <td style="background: #AEF1AE">
+          buffer.observer
+        </td>
+      </tr><tr>
+        <td>
+          111
+        </td>
+        <td>
+          4150
+        </td>
+        <td>
+          3632
+          -
+          5684
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.Observable.unsafeSubscribe
+        </td>
+        <td style="background: #AEF1AE">
+          source.unsafeSubscribe({
+  final class $anon extends AnyRef with monifu.reactive.observers.SynchronousObserver[T] {
+    def &lt;init&gt;(): &lt;$anon: monifu.reactive.observers.SynchronousObserver[T]&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    private[this] val streamActivity: monifu.concurrent.cancelables.BooleanCancelable = monifu.concurrent.cancelables.BooleanCancelable.apply();
+    private[this] val errors: scala.collection.mutable.ArrayBuffer[Throwable] = if (delayErrors)
+      scala.collection.mutable.ArrayBuffer.empty[Throwable]
+    else
+      null;
+    private[this] val refCount: monifu.concurrent.cancelables.RefCountCancelable = monifu.concurrent.cancelables.RefCountCancelable.apply(if (delayErrors)
+      $anon.this.errors.synchronized[Unit](if ($anon.this.errors.nonEmpty)
+        observerU.onError(monifu.reactive.CompositeException.apply($anon.this.errors))
+      else
+        observerU.onComplete())
+    else
+      observerU.onComplete());
+    def onNext(childObservable: T): monifu.reactive.Ack = {
+      val refID: monifu.concurrent.Cancelable = $anon.this.refCount.acquire();
+      ev.apply(childObservable).unsafeSubscribe({
+        final class $anon extends AnyRef with monifu.reactive.Observer[U] {
+          def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[U]&gt; = {
+            $anon.super.&lt;init&gt;();
+            ()
+          };
+          def onNext(elem: U): scala.concurrent.Future[monifu.reactive.Ack] = if ($anon.this.streamActivity.isCanceled)
+            monifu.reactive.Ack.Cancel
+          else
+            monifu.reactive.internals.`package`.FutureAckExtensions(observerU.onNext(elem)).ifCanceledDoCancel($anon.this.streamActivity)(s);
+          def onError(ex: Throwable): Unit = if (delayErrors)
+            {
+              $anon.this.errors.synchronized[Boolean]({
+                $anon.this.errors.+=(ex);
+                refID.cancel()
+              });
+              ()
+            }
+          else
+            {
+              $anon.this.streamActivity.cancel();
+              observerU.onError(ex)
+            };
+          def onComplete(): Unit = {
+            refID.cancel();
+            ()
+          }
+        };
+        new $anon()
+      })(s);
+      if ($anon.this.streamActivity.isCanceled)
+        monifu.reactive.Ack.Cancel
+      else
+        monifu.reactive.Ack.Continue
+    };
+    def onError(ex: Throwable): Unit = if (delayErrors)
+      {
+        $anon.this.errors.synchronized[Boolean]({
+          $anon.this.errors.+=(ex);
+          $anon.this.refCount.cancel()
+        });
+        ()
+      }
+    else
+      observerU.onError(ex);
+    def onComplete(): Unit = {
+      $anon.this.refCount.cancel();
+      ()
+    }
+  };
+  new $anon()
+})(s)
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

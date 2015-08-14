@@ -1,0 +1,3544 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          /Users/alex/Projects/org.monifu/monifu/shared/src/main/scala/monifu/reactive/observers/SynchronousBufferedSubscriber.scala.html
+        </title>
+        <link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css"/>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+        <script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script>
+        <script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.18.3/addons/pager/jquery.tablesorter.pager.min.js"></script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''>
+</span>17 <span style=''>package monifu.reactive.observers
+</span>18 <span style=''>
+</span>19 <span style=''>import monifu.collection.mutable.ConcurrentQueue
+</span>20 <span style=''>import monifu.concurrent.Scheduler
+</span>21 <span style=''>import monifu.concurrent.atomic.padded.Atomic
+</span>22 <span style=''>import monifu.reactive.Ack.{Cancel, Continue}
+</span>23 <span style=''>import monifu.reactive.{BufferOverflowException, Ack, Observer}
+</span>24 <span style=''>
+</span>25 <span style=''>import scala.annotation.tailrec
+</span>26 <span style=''>import scala.util.Failure
+</span>27 <span style=''>import scala.util.control.NonFatal
+</span>28 <span style=''>
+</span>29 <span style=''>/**
+</span>30 <span style=''> * A highly optimized [[BufferedSubscriber]] implementation. It supports 2
+</span>31 <span style=''> * [[monifu.reactive.BufferPolicy buffer policies]] - unbounded or bounded and terminated
+</span>32 <span style=''> * with a [[monifu.reactive.BufferOverflowException BufferOverflowException]].
+</span>33 <span style=''> *
+</span>34 <span style=''> * To create an instance using an unbounded policy: {{{
+</span>35 <span style=''> *   // by default, the constructor for BufferedSubscriber is returning this unbounded variant
+</span>36 <span style=''> *   BufferedSubscriber(observer)
+</span>37 <span style=''> *
+</span>38 <span style=''> *   // or you can specify the Unbounded policy explicitly
+</span>39 <span style=''> *   import monifu.reactive.BufferPolicy.Unbounded
+</span>40 <span style=''> *   val buffered = BufferedSubscriber(observer, bufferPolicy = Unbounded)
+</span>41 <span style=''> * }}}
+</span>42 <span style=''> *
+</span>43 <span style=''> * To create a bounded buffered observable that triggers
+</span>44 <span style=''> * [[monifu.reactive.BufferOverflowException BufferOverflowException]]
+</span>45 <span style=''> * when over capacity: {{{
+</span>46 <span style=''> *   import monifu.reactive.BufferPolicy.OverflowTriggering
+</span>47 <span style=''> *   // triggers buffer overflow error after 10000 messages
+</span>48 <span style=''> *   val buffered = BufferedSubscriber(observer, bufferPolicy = OverflowTriggering(bufferSize = 10000))
+</span>49 <span style=''> * }}}
+</span>50 <span style=''> *
+</span>51 <span style=''> * @param underlying is the underlying observer receiving the queued events
+</span>52 <span style=''> * @param bufferSize is the maximum buffer size, or zero if unbounded
+</span>53 <span style=''> */
+</span>54 <span style=''>final class SynchronousBufferedSubscriber[-T] private
+</span>55 <span style=''>    (underlying: Observer[T], bufferSize: Int = 0)(implicit val scheduler: Scheduler)
+</span>56 <span style=''>  extends BufferedSubscriber[T] with SynchronousSubscriber[T] {
+</span>57 <span style=''>
+</span>58 <span style=''>  </span><span style='background: #AEF1AE'>require(bufferSize >= 0, </span><span style='background: #F0ADAD'>"bufferSize must be a positive number"</span><span style='background: #AEF1AE'>)</span><span style=''>
+</span>59 <span style=''>
+</span>60 <span style=''>  private[this] val queue = </span><span style='background: #AEF1AE'>ConcurrentQueue.empty[T]</span><span style=''>
+</span>61 <span style=''>  // to be modified only in onError, before upstreamIsComplete
+</span>62 <span style=''>  private[this] var errorThrown: Throwable = </span><span style='background: #AEF1AE'>null</span><span style=''>
+</span>63 <span style=''>  // to be modified only in onError / onComplete
+</span>64 <span style=''>  @volatile private[this] var upstreamIsComplete = </span><span style='background: #AEF1AE'>false</span><span style=''>
+</span>65 <span style=''>  // to be modified only by consumer
+</span>66 <span style=''>  @volatile private[this] var downstreamIsDone = </span><span style='background: #AEF1AE'>false</span><span style=''>
+</span>67 <span style=''>  // for enforcing non-concurrent updates
+</span>68 <span style=''>  private[this] val itemsToPush = </span><span style='background: #AEF1AE'>Atomic(0)</span><span style=''>
+</span>69 <span style=''>
+</span>70 <span style=''>  val observer: SynchronousObserver[T] = </span><span style='background: #AEF1AE'>new</span><span style=''> SynchronousObserver[T] {
+</span>71 <span style=''>    def onNext(elem: T): Ack = {
+</span>72 <span style=''>      if (</span><span style='background: #AEF1AE'>!upstreamIsComplete && !downstreamIsDone</span><span style=''>) {
+</span>73 <span style=''>        </span><span style='background: #AEF1AE'>try {
+</span>74 <span style=''></span><span style='background: #AEF1AE'>          queue.offer(elem)
+</span>75 <span style=''></span><span style='background: #AEF1AE'>          pushToConsumer()
+</span>76 <span style=''></span><span style='background: #AEF1AE'>          Continue
+</span>77 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>78 <span style=''></span><span style='background: #AEF1AE'>        catch {
+</span>79 <span style=''></span><span style='background: #AEF1AE'>          case NonFatal(ex) =>
+</span>80 <span style=''></span><span style='background: #AEF1AE'>            </span><span style='background: #F0ADAD'>onError(ex)</span><span style='background: #AEF1AE'>
+</span>81 <span style=''></span><span style='background: #AEF1AE'>            </span><span style='background: #F0ADAD'>Cancel</span><span style='background: #AEF1AE'>
+</span>82 <span style=''></span><span style='background: #AEF1AE'>        }</span><span style=''>
+</span>83 <span style=''>      }
+</span>84 <span style=''>      else
+</span>85 <span style=''>        </span><span style='background: #AEF1AE'>Cancel</span><span style=''>
+</span>86 <span style=''>    }
+</span>87 <span style=''>
+</span>88 <span style=''>    def onError(ex: Throwable) = {
+</span>89 <span style=''>      if (</span><span style='background: #AEF1AE'>!upstreamIsComplete && !downstreamIsDone</span><span style=''>) </span><span style='background: #AEF1AE'>{
+</span>90 <span style=''></span><span style='background: #AEF1AE'>        errorThrown = ex
+</span>91 <span style=''></span><span style='background: #AEF1AE'>        upstreamIsComplete = true
+</span>92 <span style=''></span><span style='background: #AEF1AE'>        pushToConsumer()
+</span>93 <span style=''></span><span style='background: #AEF1AE'>      }</span><span style=''>
+</span>94 <span style=''>    }
+</span>95 <span style=''>
+</span>96 <span style=''>    def onComplete() = {
+</span>97 <span style=''>      if (</span><span style='background: #AEF1AE'>!upstreamIsComplete && !downstreamIsDone</span><span style=''>) </span><span style='background: #AEF1AE'>{
+</span>98 <span style=''></span><span style='background: #AEF1AE'>        upstreamIsComplete = true
+</span>99 <span style=''></span><span style='background: #AEF1AE'>        pushToConsumer()
+</span>100 <span style=''></span><span style='background: #AEF1AE'>      }</span><span style=''>
+</span>101 <span style=''>    }
+</span>102 <span style=''>  }
+</span>103 <span style=''>
+</span>104 <span style=''>
+</span>105 <span style=''>  @tailrec
+</span>106 <span style=''>  private[this] def pushToConsumer(): Unit = {
+</span>107 <span style=''>    val currentNr = </span><span style='background: #AEF1AE'>itemsToPush.get</span><span style=''>
+</span>108 <span style=''>
+</span>109 <span style=''>    if (</span><span style='background: #AEF1AE'>bufferSize == 0</span><span style=''>) {
+</span>110 <span style=''>      // unbounded branch
+</span>111 <span style=''>      </span><span style='background: #AEF1AE'>if (!itemsToPush.compareAndSet(currentNr, currentNr + 1))
+</span>112 <span style=''></span><span style='background: #AEF1AE'>        pushToConsumer()
+</span>113 <span style=''></span><span style='background: #AEF1AE'>      else if (currentNr == 0)
+</span>114 <span style=''></span><span style='background: #AEF1AE'>        scheduler.execute(new Runnable {
+</span>115 <span style=''></span><span style='background: #AEF1AE'>          def run() = fastLoop(0)
+</span>116 <span style=''></span><span style='background: #AEF1AE'>        })</span><span style=''>
+</span>117 <span style=''>    }
+</span>118 <span style=''>    else {
+</span>119 <span style=''>      // triggering overflow branch
+</span>120 <span style=''>      </span><span style='background: #AEF1AE'>if (currentNr >= bufferSize && !upstreamIsComplete) {
+</span>121 <span style=''></span><span style='background: #AEF1AE'>        observer.onError(new BufferOverflowException(
+</span>122 <span style=''></span><span style='background: #AEF1AE'>          s"Downstream observer is too slow, buffer over capacity with a specified buffer size of $bufferSize and" +
+</span>123 <span style=''></span><span style='background: #AEF1AE'>            s" $currentNr events being left for push"))
+</span>124 <span style=''></span><span style='background: #AEF1AE'>      }
+</span>125 <span style=''></span><span style='background: #AEF1AE'>      else if (!itemsToPush.compareAndSet(currentNr, currentNr + 1))
+</span>126 <span style=''></span><span style='background: #AEF1AE'>        pushToConsumer()
+</span>127 <span style=''></span><span style='background: #AEF1AE'>      else if (currentNr == 0)
+</span>128 <span style=''></span><span style='background: #AEF1AE'>        scheduler.execute(new Runnable {
+</span>129 <span style=''></span><span style='background: #AEF1AE'>          def run() = fastLoop(0)
+</span>130 <span style=''></span><span style='background: #AEF1AE'>        })</span><span style=''>
+</span>131 <span style=''>    }
+</span>132 <span style=''>  }
+</span>133 <span style=''>
+</span>134 <span style=''>  private[this] def rescheduled(processed: Int): Unit = {
+</span>135 <span style=''>    </span><span style='background: #AEF1AE'>fastLoop(processed)</span><span style=''>
+</span>136 <span style=''>  }
+</span>137 <span style=''>
+</span>138 <span style=''>  @tailrec
+</span>139 <span style=''>  private[this] def fastLoop(processed: Int): Unit = {
+</span>140 <span style=''>    if (</span><span style='background: #AEF1AE'>!downstreamIsDone</span><span style=''>) </span><span style='background: #AEF1AE'>{
+</span>141 <span style=''></span><span style='background: #AEF1AE'>      val hasError = errorThrown ne null
+</span>142 <span style=''></span><span style='background: #AEF1AE'>      val next = queue.poll()
+</span>143 <span style=''></span><span style='background: #AEF1AE'>
+</span>144 <span style=''></span><span style='background: #AEF1AE'>      if (next != null) {
+</span>145 <span style=''></span><span style='background: #AEF1AE'>        underlying.onNext(next) match {
+</span>146 <span style=''></span><span style='background: #AEF1AE'>          case sync if sync.isCompleted =>
+</span>147 <span style=''></span><span style='background: #AEF1AE'>            sync match {
+</span>148 <span style=''></span><span style='background: #AEF1AE'>              case continue if continue == Continue || continue.value.get == Continue.IsSuccess =>
+</span>149 <span style=''></span><span style='background: #AEF1AE'>                // process next
+</span>150 <span style=''></span><span style='background: #AEF1AE'>                fastLoop(processed + 1)
+</span>151 <span style=''></span><span style='background: #AEF1AE'>
+</span>152 <span style=''></span><span style='background: #AEF1AE'>              case done if </span><span style='background: #F0ADAD'>done == Cancel || done.value.get == Cancel.IsSuccess</span><span style='background: #AEF1AE'> =>
+</span>153 <span style=''></span><span style='background: #AEF1AE'>                // ending loop
+</span>154 <span style=''></span><span style='background: #AEF1AE'>                downstreamIsDone = </span><span style='background: #F0ADAD'>true</span><span style='background: #AEF1AE'>
+</span>155 <span style=''></span><span style='background: #AEF1AE'>                </span><span style='background: #F0ADAD'>itemsToPush.set(0)</span><span style='background: #AEF1AE'>
+</span>156 <span style=''></span><span style='background: #AEF1AE'>
+</span>157 <span style=''></span><span style='background: #AEF1AE'>              case error if </span><span style='background: #F0ADAD'>error.value.get.isFailure</span><span style='background: #AEF1AE'> =>
+</span>158 <span style=''></span><span style='background: #AEF1AE'>                // ending loop
+</span>159 <span style=''></span><span style='background: #AEF1AE'>                downstreamIsDone = </span><span style='background: #F0ADAD'>true</span><span style='background: #AEF1AE'>
+</span>160 <span style=''></span><span style='background: #AEF1AE'>                </span><span style='background: #F0ADAD'>itemsToPush.set(0)</span><span style='background: #AEF1AE'>
+</span>161 <span style=''></span><span style='background: #AEF1AE'>                </span><span style='background: #F0ADAD'>underlying.onError(error.value.get.failed.get)</span><span style='background: #AEF1AE'>
+</span>162 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>163 <span style=''></span><span style='background: #AEF1AE'>
+</span>164 <span style=''></span><span style='background: #AEF1AE'>          case async =>
+</span>165 <span style=''></span><span style='background: #AEF1AE'>            async.onComplete {
+</span>166 <span style=''></span><span style='background: #AEF1AE'>              case Continue.IsSuccess =>
+</span>167 <span style=''></span><span style='background: #AEF1AE'>                // re-run loop (in different thread)
+</span>168 <span style=''></span><span style='background: #AEF1AE'>                rescheduled(processed + 1)
+</span>169 <span style=''></span><span style='background: #AEF1AE'>
+</span>170 <span style=''></span><span style='background: #AEF1AE'>              case Cancel.IsSuccess =>
+</span>171 <span style=''></span><span style='background: #AEF1AE'>                // ending loop
+</span>172 <span style=''></span><span style='background: #AEF1AE'>                downstreamIsDone = true
+</span>173 <span style=''></span><span style='background: #AEF1AE'>                itemsToPush.set(0)
+</span>174 <span style=''></span><span style='background: #AEF1AE'>
+</span>175 <span style=''></span><span style='background: #AEF1AE'>              case Failure(ex) =>
+</span>176 <span style=''></span><span style='background: #AEF1AE'>                // ending loop
+</span>177 <span style=''></span><span style='background: #AEF1AE'>                downstreamIsDone = </span><span style='background: #F0ADAD'>true</span><span style='background: #AEF1AE'>
+</span>178 <span style=''></span><span style='background: #AEF1AE'>                </span><span style='background: #F0ADAD'>itemsToPush.set(0)</span><span style='background: #AEF1AE'>
+</span>179 <span style=''></span><span style='background: #AEF1AE'>                </span><span style='background: #F0ADAD'>underlying.onError(ex)</span><span style='background: #AEF1AE'>
+</span>180 <span style=''></span><span style='background: #AEF1AE'>
+</span>181 <span style=''></span><span style='background: #AEF1AE'>              case other =>
+</span>182 <span style=''></span><span style='background: #AEF1AE'>                // never happens, but to appease Scala's compiler
+</span>183 <span style=''></span><span style='background: #AEF1AE'>                downstreamIsDone = </span><span style='background: #F0ADAD'>true</span><span style='background: #AEF1AE'>
+</span>184 <span style=''></span><span style='background: #AEF1AE'>                </span><span style='background: #F0ADAD'>itemsToPush.set(0)</span><span style='background: #AEF1AE'>
+</span>185 <span style=''></span><span style='background: #AEF1AE'>                </span><span style='background: #F0ADAD'>underlying.onError(new MatchError(s"$other"))</span><span style='background: #AEF1AE'>
+</span>186 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>187 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>188 <span style=''></span><span style='background: #AEF1AE'>      }
+</span>189 <span style=''></span><span style='background: #AEF1AE'>      else if (upstreamIsComplete || hasError) {
+</span>190 <span style=''></span><span style='background: #AEF1AE'>        // Race-condition check, but if upstreamIsComplete=true is visible,
+</span>191 <span style=''></span><span style='background: #AEF1AE'>        // then the queue should be fully published because there's a clear happens-before
+</span>192 <span style=''></span><span style='background: #AEF1AE'>        // relationship between queue.offer() and upstreamIsComplete=true
+</span>193 <span style=''></span><span style='background: #AEF1AE'>        if (!queue.isEmpty) {
+</span>194 <span style=''></span><span style='background: #AEF1AE'>          </span><span style='background: #F0ADAD'>fastLoop(processed)</span><span style='background: #AEF1AE'>
+</span>195 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>196 <span style=''></span><span style='background: #AEF1AE'>        else {
+</span>197 <span style=''></span><span style='background: #AEF1AE'>          // ending loop
+</span>198 <span style=''></span><span style='background: #AEF1AE'>          downstreamIsDone = true
+</span>199 <span style=''></span><span style='background: #AEF1AE'>          itemsToPush.set(0)
+</span>200 <span style=''></span><span style='background: #AEF1AE'>          queue.clear() // for GC purposes
+</span>201 <span style=''></span><span style='background: #AEF1AE'>          if (errorThrown ne null)
+</span>202 <span style=''></span><span style='background: #AEF1AE'>            underlying.onError(errorThrown)
+</span>203 <span style=''></span><span style='background: #AEF1AE'>          else
+</span>204 <span style=''></span><span style='background: #AEF1AE'>            underlying.onComplete()
+</span>205 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>206 <span style=''></span><span style='background: #AEF1AE'>      }
+</span>207 <span style=''></span><span style='background: #AEF1AE'>      else {
+</span>208 <span style=''></span><span style='background: #AEF1AE'>        val remaining = itemsToPush.decrementAndGet(processed)
+</span>209 <span style=''></span><span style='background: #AEF1AE'>        // if the queue is non-empty (i.e. concurrent modifications just happened)
+</span>210 <span style=''></span><span style='background: #AEF1AE'>        // then start all over again
+</span>211 <span style=''></span><span style='background: #AEF1AE'>        if (remaining > 0) fastLoop(0)
+</span>212 <span style=''></span><span style='background: #AEF1AE'>      }
+</span>213 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>214 <span style=''>  }
+</span>215 <span style=''>}
+</span>216 <span style=''>
+</span>217 <span style=''>object SynchronousBufferedSubscriber {
+</span>218 <span style=''>  def unbounded[T](observer: Observer[T])(implicit s: Scheduler): SynchronousBufferedSubscriber[T] =
+</span>219 <span style=''>    </span><span style='background: #AEF1AE'>new SynchronousBufferedSubscriber[T](observer)</span><span style=''>
+</span>220 <span style=''>
+</span>221 <span style=''>  def overflowTriggering[T](observer: Observer[T], bufferSize: Int)(implicit s: Scheduler): SynchronousBufferedSubscriber[T] =
+</span>222 <span style=''>    </span><span style='background: #AEF1AE'>new SynchronousBufferedSubscriber[T](observer, bufferSize)</span><span style=''>
+</span>223 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          58
+        </td>
+        <td>
+          3650
+        </td>
+        <td>
+          2369
+          -
+          2384
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.&gt;=
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.bufferSize.&gt;=(0)
+        </td>
+      </tr><tr>
+        <td>
+          58
+        </td>
+        <td>
+          3652
+        </td>
+        <td>
+          2361
+          -
+          2425
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Predef.require
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.require(SynchronousBufferedSubscriber.this.bufferSize.&gt;=(0), &quot;bufferSize must be a positive number&quot;)
+        </td>
+      </tr><tr>
+        <td>
+          58
+        </td>
+        <td>
+          3651
+        </td>
+        <td>
+          2386
+          -
+          2424
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          &quot;bufferSize must be a positive number&quot;
+        </td>
+      </tr><tr>
+        <td>
+          60
+        </td>
+        <td>
+          3653
+        </td>
+        <td>
+          2455
+          -
+          2479
+        </td>
+        <td>
+          TypeApply
+        </td>
+        <td>
+          scala.collection.generic.GenericCompanion.empty
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.collection.mutable.ConcurrentQueue.empty[T]
+        </td>
+      </tr><tr>
+        <td>
+          62
+        </td>
+        <td>
+          3654
+        </td>
+        <td>
+          2588
+          -
+          2592
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          null
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          3655
+        </td>
+        <td>
+          2693
+          -
+          2698
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          false
+        </td>
+      </tr><tr>
+        <td>
+          66
+        </td>
+        <td>
+          3656
+        </td>
+        <td>
+          2785
+          -
+          2790
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          false
+        </td>
+      </tr><tr>
+        <td>
+          68
+        </td>
+        <td>
+          3657
+        </td>
+        <td>
+          2874
+          -
+          2875
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          0
+        </td>
+      </tr><tr>
+        <td>
+          68
+        </td>
+        <td>
+          3659
+        </td>
+        <td>
+          2867
+          -
+          2876
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.Atomic.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.atomic.padded.Atomic.apply[Int, monifu.concurrent.atomic.padded.AtomicInt](0)(padded.this.AtomicBuilder.AtomicIntBuilder)
+        </td>
+      </tr><tr>
+        <td>
+          68
+        </td>
+        <td>
+          3658
+        </td>
+        <td>
+          2873
+          -
+          2873
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.Implicits.Level3.AtomicIntBuilder
+        </td>
+        <td style="background: #AEF1AE">
+          padded.this.AtomicBuilder.AtomicIntBuilder
+        </td>
+      </tr><tr>
+        <td>
+          70
+        </td>
+        <td>
+          3685
+        </td>
+        <td>
+          2919
+          -
+          2922
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          72
+        </td>
+        <td>
+          3661
+        </td>
+        <td>
+          2991
+          -
+          3031
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Boolean.&amp;&amp;
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.upstreamIsComplete.unary_!.&amp;&amp;(SynchronousBufferedSubscriber.this.downstreamIsDone.unary_!)
+        </td>
+      </tr><tr>
+        <td>
+          72
+        </td>
+        <td>
+          3660
+        </td>
+        <td>
+          3014
+          -
+          3031
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.downstreamIsDone.unary_!
+        </td>
+      </tr><tr>
+        <td>
+          73
+        </td>
+        <td>
+          3665
+        </td>
+        <td>
+          3059
+          -
+          3122
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  SynchronousBufferedSubscriber.this.queue.offer(elem);
+  SynchronousBufferedSubscriber.this.pushToConsumer();
+  monifu.reactive.Ack.Continue
+}
+        </td>
+      </tr><tr>
+        <td>
+          73
+        </td>
+        <td>
+          3668
+        </td>
+        <td>
+          3043
+          -
+          3232
+        </td>
+        <td>
+          Try
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          try {
+  SynchronousBufferedSubscriber.this.queue.offer(elem);
+  SynchronousBufferedSubscriber.this.pushToConsumer();
+  monifu.reactive.Ack.Continue
+} catch {
+  case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((ex @ _)) =&gt; {
+    $anon.this.onError(ex);
+    monifu.reactive.Ack.Cancel
+  }
+}
+        </td>
+      </tr><tr>
+        <td>
+          74
+        </td>
+        <td>
+          3662
+        </td>
+        <td>
+          3059
+          -
+          3076
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.collection.mutable.ConcurrentQueue.offer
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.queue.offer(elem)
+        </td>
+      </tr><tr>
+        <td>
+          75
+        </td>
+        <td>
+          3663
+        </td>
+        <td>
+          3087
+          -
+          3103
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.pushToConsumer
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.pushToConsumer()
+        </td>
+      </tr><tr>
+        <td>
+          76
+        </td>
+        <td>
+          3664
+        </td>
+        <td>
+          3114
+          -
+          3122
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Continue
+        </td>
+      </tr><tr>
+        <td>
+          80
+        </td>
+        <td>
+          3666
+        </td>
+        <td>
+          3192
+          -
+          3203
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.$anon.onError
+        </td>
+        <td style="background: #F0ADAD">
+          $anon.this.onError(ex)
+        </td>
+      </tr><tr>
+        <td>
+          81
+        </td>
+        <td>
+          3667
+        </td>
+        <td>
+          3216
+          -
+          3222
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          85
+        </td>
+        <td>
+          3670
+        </td>
+        <td>
+          3260
+          -
+          3266
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          85
+        </td>
+        <td>
+          3669
+        </td>
+        <td>
+          3260
+          -
+          3266
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          89
+        </td>
+        <td>
+          3672
+        </td>
+        <td>
+          3319
+          -
+          3359
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Boolean.&amp;&amp;
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.upstreamIsComplete.unary_!.&amp;&amp;(SynchronousBufferedSubscriber.this.downstreamIsDone.unary_!)
+        </td>
+      </tr><tr>
+        <td>
+          89
+        </td>
+        <td>
+          3675
+        </td>
+        <td>
+          3361
+          -
+          3454
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  SynchronousBufferedSubscriber.this.errorThrown = ex;
+  SynchronousBufferedSubscriber.this.upstreamIsComplete = true;
+  SynchronousBufferedSubscriber.this.pushToConsumer()
+}
+        </td>
+      </tr><tr>
+        <td>
+          89
+        </td>
+        <td>
+          3677
+        </td>
+        <td>
+          3315
+          -
+          3315
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          89
+        </td>
+        <td>
+          3671
+        </td>
+        <td>
+          3342
+          -
+          3359
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.downstreamIsDone.unary_!
+        </td>
+      </tr><tr>
+        <td>
+          89
+        </td>
+        <td>
+          3676
+        </td>
+        <td>
+          3315
+          -
+          3315
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          91
+        </td>
+        <td>
+          3673
+        </td>
+        <td>
+          3417
+          -
+          3421
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          92
+        </td>
+        <td>
+          3674
+        </td>
+        <td>
+          3430
+          -
+          3446
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.pushToConsumer
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.pushToConsumer()
+        </td>
+      </tr><tr>
+        <td>
+          97
+        </td>
+        <td>
+          3684
+        </td>
+        <td>
+          3493
+          -
+          3493
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          97
+        </td>
+        <td>
+          3683
+        </td>
+        <td>
+          3493
+          -
+          3493
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          97
+        </td>
+        <td>
+          3682
+        </td>
+        <td>
+          3539
+          -
+          3607
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  SynchronousBufferedSubscriber.this.upstreamIsComplete = true;
+  SynchronousBufferedSubscriber.this.pushToConsumer()
+}
+        </td>
+      </tr><tr>
+        <td>
+          97
+        </td>
+        <td>
+          3679
+        </td>
+        <td>
+          3497
+          -
+          3537
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Boolean.&amp;&amp;
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.upstreamIsComplete.unary_!.&amp;&amp;(SynchronousBufferedSubscriber.this.downstreamIsDone.unary_!)
+        </td>
+      </tr><tr>
+        <td>
+          97
+        </td>
+        <td>
+          3678
+        </td>
+        <td>
+          3520
+          -
+          3537
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.downstreamIsDone.unary_!
+        </td>
+      </tr><tr>
+        <td>
+          98
+        </td>
+        <td>
+          3680
+        </td>
+        <td>
+          3570
+          -
+          3574
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          99
+        </td>
+        <td>
+          3681
+        </td>
+        <td>
+          3583
+          -
+          3599
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.pushToConsumer
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.pushToConsumer()
+        </td>
+      </tr><tr>
+        <td>
+          107
+        </td>
+        <td>
+          3686
+        </td>
+        <td>
+          3698
+          -
+          3713
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicInt.get
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.itemsToPush.get
+        </td>
+      </tr><tr>
+        <td>
+          109
+        </td>
+        <td>
+          3687
+        </td>
+        <td>
+          3723
+          -
+          3738
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.==
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.bufferSize.==(0)
+        </td>
+      </tr><tr>
+        <td>
+          111
+        </td>
+        <td>
+          3689
+        </td>
+        <td>
+          3778
+          -
+          3830
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.itemsToPush.compareAndSet(currentNr, currentNr.+(1)).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          111
+        </td>
+        <td>
+          3688
+        </td>
+        <td>
+          3816
+          -
+          3829
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.+
+        </td>
+        <td style="background: #AEF1AE">
+          currentNr.+(1)
+        </td>
+      </tr><tr>
+        <td>
+          111
+        </td>
+        <td>
+          3700
+        </td>
+        <td>
+          3774
+          -
+          3973
+        </td>
+        <td>
+          If
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          if (SynchronousBufferedSubscriber.this.itemsToPush.compareAndSet(currentNr, currentNr.+(1)).unary_!)
+  SynchronousBufferedSubscriber.this.pushToConsumer()
+else
+  if (currentNr.==(0))
+    SynchronousBufferedSubscriber.this.scheduler.execute({
+      final class $anon extends Object with Runnable {
+        def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+          $anon.super.&lt;init&gt;();
+          ()
+        };
+        def run(): Unit = SynchronousBufferedSubscriber.this.fastLoop(0)
+      };
+      new $anon()
+    })
+  else
+    ()
+        </td>
+      </tr><tr>
+        <td>
+          112
+        </td>
+        <td>
+          3690
+        </td>
+        <td>
+          3840
+          -
+          3856
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.pushToConsumer
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.pushToConsumer()
+        </td>
+      </tr><tr>
+        <td>
+          112
+        </td>
+        <td>
+          3691
+        </td>
+        <td>
+          3840
+          -
+          3856
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.pushToConsumer
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.pushToConsumer()
+        </td>
+      </tr><tr>
+        <td>
+          113
+        </td>
+        <td>
+          3699
+        </td>
+        <td>
+          3868
+          -
+          3973
+        </td>
+        <td>
+          If
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          if (currentNr.==(0))
+  SynchronousBufferedSubscriber.this.scheduler.execute({
+    final class $anon extends Object with Runnable {
+      def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+        $anon.super.&lt;init&gt;();
+        ()
+      };
+      def run(): Unit = SynchronousBufferedSubscriber.this.fastLoop(0)
+    };
+    new $anon()
+  })
+else
+  ()
+        </td>
+      </tr><tr>
+        <td>
+          113
+        </td>
+        <td>
+          3692
+        </td>
+        <td>
+          3872
+          -
+          3886
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.==
+        </td>
+        <td style="background: #AEF1AE">
+          currentNr.==(0)
+        </td>
+      </tr><tr>
+        <td>
+          113
+        </td>
+        <td>
+          3698
+        </td>
+        <td>
+          3868
+          -
+          3868
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          113
+        </td>
+        <td>
+          3697
+        </td>
+        <td>
+          3868
+          -
+          3868
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          114
+        </td>
+        <td>
+          3695
+        </td>
+        <td>
+          3896
+          -
+          3973
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.execute
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.scheduler.execute({
+  final class $anon extends Object with Runnable {
+    def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def run(): Unit = SynchronousBufferedSubscriber.this.fastLoop(0)
+  };
+  new $anon()
+})
+        </td>
+      </tr><tr>
+        <td>
+          114
+        </td>
+        <td>
+          3694
+        </td>
+        <td>
+          3914
+          -
+          3917
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          114
+        </td>
+        <td>
+          3696
+        </td>
+        <td>
+          3896
+          -
+          3973
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.execute
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.scheduler.execute({
+  final class $anon extends Object with Runnable {
+    def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def run(): Unit = SynchronousBufferedSubscriber.this.fastLoop(0)
+  };
+  new $anon()
+})
+        </td>
+      </tr><tr>
+        <td>
+          115
+        </td>
+        <td>
+          3693
+        </td>
+        <td>
+          3951
+          -
+          3962
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.fastLoop
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.fastLoop(0)
+        </td>
+      </tr><tr>
+        <td>
+          120
+        </td>
+        <td>
+          3702
+        </td>
+        <td>
+          4064
+          -
+          4083
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.upstreamIsComplete.unary_!
+        </td>
+      </tr><tr>
+        <td>
+          120
+        </td>
+        <td>
+          3725
+        </td>
+        <td>
+          4033
+          -
+          4532
+        </td>
+        <td>
+          If
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          if (currentNr.&gt;=(SynchronousBufferedSubscriber.this.bufferSize).&amp;&amp;(SynchronousBufferedSubscriber.this.upstreamIsComplete.unary_!))
+  SynchronousBufferedSubscriber.this.observer.onError(new monifu.reactive.BufferOverflowException(scala.StringContext.apply(&quot;Downstream observer is too slow, buffer over capacity with a specified buffer size of &quot;, &quot; and&quot;).s(SynchronousBufferedSubscriber.this.bufferSize).+(scala.StringContext.apply(&quot; &quot;, &quot; events being left for push&quot;).s(currentNr))))
+else
+  if (SynchronousBufferedSubscriber.this.itemsToPush.compareAndSet(currentNr, currentNr.+(1)).unary_!)
+    SynchronousBufferedSubscriber.this.pushToConsumer()
+  else
+    if (currentNr.==(0))
+      SynchronousBufferedSubscriber.this.scheduler.execute({
+        final class $anon extends Object with Runnable {
+          def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+            $anon.super.&lt;init&gt;();
+            ()
+          };
+          def run(): Unit = SynchronousBufferedSubscriber.this.fastLoop(0)
+        };
+        new $anon()
+      })
+    else
+      ()
+        </td>
+      </tr><tr>
+        <td>
+          120
+        </td>
+        <td>
+          3701
+        </td>
+        <td>
+          4050
+          -
+          4060
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.bufferSize
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.bufferSize
+        </td>
+      </tr><tr>
+        <td>
+          120
+        </td>
+        <td>
+          3703
+        </td>
+        <td>
+          4037
+          -
+          4083
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Boolean.&amp;&amp;
+        </td>
+        <td style="background: #AEF1AE">
+          currentNr.&gt;=(SynchronousBufferedSubscriber.this.bufferSize).&amp;&amp;(SynchronousBufferedSubscriber.this.upstreamIsComplete.unary_!)
+        </td>
+      </tr><tr>
+        <td>
+          121
+        </td>
+        <td>
+          3710
+        </td>
+        <td>
+          4095
+          -
+          4313
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.observer.onError(new monifu.reactive.BufferOverflowException(scala.StringContext.apply(&quot;Downstream observer is too slow, buffer over capacity with a specified buffer size of &quot;, &quot; and&quot;).s(SynchronousBufferedSubscriber.this.bufferSize).+(scala.StringContext.apply(&quot; &quot;, &quot; events being left for push&quot;).s(currentNr))))
+        </td>
+      </tr><tr>
+        <td>
+          121
+        </td>
+        <td>
+          3709
+        </td>
+        <td>
+          4112
+          -
+          4312
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.BufferOverflowException.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new monifu.reactive.BufferOverflowException(scala.StringContext.apply(&quot;Downstream observer is too slow, buffer over capacity with a specified buffer size of &quot;, &quot; and&quot;).s(SynchronousBufferedSubscriber.this.bufferSize).+(scala.StringContext.apply(&quot; &quot;, &quot; events being left for push&quot;).s(currentNr)))
+        </td>
+      </tr><tr>
+        <td>
+          121
+        </td>
+        <td>
+          3711
+        </td>
+        <td>
+          4095
+          -
+          4313
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.observer.onError(new monifu.reactive.BufferOverflowException(scala.StringContext.apply(&quot;Downstream observer is too slow, buffer over capacity with a specified buffer size of &quot;, &quot; and&quot;).s(SynchronousBufferedSubscriber.this.bufferSize).+(scala.StringContext.apply(&quot; &quot;, &quot; events being left for push&quot;).s(currentNr))))
+        </td>
+      </tr><tr>
+        <td>
+          122
+        </td>
+        <td>
+          3708
+        </td>
+        <td>
+          4151
+          -
+          4311
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.String.+
+        </td>
+        <td style="background: #AEF1AE">
+          scala.StringContext.apply(&quot;Downstream observer is too slow, buffer over capacity with a specified buffer size of &quot;, &quot; and&quot;).s(SynchronousBufferedSubscriber.this.bufferSize).+(scala.StringContext.apply(&quot; &quot;, &quot; events being left for push&quot;).s(currentNr))
+        </td>
+      </tr><tr>
+        <td>
+          122
+        </td>
+        <td>
+          3704
+        </td>
+        <td>
+          4153
+          -
+          4240
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          &quot;Downstream observer is too slow, buffer over capacity with a specified buffer size of &quot;
+        </td>
+      </tr><tr>
+        <td>
+          122
+        </td>
+        <td>
+          3706
+        </td>
+        <td>
+          4240
+          -
+          4250
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.bufferSize
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.bufferSize
+        </td>
+      </tr><tr>
+        <td>
+          122
+        </td>
+        <td>
+          3705
+        </td>
+        <td>
+          4250
+          -
+          4255
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          &quot; and&quot;
+        </td>
+      </tr><tr>
+        <td>
+          123
+        </td>
+        <td>
+          3707
+        </td>
+        <td>
+          4270
+          -
+          4311
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.StringContext.s
+        </td>
+        <td style="background: #AEF1AE">
+          scala.StringContext.apply(&quot; &quot;, &quot; events being left for push&quot;).s(currentNr)
+        </td>
+      </tr><tr>
+        <td>
+          125
+        </td>
+        <td>
+          3713
+        </td>
+        <td>
+          4337
+          -
+          4389
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.itemsToPush.compareAndSet(currentNr, currentNr.+(1)).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          125
+        </td>
+        <td>
+          3724
+        </td>
+        <td>
+          4333
+          -
+          4532
+        </td>
+        <td>
+          If
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          if (SynchronousBufferedSubscriber.this.itemsToPush.compareAndSet(currentNr, currentNr.+(1)).unary_!)
+  SynchronousBufferedSubscriber.this.pushToConsumer()
+else
+  if (currentNr.==(0))
+    SynchronousBufferedSubscriber.this.scheduler.execute({
+      final class $anon extends Object with Runnable {
+        def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+          $anon.super.&lt;init&gt;();
+          ()
+        };
+        def run(): Unit = SynchronousBufferedSubscriber.this.fastLoop(0)
+      };
+      new $anon()
+    })
+  else
+    ()
+        </td>
+      </tr><tr>
+        <td>
+          125
+        </td>
+        <td>
+          3712
+        </td>
+        <td>
+          4375
+          -
+          4388
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.+
+        </td>
+        <td style="background: #AEF1AE">
+          currentNr.+(1)
+        </td>
+      </tr><tr>
+        <td>
+          126
+        </td>
+        <td>
+          3715
+        </td>
+        <td>
+          4399
+          -
+          4415
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.pushToConsumer
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.pushToConsumer()
+        </td>
+      </tr><tr>
+        <td>
+          126
+        </td>
+        <td>
+          3714
+        </td>
+        <td>
+          4399
+          -
+          4415
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.pushToConsumer
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.pushToConsumer()
+        </td>
+      </tr><tr>
+        <td>
+          127
+        </td>
+        <td>
+          3722
+        </td>
+        <td>
+          4427
+          -
+          4427
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          127
+        </td>
+        <td>
+          3716
+        </td>
+        <td>
+          4431
+          -
+          4445
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.==
+        </td>
+        <td style="background: #AEF1AE">
+          currentNr.==(0)
+        </td>
+      </tr><tr>
+        <td>
+          127
+        </td>
+        <td>
+          3721
+        </td>
+        <td>
+          4427
+          -
+          4427
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          127
+        </td>
+        <td>
+          3723
+        </td>
+        <td>
+          4427
+          -
+          4532
+        </td>
+        <td>
+          If
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          if (currentNr.==(0))
+  SynchronousBufferedSubscriber.this.scheduler.execute({
+    final class $anon extends Object with Runnable {
+      def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+        $anon.super.&lt;init&gt;();
+        ()
+      };
+      def run(): Unit = SynchronousBufferedSubscriber.this.fastLoop(0)
+    };
+    new $anon()
+  })
+else
+  ()
+        </td>
+      </tr><tr>
+        <td>
+          128
+        </td>
+        <td>
+          3719
+        </td>
+        <td>
+          4455
+          -
+          4532
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.execute
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.scheduler.execute({
+  final class $anon extends Object with Runnable {
+    def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def run(): Unit = SynchronousBufferedSubscriber.this.fastLoop(0)
+  };
+  new $anon()
+})
+        </td>
+      </tr><tr>
+        <td>
+          128
+        </td>
+        <td>
+          3718
+        </td>
+        <td>
+          4473
+          -
+          4476
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          128
+        </td>
+        <td>
+          3720
+        </td>
+        <td>
+          4455
+          -
+          4532
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.execute
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.scheduler.execute({
+  final class $anon extends Object with Runnable {
+    def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def run(): Unit = SynchronousBufferedSubscriber.this.fastLoop(0)
+  };
+  new $anon()
+})
+        </td>
+      </tr><tr>
+        <td>
+          129
+        </td>
+        <td>
+          3717
+        </td>
+        <td>
+          4510
+          -
+          4521
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.fastLoop
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.fastLoop(0)
+        </td>
+      </tr><tr>
+        <td>
+          135
+        </td>
+        <td>
+          3726
+        </td>
+        <td>
+          4606
+          -
+          4625
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.fastLoop
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.fastLoop(processed)
+        </td>
+      </tr><tr>
+        <td>
+          140
+        </td>
+        <td>
+          3788
+        </td>
+        <td>
+          4724
+          -
+          7219
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  val hasError: Boolean = SynchronousBufferedSubscriber.this.errorThrown.ne(null);
+  val next: T = SynchronousBufferedSubscriber.this.queue.poll();
+  if (next.!=(null))
+    SynchronousBufferedSubscriber.this.underlying.onNext(next) match {
+      case (sync @ _) if sync.isCompleted =&gt; sync match {
+        case (continue @ _) if continue.==(monifu.reactive.Ack.Continue).||(continue.value.get.==(monifu.reactive.Ack.Continue.IsSuccess)) =&gt; SynchronousBufferedSubscriber.this.fastLoop(processed.+(1))
+        case (done @ _) if done.==(monifu.reactive.Ack.Cancel).||(done.value.get.==(monifu.reactive.Ack.Cancel.IsSuccess)) =&gt; {
+          SynchronousBufferedSubscriber.this.downstreamIsDone = true;
+          SynchronousBufferedSubscriber.this.itemsToPush.set(0)
+        }
+        case (error @ _) if error.value.get.isFailure =&gt; {
+          SynchronousBufferedSubscriber.this.downstreamIsDone = true;
+          SynchronousBufferedSubscriber.this.itemsToPush.set(0);
+          SynchronousBufferedSubscriber.this.underlying.onError(error.value.get.failed.get)
+        }
+      }
+      case (async @ _) =&gt; async.onComplete[Unit](((x0$1: scala.util.Try[monifu.reactive.Ack]) =&gt; x0$1 match {
+        case monifu.reactive.Ack.Continue.IsSuccess =&gt; SynchronousBufferedSubscriber.this.rescheduled(processed.+(1))
+        case monifu.reactive.Ack.Cancel.IsSuccess =&gt; {
+          SynchronousBufferedSubscriber.this.downstreamIsDone = true;
+          SynchronousBufferedSubscriber.this.itemsToPush.set(0)
+        }
+        case (exception: Throwable)scala.util.Failure[monifu.reactive.Ack]((ex @ _)) =&gt; {
+          SynchronousBufferedSubscriber.this.downstreamIsDone = true;
+          SynchronousBufferedSubscriber.this.itemsToPush.set(0);
+          SynchronousBufferedSubscriber.this.underlying.onError(ex)
+        }
+        case (other @ _) =&gt; {
+          SynchronousBufferedSubscriber.this.downstreamIsDone = true;
+          SynchronousBufferedSubscriber.this.itemsToPush.set(0);
+          SynchronousBufferedSubscriber.this.underlying.onError(new scala.MatchError(scala.StringContext.apply(&quot;&quot;, &quot;&quot;).s(other)))
+        }
+      }))(SynchronousBufferedSubscriber.this.scheduler)
+    }
+  else
+    if (SynchronousBufferedSubscriber.this.upstreamIsComplete.||(hasError))
+      if (SynchronousBufferedSubscriber.this.queue.isEmpty.unary_!)
+        SynchronousBufferedSubscriber.this.fastLoop(processed)
+      else
+        {
+          SynchronousBufferedSubscriber.this.downstreamIsDone = true;
+          SynchronousBufferedSubscriber.this.itemsToPush.set(0);
+          SynchronousBufferedSubscriber.this.queue.clear();
+          if (SynchronousBufferedSubscriber.this.errorThrown.ne(null))
+            SynchronousBufferedSubscriber.this.underlying.onError(SynchronousBufferedSubscriber.this.errorThrown)
+          else
+            SynchronousBufferedSubscriber.this.underlying.onComplete()
+        }
+    else
+      {
+        val remaining: Int = SynchronousBufferedSubscriber.this.itemsToPush.decrementAndGet(processed);
+        if (remaining.&gt;(0))
+          SynchronousBufferedSubscriber.this.fastLoop(0)
+        else
+          ()
+      }
+}
+        </td>
+      </tr><tr>
+        <td>
+          140
+        </td>
+        <td>
+          3790
+        </td>
+        <td>
+          4701
+          -
+          4701
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          140
+        </td>
+        <td>
+          3727
+        </td>
+        <td>
+          4705
+          -
+          4722
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.downstreamIsDone.unary_!
+        </td>
+      </tr><tr>
+        <td>
+          140
+        </td>
+        <td>
+          3789
+        </td>
+        <td>
+          4701
+          -
+          4701
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          141
+        </td>
+        <td>
+          3728
+        </td>
+        <td>
+          4747
+          -
+          4766
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.ne
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.errorThrown.ne(null)
+        </td>
+      </tr><tr>
+        <td>
+          142
+        </td>
+        <td>
+          3729
+        </td>
+        <td>
+          4784
+          -
+          4796
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.collection.mutable.ConcurrentQueue.poll
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.queue.poll()
+        </td>
+      </tr><tr>
+        <td>
+          144
+        </td>
+        <td>
+          3730
+        </td>
+        <td>
+          4808
+          -
+          4820
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Any.!=
+        </td>
+        <td style="background: #AEF1AE">
+          next.!=(null)
+        </td>
+      </tr><tr>
+        <td>
+          145
+        </td>
+        <td>
+          3764
+        </td>
+        <td>
+          4832
+          -
+          6308
+        </td>
+        <td>
+          Match
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.underlying.onNext(next) match {
+  case (sync @ _) if sync.isCompleted =&gt; sync match {
+    case (continue @ _) if continue.==(monifu.reactive.Ack.Continue).||(continue.value.get.==(monifu.reactive.Ack.Continue.IsSuccess)) =&gt; SynchronousBufferedSubscriber.this.fastLoop(processed.+(1))
+    case (done @ _) if done.==(monifu.reactive.Ack.Cancel).||(done.value.get.==(monifu.reactive.Ack.Cancel.IsSuccess)) =&gt; {
+      SynchronousBufferedSubscriber.this.downstreamIsDone = true;
+      SynchronousBufferedSubscriber.this.itemsToPush.set(0)
+    }
+    case (error @ _) if error.value.get.isFailure =&gt; {
+      SynchronousBufferedSubscriber.this.downstreamIsDone = true;
+      SynchronousBufferedSubscriber.this.itemsToPush.set(0);
+      SynchronousBufferedSubscriber.this.underlying.onError(error.value.get.failed.get)
+    }
+  }
+  case (async @ _) =&gt; async.onComplete[Unit](((x0$1: scala.util.Try[monifu.reactive.Ack]) =&gt; x0$1 match {
+    case monifu.reactive.Ack.Continue.IsSuccess =&gt; SynchronousBufferedSubscriber.this.rescheduled(processed.+(1))
+    case monifu.reactive.Ack.Cancel.IsSuccess =&gt; {
+      SynchronousBufferedSubscriber.this.downstreamIsDone = true;
+      SynchronousBufferedSubscriber.this.itemsToPush.set(0)
+    }
+    case (exception: Throwable)scala.util.Failure[monifu.reactive.Ack]((ex @ _)) =&gt; {
+      SynchronousBufferedSubscriber.this.downstreamIsDone = true;
+      SynchronousBufferedSubscriber.this.itemsToPush.set(0);
+      SynchronousBufferedSubscriber.this.underlying.onError(ex)
+    }
+    case (other @ _) =&gt; {
+      SynchronousBufferedSubscriber.this.downstreamIsDone = true;
+      SynchronousBufferedSubscriber.this.itemsToPush.set(0);
+      SynchronousBufferedSubscriber.this.underlying.onError(new scala.MatchError(scala.StringContext.apply(&quot;&quot;, &quot;&quot;).s(other)))
+    }
+  }))(SynchronousBufferedSubscriber.this.scheduler)
+}
+        </td>
+      </tr><tr>
+        <td>
+          145
+        </td>
+        <td>
+          3731
+        </td>
+        <td>
+          4832
+          -
+          4855
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onNext
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.underlying.onNext(next)
+        </td>
+      </tr><tr>
+        <td>
+          146
+        </td>
+        <td>
+          3732
+        </td>
+        <td>
+          4887
+          -
+          4903
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.Future.isCompleted
+        </td>
+        <td style="background: #AEF1AE">
+          sync.isCompleted
+        </td>
+      </tr><tr>
+        <td>
+          148
+        </td>
+        <td>
+          3735
+        </td>
+        <td>
+          4987
+          -
+          5027
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.==
+        </td>
+        <td style="background: #AEF1AE">
+          continue.value.get.==(monifu.reactive.Ack.Continue.IsSuccess)
+        </td>
+      </tr><tr>
+        <td>
+          148
+        </td>
+        <td>
+          3734
+        </td>
+        <td>
+          5009
+          -
+          5027
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue.IsSuccess
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Continue.IsSuccess
+        </td>
+      </tr><tr>
+        <td>
+          148
+        </td>
+        <td>
+          3733
+        </td>
+        <td>
+          4975
+          -
+          4983
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Continue
+        </td>
+      </tr><tr>
+        <td>
+          148
+        </td>
+        <td>
+          3736
+        </td>
+        <td>
+          4963
+          -
+          5027
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Boolean.||
+        </td>
+        <td style="background: #AEF1AE">
+          continue.==(monifu.reactive.Ack.Continue).||(continue.value.get.==(monifu.reactive.Ack.Continue.IsSuccess))
+        </td>
+      </tr><tr>
+        <td>
+          150
+        </td>
+        <td>
+          3737
+        </td>
+        <td>
+          5088
+          -
+          5101
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.+
+        </td>
+        <td style="background: #AEF1AE">
+          processed.+(1)
+        </td>
+      </tr><tr>
+        <td>
+          150
+        </td>
+        <td>
+          3738
+        </td>
+        <td>
+          5079
+          -
+          5102
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.fastLoop
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.fastLoop(processed.+(1))
+        </td>
+      </tr><tr>
+        <td>
+          152
+        </td>
+        <td>
+          3740
+        </td>
+        <td>
+          5167
+          -
+          5183
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel.IsSuccess
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Ack.Cancel.IsSuccess
+        </td>
+      </tr><tr>
+        <td>
+          152
+        </td>
+        <td>
+          3742
+        </td>
+        <td>
+          5131
+          -
+          5183
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Boolean.||
+        </td>
+        <td style="background: #F0ADAD">
+          done.==(monifu.reactive.Ack.Cancel).||(done.value.get.==(monifu.reactive.Ack.Cancel.IsSuccess))
+        </td>
+      </tr><tr>
+        <td>
+          152
+        </td>
+        <td>
+          3739
+        </td>
+        <td>
+          5139
+          -
+          5145
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          152
+        </td>
+        <td>
+          3741
+        </td>
+        <td>
+          5149
+          -
+          5183
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.==
+        </td>
+        <td style="background: #F0ADAD">
+          done.value.get.==(monifu.reactive.Ack.Cancel.IsSuccess)
+        </td>
+      </tr><tr>
+        <td>
+          154
+        </td>
+        <td>
+          3743
+        </td>
+        <td>
+          5253
+          -
+          5257
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          155
+        </td>
+        <td>
+          3744
+        </td>
+        <td>
+          5274
+          -
+          5292
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicInt.set
+        </td>
+        <td style="background: #F0ADAD">
+          SynchronousBufferedSubscriber.this.itemsToPush.set(0)
+        </td>
+      </tr><tr>
+        <td>
+          157
+        </td>
+        <td>
+          3745
+        </td>
+        <td>
+          5322
+          -
+          5347
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.util.Try.isFailure
+        </td>
+        <td style="background: #F0ADAD">
+          error.value.get.isFailure
+        </td>
+      </tr><tr>
+        <td>
+          159
+        </td>
+        <td>
+          3746
+        </td>
+        <td>
+          5417
+          -
+          5421
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          160
+        </td>
+        <td>
+          3747
+        </td>
+        <td>
+          5438
+          -
+          5456
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicInt.set
+        </td>
+        <td style="background: #F0ADAD">
+          SynchronousBufferedSubscriber.this.itemsToPush.set(0)
+        </td>
+      </tr><tr>
+        <td>
+          161
+        </td>
+        <td>
+          3749
+        </td>
+        <td>
+          5473
+          -
+          5519
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #F0ADAD">
+          SynchronousBufferedSubscriber.this.underlying.onError(error.value.get.failed.get)
+        </td>
+      </tr><tr>
+        <td>
+          161
+        </td>
+        <td>
+          3748
+        </td>
+        <td>
+          5492
+          -
+          5518
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.util.Try.get
+        </td>
+        <td style="background: #F0ADAD">
+          error.value.get.failed.get
+        </td>
+      </tr><tr>
+        <td>
+          165
+        </td>
+        <td>
+          3762
+        </td>
+        <td>
+          5588
+          -
+          5588
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          165
+        </td>
+        <td>
+          3763
+        </td>
+        <td>
+          5571
+          -
+          6298
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.concurrent.Future.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          async.onComplete[Unit](((x0$1: scala.util.Try[monifu.reactive.Ack]) =&gt; x0$1 match {
+  case monifu.reactive.Ack.Continue.IsSuccess =&gt; SynchronousBufferedSubscriber.this.rescheduled(processed.+(1))
+  case monifu.reactive.Ack.Cancel.IsSuccess =&gt; {
+    SynchronousBufferedSubscriber.this.downstreamIsDone = true;
+    SynchronousBufferedSubscriber.this.itemsToPush.set(0)
+  }
+  case (exception: Throwable)scala.util.Failure[monifu.reactive.Ack]((ex @ _)) =&gt; {
+    SynchronousBufferedSubscriber.this.downstreamIsDone = true;
+    SynchronousBufferedSubscriber.this.itemsToPush.set(0);
+    SynchronousBufferedSubscriber.this.underlying.onError(ex)
+  }
+  case (other @ _) =&gt; {
+    SynchronousBufferedSubscriber.this.downstreamIsDone = true;
+    SynchronousBufferedSubscriber.this.itemsToPush.set(0);
+    SynchronousBufferedSubscriber.this.underlying.onError(new scala.MatchError(scala.StringContext.apply(&quot;&quot;, &quot;&quot;).s(other)))
+  }
+}))(SynchronousBufferedSubscriber.this.scheduler)
+        </td>
+      </tr><tr>
+        <td>
+          168
+        </td>
+        <td>
+          3751
+        </td>
+        <td>
+          5700
+          -
+          5726
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.rescheduled
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.rescheduled(processed.+(1))
+        </td>
+      </tr><tr>
+        <td>
+          168
+        </td>
+        <td>
+          3750
+        </td>
+        <td>
+          5712
+          -
+          5725
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.+
+        </td>
+        <td style="background: #AEF1AE">
+          processed.+(1)
+        </td>
+      </tr><tr>
+        <td>
+          172
+        </td>
+        <td>
+          3752
+        </td>
+        <td>
+          5833
+          -
+          5837
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          173
+        </td>
+        <td>
+          3753
+        </td>
+        <td>
+          5854
+          -
+          5872
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicInt.set
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.itemsToPush.set(0)
+        </td>
+      </tr><tr>
+        <td>
+          177
+        </td>
+        <td>
+          3754
+        </td>
+        <td>
+          5974
+          -
+          5978
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          178
+        </td>
+        <td>
+          3755
+        </td>
+        <td>
+          5995
+          -
+          6013
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicInt.set
+        </td>
+        <td style="background: #F0ADAD">
+          SynchronousBufferedSubscriber.this.itemsToPush.set(0)
+        </td>
+      </tr><tr>
+        <td>
+          179
+        </td>
+        <td>
+          3756
+        </td>
+        <td>
+          6030
+          -
+          6052
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #F0ADAD">
+          SynchronousBufferedSubscriber.this.underlying.onError(ex)
+        </td>
+      </tr><tr>
+        <td>
+          183
+        </td>
+        <td>
+          3757
+        </td>
+        <td>
+          6183
+          -
+          6187
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          184
+        </td>
+        <td>
+          3758
+        </td>
+        <td>
+          6204
+          -
+          6222
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicInt.set
+        </td>
+        <td style="background: #F0ADAD">
+          SynchronousBufferedSubscriber.this.itemsToPush.set(0)
+        </td>
+      </tr><tr>
+        <td>
+          185
+        </td>
+        <td>
+          3761
+        </td>
+        <td>
+          6239
+          -
+          6284
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #F0ADAD">
+          SynchronousBufferedSubscriber.this.underlying.onError(new scala.MatchError(scala.StringContext.apply(&quot;&quot;, &quot;&quot;).s(other)))
+        </td>
+      </tr><tr>
+        <td>
+          185
+        </td>
+        <td>
+          3760
+        </td>
+        <td>
+          6258
+          -
+          6283
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.MatchError.&lt;init&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          new scala.MatchError(scala.StringContext.apply(&quot;&quot;, &quot;&quot;).s(other))
+        </td>
+      </tr><tr>
+        <td>
+          185
+        </td>
+        <td>
+          3759
+        </td>
+        <td>
+          6273
+          -
+          6282
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.StringContext.s
+        </td>
+        <td style="background: #F0ADAD">
+          scala.StringContext.apply(&quot;&quot;, &quot;&quot;).s(other)
+        </td>
+      </tr><tr>
+        <td>
+          189
+        </td>
+        <td>
+          3787
+        </td>
+        <td>
+          6328
+          -
+          7213
+        </td>
+        <td>
+          If
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          if (SynchronousBufferedSubscriber.this.upstreamIsComplete.||(hasError))
+  if (SynchronousBufferedSubscriber.this.queue.isEmpty.unary_!)
+    SynchronousBufferedSubscriber.this.fastLoop(processed)
+  else
+    {
+      SynchronousBufferedSubscriber.this.downstreamIsDone = true;
+      SynchronousBufferedSubscriber.this.itemsToPush.set(0);
+      SynchronousBufferedSubscriber.this.queue.clear();
+      if (SynchronousBufferedSubscriber.this.errorThrown.ne(null))
+        SynchronousBufferedSubscriber.this.underlying.onError(SynchronousBufferedSubscriber.this.errorThrown)
+      else
+        SynchronousBufferedSubscriber.this.underlying.onComplete()
+    }
+else
+  {
+    val remaining: Int = SynchronousBufferedSubscriber.this.itemsToPush.decrementAndGet(processed);
+    if (remaining.&gt;(0))
+      SynchronousBufferedSubscriber.this.fastLoop(0)
+    else
+      ()
+  }
+        </td>
+      </tr><tr>
+        <td>
+          189
+        </td>
+        <td>
+          3765
+        </td>
+        <td>
+          6332
+          -
+          6362
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Boolean.||
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.upstreamIsComplete.||(hasError)
+        </td>
+      </tr><tr>
+        <td>
+          193
+        </td>
+        <td>
+          3779
+        </td>
+        <td>
+          6615
+          -
+          6962
+        </td>
+        <td>
+          If
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          if (SynchronousBufferedSubscriber.this.queue.isEmpty.unary_!)
+  SynchronousBufferedSubscriber.this.fastLoop(processed)
+else
+  {
+    SynchronousBufferedSubscriber.this.downstreamIsDone = true;
+    SynchronousBufferedSubscriber.this.itemsToPush.set(0);
+    SynchronousBufferedSubscriber.this.queue.clear();
+    if (SynchronousBufferedSubscriber.this.errorThrown.ne(null))
+      SynchronousBufferedSubscriber.this.underlying.onError(SynchronousBufferedSubscriber.this.errorThrown)
+    else
+      SynchronousBufferedSubscriber.this.underlying.onComplete()
+  }
+        </td>
+      </tr><tr>
+        <td>
+          193
+        </td>
+        <td>
+          3766
+        </td>
+        <td>
+          6619
+          -
+          6633
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.queue.isEmpty.unary_!
+        </td>
+      </tr><tr>
+        <td>
+          194
+        </td>
+        <td>
+          3767
+        </td>
+        <td>
+          6647
+          -
+          6666
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.fastLoop
+        </td>
+        <td style="background: #F0ADAD">
+          SynchronousBufferedSubscriber.this.fastLoop(processed)
+        </td>
+      </tr><tr>
+        <td>
+          194
+        </td>
+        <td>
+          3768
+        </td>
+        <td>
+          6647
+          -
+          6666
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.fastLoop
+        </td>
+        <td style="background: #F0ADAD">
+          SynchronousBufferedSubscriber.this.fastLoop(processed)
+        </td>
+      </tr><tr>
+        <td>
+          196
+        </td>
+        <td>
+          3778
+        </td>
+        <td>
+          6690
+          -
+          6962
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  SynchronousBufferedSubscriber.this.downstreamIsDone = true;
+  SynchronousBufferedSubscriber.this.itemsToPush.set(0);
+  SynchronousBufferedSubscriber.this.queue.clear();
+  if (SynchronousBufferedSubscriber.this.errorThrown.ne(null))
+    SynchronousBufferedSubscriber.this.underlying.onError(SynchronousBufferedSubscriber.this.errorThrown)
+  else
+    SynchronousBufferedSubscriber.this.underlying.onComplete()
+}
+        </td>
+      </tr><tr>
+        <td>
+          198
+        </td>
+        <td>
+          3769
+        </td>
+        <td>
+          6746
+          -
+          6750
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          199
+        </td>
+        <td>
+          3770
+        </td>
+        <td>
+          6761
+          -
+          6779
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicInt.set
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.itemsToPush.set(0)
+        </td>
+      </tr><tr>
+        <td>
+          200
+        </td>
+        <td>
+          3771
+        </td>
+        <td>
+          6790
+          -
+          6803
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.collection.mutable.ConcurrentQueue.clear
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.queue.clear()
+        </td>
+      </tr><tr>
+        <td>
+          201
+        </td>
+        <td>
+          3772
+        </td>
+        <td>
+          6837
+          -
+          6856
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.ne
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.errorThrown.ne(null)
+        </td>
+      </tr><tr>
+        <td>
+          202
+        </td>
+        <td>
+          3773
+        </td>
+        <td>
+          6889
+          -
+          6900
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.errorThrown
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.errorThrown
+        </td>
+      </tr><tr>
+        <td>
+          202
+        </td>
+        <td>
+          3775
+        </td>
+        <td>
+          6870
+          -
+          6901
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.underlying.onError(SynchronousBufferedSubscriber.this.errorThrown)
+        </td>
+      </tr><tr>
+        <td>
+          202
+        </td>
+        <td>
+          3774
+        </td>
+        <td>
+          6870
+          -
+          6901
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.underlying.onError(SynchronousBufferedSubscriber.this.errorThrown)
+        </td>
+      </tr><tr>
+        <td>
+          204
+        </td>
+        <td>
+          3776
+        </td>
+        <td>
+          6929
+          -
+          6952
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.underlying.onComplete()
+        </td>
+      </tr><tr>
+        <td>
+          204
+        </td>
+        <td>
+          3777
+        </td>
+        <td>
+          6929
+          -
+          6952
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Observer.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.underlying.onComplete()
+        </td>
+      </tr><tr>
+        <td>
+          207
+        </td>
+        <td>
+          3786
+        </td>
+        <td>
+          6982
+          -
+          7213
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  val remaining: Int = SynchronousBufferedSubscriber.this.itemsToPush.decrementAndGet(processed);
+  if (remaining.&gt;(0))
+    SynchronousBufferedSubscriber.this.fastLoop(0)
+  else
+    ()
+}
+        </td>
+      </tr><tr>
+        <td>
+          208
+        </td>
+        <td>
+          3780
+        </td>
+        <td>
+          7008
+          -
+          7046
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicInt.decrementAndGet
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.itemsToPush.decrementAndGet(processed)
+        </td>
+      </tr><tr>
+        <td>
+          211
+        </td>
+        <td>
+          3785
+        </td>
+        <td>
+          7175
+          -
+          7175
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          211
+        </td>
+        <td>
+          3782
+        </td>
+        <td>
+          7194
+          -
+          7205
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.fastLoop
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.fastLoop(0)
+        </td>
+      </tr><tr>
+        <td>
+          211
+        </td>
+        <td>
+          3784
+        </td>
+        <td>
+          7175
+          -
+          7175
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          211
+        </td>
+        <td>
+          3781
+        </td>
+        <td>
+          7179
+          -
+          7192
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          remaining.&gt;(0)
+        </td>
+      </tr><tr>
+        <td>
+          211
+        </td>
+        <td>
+          3783
+        </td>
+        <td>
+          7194
+          -
+          7205
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.fastLoop
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousBufferedSubscriber.this.fastLoop(0)
+        </td>
+      </tr><tr>
+        <td>
+          219
+        </td>
+        <td>
+          3791
+        </td>
+        <td>
+          7371
+          -
+          7417
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new monifu.reactive.observers.SynchronousBufferedSubscriber[T](observer, observers.this.SynchronousBufferedSubscriber.&lt;init&gt;$default$2[T])(s)
+        </td>
+      </tr><tr>
+        <td>
+          222
+        </td>
+        <td>
+          3792
+        </td>
+        <td>
+          7550
+          -
+          7608
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new monifu.reactive.observers.SynchronousBufferedSubscriber[T](observer, bufferSize)(s)
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

@@ -1,0 +1,1198 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          monifu/concurrent/schedulers/SchedulerCompanion.scala.html
+        </title>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''>
+</span>17 <span style=''>package monifu.concurrent.schedulers
+</span>18 <span style=''>
+</span>19 <span style=''>import java.lang.Thread.UncaughtExceptionHandler
+</span>20 <span style=''>import java.util.concurrent.{Executors, ScheduledExecutorService, ThreadFactory}
+</span>21 <span style=''>import monifu.concurrent.atomic.Atomic
+</span>22 <span style=''>import monifu.concurrent.{Scheduler, UncaughtExceptionReporter}
+</span>23 <span style=''>import monifu.concurrent.UncaughtExceptionReporter._
+</span>24 <span style=''>import scala.concurrent.ExecutionContext
+</span>25 <span style=''>import scala.concurrent.forkjoin.ForkJoinPool
+</span>26 <span style=''>
+</span>27 <span style=''>
+</span>28 <span style=''>private[concurrent] abstract class SchedulerCompanion {
+</span>29 <span style=''>  /**
+</span>30 <span style=''>   * [[Scheduler]] builder.
+</span>31 <span style=''>   *
+</span>32 <span style=''>   * @param executor is the `ScheduledExecutorService` that handles the scheduling
+</span>33 <span style=''>   *                 of tasks into the future.
+</span>34 <span style=''>   *
+</span>35 <span style=''>   * @param ec is the execution context in which all tasks will run.
+</span>36 <span style=''>   * @param r is the [[UncaughtExceptionReporter]] that logs uncaught exceptions.
+</span>37 <span style=''>   */
+</span>38 <span style=''>  def apply(executor: ScheduledExecutorService, ec: ExecutionContext, r: UncaughtExceptionReporter): Scheduler = {
+</span>39 <span style=''>    </span><span style='background: #F0ADAD'>AsyncScheduler(executor, ec, r)</span><span style=''>
+</span>40 <span style=''>  }
+</span>41 <span style=''>
+</span>42 <span style=''>  /**
+</span>43 <span style=''>   * [[Scheduler]] builder.
+</span>44 <span style=''>   *
+</span>45 <span style=''>   * @param executor is the `ScheduledExecutorService` that handles the scheduling
+</span>46 <span style=''>   *                 of tasks into the future.
+</span>47 <span style=''>   *
+</span>48 <span style=''>   * @param ec is the execution context in which all tasks will run.
+</span>49 <span style=''>   */
+</span>50 <span style=''>  def apply(executor: ScheduledExecutorService, ec: ExecutionContext): Scheduler = {
+</span>51 <span style=''>    </span><span style='background: #F0ADAD'>AsyncScheduler(executor, ec, UncaughtExceptionReporter(ec.reportFailure))</span><span style=''>
+</span>52 <span style=''>  }
+</span>53 <span style=''>
+</span>54 <span style=''>  /**
+</span>55 <span style=''>   * [[Scheduler]] builder - uses Monifu's default `ScheduledExecutorService` for
+</span>56 <span style=''>   * handling the scheduling of tasks.
+</span>57 <span style=''>   *
+</span>58 <span style=''>   * @param ec is the execution context in which all tasks will run.
+</span>59 <span style=''>   * @param r is the [[UncaughtExceptionReporter]] that logs uncaught exceptions.
+</span>60 <span style=''>   */
+</span>61 <span style=''>  def apply(ec: ExecutionContext, r: UncaughtExceptionReporter): Scheduler =
+</span>62 <span style=''>    </span><span style='background: #F0ADAD'>AsyncScheduler(defaultScheduledExecutor, ec, r)</span><span style=''>
+</span>63 <span style=''>
+</span>64 <span style=''>  /**
+</span>65 <span style=''>   * [[Scheduler]] builder - uses Monifu's default `ScheduledExecutorService` for
+</span>66 <span style=''>   * handling the scheduling of tasks.
+</span>67 <span style=''>   *
+</span>68 <span style=''>   * @param ec is the execution context in which all tasks will run.
+</span>69 <span style=''>   */
+</span>70 <span style=''>  def apply(ec: ExecutionContext): Scheduler =
+</span>71 <span style=''>    </span><span style='background: #F0ADAD'>AsyncScheduler(
+</span>72 <span style=''></span><span style='background: #F0ADAD'>      defaultScheduledExecutor, ec,
+</span>73 <span style=''></span><span style='background: #F0ADAD'>      UncaughtExceptionReporter(ec.reportFailure)
+</span>74 <span style=''></span><span style='background: #F0ADAD'>    )</span><span style=''>
+</span>75 <span style=''>
+</span>76 <span style=''>
+</span>77 <span style=''>  /**
+</span>78 <span style=''>   * Creates a [[Scheduler]] meant for computational heavy tasks.
+</span>79 <span style=''>   *
+</span>80 <span style=''>   * Characteristics:
+</span>81 <span style=''>   *
+</span>82 <span style=''>   * - backed by Scala's `ForkJoinPool` for the task execution, in async mode
+</span>83 <span style=''>   * - uses Monifu's default `ScheduledExecutorService` instance for scheduling
+</span>84 <span style=''>   * - all created threads are daemonic
+</span>85 <span style=''>   * - cooperates with Scala's `BlockContext`
+</span>86 <span style=''>   *
+</span>87 <span style=''>   * @param parallelism is the number of threads that can run in parallel
+</span>88 <span style=''>   * @param r is the [[UncaughtExceptionReporter]] that logs uncaught exceptions.
+</span>89 <span style=''>   */
+</span>90 <span style=''>  def computation(parallelism: Int, r: UncaughtExceptionReporter = LogExceptionsToStandardErr): Scheduler = {
+</span>91 <span style=''>    val exceptionHandler = </span><span style='background: #F0ADAD'>new</span><span style=''> UncaughtExceptionHandler {
+</span>92 <span style=''>      def uncaughtException(t: Thread, e: Throwable) =
+</span>93 <span style=''>        </span><span style='background: #F0ADAD'>r.reportFailure(e)</span><span style=''>
+</span>94 <span style=''>    }
+</span>95 <span style=''>
+</span>96 <span style=''>    val pool = </span><span style='background: #F0ADAD'>new scala.concurrent.forkjoin.ForkJoinPool(
+</span>97 <span style=''></span><span style='background: #F0ADAD'>      parallelism,
+</span>98 <span style=''></span><span style='background: #F0ADAD'>      ForkJoinPool.defaultForkJoinWorkerThreadFactory,
+</span>99 <span style=''></span><span style='background: #F0ADAD'>      exceptionHandler,
+</span>100 <span style=''></span><span style='background: #F0ADAD'>      true // asyncMode
+</span>101 <span style=''></span><span style='background: #F0ADAD'>    )</span><span style=''>
+</span>102 <span style=''>
+</span>103 <span style=''>    val context = </span><span style='background: #F0ADAD'>ExecutionContext.fromExecutor(pool, r.reportFailure)</span><span style=''>
+</span>104 <span style=''>    </span><span style='background: #F0ADAD'>AsyncScheduler(defaultScheduledExecutor, context, r)</span><span style=''>
+</span>105 <span style=''>  }
+</span>106 <span style=''>
+</span>107 <span style=''>  /**
+</span>108 <span style=''>   * Creates a [[Scheduler]] meant for blocking I/O tasks.
+</span>109 <span style=''>   *
+</span>110 <span style=''>   * Characteristics:
+</span>111 <span style=''>   *
+</span>112 <span style=''>   * - backed by a cached `ThreadPool` executor with 60 seconds of keep-alive
+</span>113 <span style=''>   * - the maximum number of threads is unbounded, as recommended for blocking I/O
+</span>114 <span style=''>   * - uses Monifu's default `ScheduledExecutorService` instance for scheduling
+</span>115 <span style=''>   * - doesn't cooperate with Scala's `BlockContext` only because it is unbounded
+</span>116 <span style=''>   *
+</span>117 <span style=''>   * @param name the created threads name prefix, for easy identification.
+</span>118 <span style=''>   *
+</span>119 <span style=''>   * @param daemonic specifies whether the created threads should be daemonic
+</span>120 <span style=''>   *                 (non-daemonic threads are blocking the JVM process on exit).
+</span>121 <span style=''>   *
+</span>122 <span style=''>   * @param r is the [[UncaughtExceptionReporter]] that logs uncaught exceptions.
+</span>123 <span style=''>   */
+</span>124 <span style=''>  def io(name: String = "monifu-io", daemonic: Boolean = true,
+</span>125 <span style=''>    r: UncaughtExceptionReporter = LogExceptionsToStandardErr): Scheduler = {
+</span>126 <span style=''>    val threadFactory = </span><span style='background: #F0ADAD'>new</span><span style=''> ThreadFactory {
+</span>127 <span style=''>      private[this] val counter = </span><span style='background: #F0ADAD'>Atomic(0L)</span><span style=''>
+</span>128 <span style=''>      def newThread(r: Runnable): Thread = {
+</span>129 <span style=''>        val th = </span><span style='background: #F0ADAD'>new Thread(r)</span><span style=''>
+</span>130 <span style=''>        </span><span style='background: #F0ADAD'>th.setDaemon(daemonic)</span><span style=''>
+</span>131 <span style=''>        </span><span style='background: #F0ADAD'>th.setName(name + "-" + counter.getAndIncrement().toString)</span><span style=''>
+</span>132 <span style=''>        th
+</span>133 <span style=''>      }
+</span>134 <span style=''>    }
+</span>135 <span style=''>
+</span>136 <span style=''>    val context = </span><span style='background: #F0ADAD'>ExecutionContext.fromExecutor(
+</span>137 <span style=''></span><span style='background: #F0ADAD'>      Executors.newCachedThreadPool(threadFactory),
+</span>138 <span style=''></span><span style='background: #F0ADAD'>      r.reportFailure
+</span>139 <span style=''></span><span style='background: #F0ADAD'>    )</span><span style=''>
+</span>140 <span style=''>
+</span>141 <span style=''>    </span><span style='background: #F0ADAD'>AsyncScheduler(defaultScheduledExecutor, context, r)</span><span style=''>
+</span>142 <span style=''>  }
+</span>143 <span style=''>
+</span>144 <span style=''>  /**
+</span>145 <span style=''>   * Builds a [[Scheduler]] that schedules and executes tasks on its own thread.
+</span>146 <span style=''>   *
+</span>147 <span style=''>   * Characteristics:
+</span>148 <span style=''>   *
+</span>149 <span style=''>   * - backed by a single-threaded `ScheduledExecutorService` that takes care
+</span>150 <span style=''>   *   of both scheduling tasks in the future and of executing tasks
+</span>151 <span style=''>   * - does not cooperate with Scala's `BlockingContext`, so tasks should not
+</span>152 <span style=''>   *   block on the result of other tasks scheduled to run on this same thread
+</span>153 <span style=''>   *
+</span>154 <span style=''>   * @param name is the name of the created thread, for easy identification
+</span>155 <span style=''>   *
+</span>156 <span style=''>   * @param daemonic specifies whether the created thread should be daemonic
+</span>157 <span style=''>   *                 (non-daemonic threads are blocking the JVM process on exit)
+</span>158 <span style=''>   *
+</span>159 <span style=''>   * @param r is the [[UncaughtExceptionReporter]] that logs uncaught exceptions.
+</span>160 <span style=''>   */
+</span>161 <span style=''>  def singleThread(name: String, daemonic: Boolean = true,
+</span>162 <span style=''>    r: UncaughtExceptionReporter = LogExceptionsToStandardErr): Scheduler = {
+</span>163 <span style=''>    val executor =
+</span>164 <span style=''>      </span><span style='background: #F0ADAD'>Executors.newSingleThreadScheduledExecutor(new ThreadFactory {
+</span>165 <span style=''></span><span style='background: #F0ADAD'>        def newThread(r: Runnable) = {
+</span>166 <span style=''></span><span style='background: #F0ADAD'>          val th = new Thread(r)
+</span>167 <span style=''></span><span style='background: #F0ADAD'>          th.setName(name)
+</span>168 <span style=''></span><span style='background: #F0ADAD'>          th.setDaemon(daemonic)
+</span>169 <span style=''></span><span style='background: #F0ADAD'>          th
+</span>170 <span style=''></span><span style='background: #F0ADAD'>        }
+</span>171 <span style=''></span><span style='background: #F0ADAD'>      })</span><span style=''>
+</span>172 <span style=''>
+</span>173 <span style=''>    val context = </span><span style='background: #F0ADAD'>new</span><span style=''> ExecutionContext {
+</span>174 <span style=''>      def reportFailure(t: Throwable) = </span><span style='background: #F0ADAD'>r.reportFailure(t)</span><span style=''>
+</span>175 <span style=''>      def execute(runnable: Runnable) = </span><span style='background: #F0ADAD'>executor.execute(runnable)</span><span style=''>
+</span>176 <span style=''>    }
+</span>177 <span style=''>
+</span>178 <span style=''>    </span><span style='background: #F0ADAD'>AsyncScheduler(executor, context, r)</span><span style=''>
+</span>179 <span style=''>  }
+</span>180 <span style=''>
+</span>181 <span style=''>  /**
+</span>182 <span style=''>   * The default `ScheduledExecutor` instance.
+</span>183 <span style=''>   */
+</span>184 <span style=''>  private[concurrent] lazy val defaultScheduledExecutor =
+</span>185 <span style=''>    </span><span style='background: #AEF1AE'>Executors.newSingleThreadScheduledExecutor(new ThreadFactory {
+</span>186 <span style=''></span><span style='background: #AEF1AE'>      def newThread(r: Runnable): Thread = {
+</span>187 <span style=''></span><span style='background: #AEF1AE'>        val th = new Thread(r)
+</span>188 <span style=''></span><span style='background: #AEF1AE'>        th.setDaemon(true)
+</span>189 <span style=''></span><span style='background: #AEF1AE'>        th.setName("monifu-scheduler")
+</span>190 <span style=''></span><span style='background: #AEF1AE'>        th
+</span>191 <span style=''></span><span style='background: #AEF1AE'>      }
+</span>192 <span style=''></span><span style='background: #AEF1AE'>    })</span><span style=''>
+</span>193 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          39
+        </td>
+        <td>
+          1939
+        </td>
+        <td>
+          1530
+          -
+          1561
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.AsyncScheduler.apply
+        </td>
+        <td style="background: #F0ADAD">
+          AsyncScheduler.apply(executor, ec, r)
+        </td>
+      </tr><tr>
+        <td>
+          51
+        </td>
+        <td>
+          1940
+        </td>
+        <td>
+          1960
+          -
+          1976
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.ExecutionContext.reportFailure
+        </td>
+        <td style="background: #F0ADAD">
+          ec.reportFailure(cause)
+        </td>
+      </tr><tr>
+        <td>
+          51
+        </td>
+        <td>
+          1942
+        </td>
+        <td>
+          1905
+          -
+          1978
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.AsyncScheduler.apply
+        </td>
+        <td style="background: #F0ADAD">
+          AsyncScheduler.apply(executor, ec, monifu.concurrent.UncaughtExceptionReporter.apply({
+  ((cause: Throwable) =&gt; ec.reportFailure(cause))
+}))
+        </td>
+      </tr><tr>
+        <td>
+          51
+        </td>
+        <td>
+          1941
+        </td>
+        <td>
+          1934
+          -
+          1977
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.UncaughtExceptionReporter.apply
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.concurrent.UncaughtExceptionReporter.apply({
+  ((cause: Throwable) =&gt; ec.reportFailure(cause))
+})
+        </td>
+      </tr><tr>
+        <td>
+          62
+        </td>
+        <td>
+          1943
+        </td>
+        <td>
+          2354
+          -
+          2401
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.AsyncScheduler.apply
+        </td>
+        <td style="background: #F0ADAD">
+          AsyncScheduler.apply(SchedulerCompanion.this.defaultScheduledExecutor, ec, r)
+        </td>
+      </tr><tr>
+        <td>
+          71
+        </td>
+        <td>
+          1946
+        </td>
+        <td>
+          2661
+          -
+          2768
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.AsyncScheduler.apply
+        </td>
+        <td style="background: #F0ADAD">
+          AsyncScheduler.apply(SchedulerCompanion.this.defaultScheduledExecutor, ec, monifu.concurrent.UncaughtExceptionReporter.apply({
+  ((cause: Throwable) =&gt; ec.reportFailure(cause))
+}))
+        </td>
+      </tr><tr>
+        <td>
+          73
+        </td>
+        <td>
+          1945
+        </td>
+        <td>
+          2719
+          -
+          2762
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.UncaughtExceptionReporter.apply
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.concurrent.UncaughtExceptionReporter.apply({
+  ((cause: Throwable) =&gt; ec.reportFailure(cause))
+})
+        </td>
+      </tr><tr>
+        <td>
+          73
+        </td>
+        <td>
+          1944
+        </td>
+        <td>
+          2745
+          -
+          2761
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.ExecutionContext.reportFailure
+        </td>
+        <td style="background: #F0ADAD">
+          ec.reportFailure(cause)
+        </td>
+      </tr><tr>
+        <td>
+          91
+        </td>
+        <td>
+          1948
+        </td>
+        <td>
+          3423
+          -
+          3426
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.SchedulerCompanion.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          93
+        </td>
+        <td>
+          1947
+        </td>
+        <td>
+          3517
+          -
+          3535
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.UncaughtExceptionReporter.reportFailure
+        </td>
+        <td style="background: #F0ADAD">
+          r.reportFailure(e)
+        </td>
+      </tr><tr>
+        <td>
+          96
+        </td>
+        <td>
+          1951
+        </td>
+        <td>
+          3558
+          -
+          3729
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.forkjoin.ForkJoinPool.&lt;init&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          new scala.concurrent.forkjoin.ForkJoinPool(parallelism, scala.concurrent.forkjoin.ForkJoinPool.defaultForkJoinWorkerThreadFactory, exceptionHandler, true)
+        </td>
+      </tr><tr>
+        <td>
+          98
+        </td>
+        <td>
+          1949
+        </td>
+        <td>
+          3627
+          -
+          3674
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.forkjoin.ForkJoinPool.defaultForkJoinWorkerThreadFactory
+        </td>
+        <td style="background: #F0ADAD">
+          scala.concurrent.forkjoin.ForkJoinPool.defaultForkJoinWorkerThreadFactory
+        </td>
+      </tr><tr>
+        <td>
+          100
+        </td>
+        <td>
+          1950
+        </td>
+        <td>
+          3706
+          -
+          3710
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          103
+        </td>
+        <td>
+          1952
+        </td>
+        <td>
+          3785
+          -
+          3800
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.UncaughtExceptionReporter.reportFailure
+        </td>
+        <td style="background: #F0ADAD">
+          r.reportFailure(ex)
+        </td>
+      </tr><tr>
+        <td>
+          103
+        </td>
+        <td>
+          1953
+        </td>
+        <td>
+          3749
+          -
+          3801
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.ExecutionContext.fromExecutor
+        </td>
+        <td style="background: #F0ADAD">
+          scala.concurrent.ExecutionContext.fromExecutor(pool, {
+  ((ex: Throwable) =&gt; r.reportFailure(ex))
+})
+        </td>
+      </tr><tr>
+        <td>
+          104
+        </td>
+        <td>
+          1954
+        </td>
+        <td>
+          3806
+          -
+          3858
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.AsyncScheduler.apply
+        </td>
+        <td style="background: #F0ADAD">
+          AsyncScheduler.apply(SchedulerCompanion.this.defaultScheduledExecutor, context, r)
+        </td>
+      </tr><tr>
+        <td>
+          126
+        </td>
+        <td>
+          1964
+        </td>
+        <td>
+          4787
+          -
+          4790
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.SchedulerCompanion.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          127
+        </td>
+        <td>
+          1955
+        </td>
+        <td>
+          4848
+          -
+          4850
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          0L
+        </td>
+      </tr><tr>
+        <td>
+          127
+        </td>
+        <td>
+          1957
+        </td>
+        <td>
+          4841
+          -
+          4851
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.concurrent.atomic.Atomic.apply
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.concurrent.atomic.Atomic.apply[Long, monifu.concurrent.atomic.AtomicLong](0L)(atomic.this.AtomicBuilder.AtomicLongBuilder)
+        </td>
+      </tr><tr>
+        <td>
+          127
+        </td>
+        <td>
+          1956
+        </td>
+        <td>
+          4847
+          -
+          4847
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.Implicits.Level3.AtomicLongBuilder
+        </td>
+        <td style="background: #F0ADAD">
+          atomic.this.AtomicBuilder.AtomicLongBuilder
+        </td>
+      </tr><tr>
+        <td>
+          129
+        </td>
+        <td>
+          1958
+        </td>
+        <td>
+          4914
+          -
+          4927
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Thread.&lt;init&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          new java.this.lang.Thread(r)
+        </td>
+      </tr><tr>
+        <td>
+          130
+        </td>
+        <td>
+          1959
+        </td>
+        <td>
+          4936
+          -
+          4958
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Thread.setDaemon
+        </td>
+        <td style="background: #F0ADAD">
+          th.setDaemon(daemonic)
+        </td>
+      </tr><tr>
+        <td>
+          131
+        </td>
+        <td>
+          1961
+        </td>
+        <td>
+          4991
+          -
+          5025
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Any.toString
+        </td>
+        <td style="background: #F0ADAD">
+          $anon.this.counter.getAndIncrement($anon.this.counter.getAndIncrement$default$1).toString()
+        </td>
+      </tr><tr>
+        <td>
+          131
+        </td>
+        <td>
+          1960
+        </td>
+        <td>
+          4985
+          -
+          4988
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          &quot;-&quot;
+        </td>
+      </tr><tr>
+        <td>
+          131
+        </td>
+        <td>
+          1963
+        </td>
+        <td>
+          4967
+          -
+          5026
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Thread.setName
+        </td>
+        <td style="background: #F0ADAD">
+          th.setName(name.+(&quot;-&quot;).+($anon.this.counter.getAndIncrement($anon.this.counter.getAndIncrement$default$1).toString()))
+        </td>
+      </tr><tr>
+        <td>
+          131
+        </td>
+        <td>
+          1962
+        </td>
+        <td>
+          4978
+          -
+          5025
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.String.+
+        </td>
+        <td style="background: #F0ADAD">
+          name.+(&quot;-&quot;).+($anon.this.counter.getAndIncrement($anon.this.counter.getAndIncrement$default$1).toString())
+        </td>
+      </tr><tr>
+        <td>
+          136
+        </td>
+        <td>
+          1967
+        </td>
+        <td>
+          5071
+          -
+          5181
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.ExecutionContext.fromExecutor
+        </td>
+        <td style="background: #F0ADAD">
+          scala.concurrent.ExecutionContext.fromExecutor(java.util.concurrent.Executors.newCachedThreadPool(threadFactory), {
+  ((ex: Throwable) =&gt; r.reportFailure(ex))
+})
+        </td>
+      </tr><tr>
+        <td>
+          137
+        </td>
+        <td>
+          1965
+        </td>
+        <td>
+          5108
+          -
+          5152
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.util.concurrent.Executors.newCachedThreadPool
+        </td>
+        <td style="background: #F0ADAD">
+          java.util.concurrent.Executors.newCachedThreadPool(threadFactory)
+        </td>
+      </tr><tr>
+        <td>
+          138
+        </td>
+        <td>
+          1966
+        </td>
+        <td>
+          5160
+          -
+          5175
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.UncaughtExceptionReporter.reportFailure
+        </td>
+        <td style="background: #F0ADAD">
+          r.reportFailure(ex)
+        </td>
+      </tr><tr>
+        <td>
+          141
+        </td>
+        <td>
+          1968
+        </td>
+        <td>
+          5187
+          -
+          5239
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.AsyncScheduler.apply
+        </td>
+        <td style="background: #F0ADAD">
+          AsyncScheduler.apply(SchedulerCompanion.this.defaultScheduledExecutor, context, r)
+        </td>
+      </tr><tr>
+        <td>
+          164
+        </td>
+        <td>
+          1973
+        </td>
+        <td>
+          6167
+          -
+          6393
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.util.concurrent.Executors.newSingleThreadScheduledExecutor
+        </td>
+        <td style="background: #F0ADAD">
+          java.util.concurrent.Executors.newSingleThreadScheduledExecutor({
+  final class $anon extends Object with java.util.concurrent.ThreadFactory {
+    def &lt;init&gt;(): &lt;$anon: java.util.concurrent.ThreadFactory&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def newThread(r: Runnable): Thread = {
+      val th: Thread = new java.this.lang.Thread(r);
+      th.setName(name);
+      th.setDaemon(daemonic);
+      th
+    }
+  };
+  new $anon()
+})
+        </td>
+      </tr><tr>
+        <td>
+          164
+        </td>
+        <td>
+          1972
+        </td>
+        <td>
+          6210
+          -
+          6213
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.SchedulerCompanion.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          166
+        </td>
+        <td>
+          1969
+        </td>
+        <td>
+          6288
+          -
+          6301
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Thread.&lt;init&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          new java.this.lang.Thread(r)
+        </td>
+      </tr><tr>
+        <td>
+          167
+        </td>
+        <td>
+          1970
+        </td>
+        <td>
+          6312
+          -
+          6328
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Thread.setName
+        </td>
+        <td style="background: #F0ADAD">
+          th.setName(name)
+        </td>
+      </tr><tr>
+        <td>
+          168
+        </td>
+        <td>
+          1971
+        </td>
+        <td>
+          6339
+          -
+          6361
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Thread.setDaemon
+        </td>
+        <td style="background: #F0ADAD">
+          th.setDaemon(daemonic)
+        </td>
+      </tr><tr>
+        <td>
+          173
+        </td>
+        <td>
+          1976
+        </td>
+        <td>
+          6413
+          -
+          6416
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.SchedulerCompanion.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          174
+        </td>
+        <td>
+          1974
+        </td>
+        <td>
+          6476
+          -
+          6494
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.UncaughtExceptionReporter.reportFailure
+        </td>
+        <td style="background: #F0ADAD">
+          r.reportFailure(t)
+        </td>
+      </tr><tr>
+        <td>
+          175
+        </td>
+        <td>
+          1975
+        </td>
+        <td>
+          6535
+          -
+          6561
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.util.concurrent.Executor.execute
+        </td>
+        <td style="background: #F0ADAD">
+          executor.execute(runnable)
+        </td>
+      </tr><tr>
+        <td>
+          178
+        </td>
+        <td>
+          1977
+        </td>
+        <td>
+          6573
+          -
+          6609
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.AsyncScheduler.apply
+        </td>
+        <td style="background: #F0ADAD">
+          AsyncScheduler.apply(executor, context, r)
+        </td>
+      </tr><tr>
+        <td>
+          185
+        </td>
+        <td>
+          1982
+        </td>
+        <td>
+          6736
+          -
+          6966
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.util.concurrent.Executors.newSingleThreadScheduledExecutor
+        </td>
+        <td style="background: #AEF1AE">
+          java.util.concurrent.Executors.newSingleThreadScheduledExecutor({
+  final class $anon extends Object with java.util.concurrent.ThreadFactory {
+    def &lt;init&gt;(): &lt;$anon: java.util.concurrent.ThreadFactory&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def newThread(r: Runnable): Thread = {
+      val th: Thread = new java.this.lang.Thread(r);
+      th.setDaemon(true);
+      th.setName(&quot;monifu-scheduler&quot;);
+      th
+    }
+  };
+  new $anon()
+})
+        </td>
+      </tr><tr>
+        <td>
+          185
+        </td>
+        <td>
+          1981
+        </td>
+        <td>
+          6779
+          -
+          6782
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.SchedulerCompanion.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          187
+        </td>
+        <td>
+          1978
+        </td>
+        <td>
+          6861
+          -
+          6874
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Thread.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new java.this.lang.Thread(r)
+        </td>
+      </tr><tr>
+        <td>
+          188
+        </td>
+        <td>
+          1979
+        </td>
+        <td>
+          6883
+          -
+          6901
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Thread.setDaemon
+        </td>
+        <td style="background: #AEF1AE">
+          th.setDaemon(true)
+        </td>
+      </tr><tr>
+        <td>
+          189
+        </td>
+        <td>
+          1980
+        </td>
+        <td>
+          6910
+          -
+          6940
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Thread.setName
+        </td>
+        <td style="background: #AEF1AE">
+          th.setName(&quot;monifu-scheduler&quot;)
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

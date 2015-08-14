@@ -1,0 +1,1120 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          monifu/reactive/Observer.scala.html
+        </title>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''> 
+</span>17 <span style=''>package monifu.reactive
+</span>18 <span style=''>
+</span>19 <span style=''>import monifu.concurrent.Scheduler
+</span>20 <span style=''>import monifu.reactive.Ack.{Cancel, Continue}
+</span>21 <span style=''>import monifu.reactive.observers.{SynchronousSubscriber, SynchronousObserver}
+</span>22 <span style=''>import monifu.reactive.streams.{SubscriberAsReactiveSubscriber, SubscriberAsObserver, SynchronousSubscriberAsReactiveSubscriber}
+</span>23 <span style=''>import org.reactivestreams.{Subscriber => RSubscriber}
+</span>24 <span style=''>
+</span>25 <span style=''>import scala.annotation.tailrec
+</span>26 <span style=''>import scala.concurrent.{Future, Promise}
+</span>27 <span style=''>import scala.util.control.NonFatal
+</span>28 <span style=''>import scala.util.{Failure, Success}
+</span>29 <span style=''>
+</span>30 <span style=''>
+</span>31 <span style=''>/**
+</span>32 <span style=''> * The Observer from the Rx pattern is the trio of callbacks that
+</span>33 <span style=''> * get subscribed to an Observable for receiving events.
+</span>34 <span style=''> *
+</span>35 <span style=''> * The events received must follow the Rx grammar, which is:
+</span>36 <span style=''> *      onNext *   (onComplete | onError)?
+</span>37 <span style=''> *
+</span>38 <span style=''> * That means an Observer can receive zero or multiple events, the stream
+</span>39 <span style=''> * ending either in one or zero `onComplete` or `onError` (just one, not both),
+</span>40 <span style=''> * and after onComplete or onError, a well behaved Observable implementation
+</span>41 <span style=''> * shouldn't send any more onNext events.
+</span>42 <span style=''> */
+</span>43 <span style=''>trait Observer[-T] {
+</span>44 <span style=''>  def onNext(elem: T): Future[Ack]
+</span>45 <span style=''>
+</span>46 <span style=''>  def onError(ex: Throwable): Unit
+</span>47 <span style=''>
+</span>48 <span style=''>  def onComplete(): Unit
+</span>49 <span style=''>}
+</span>50 <span style=''>
+</span>51 <span style=''>object Observer {
+</span>52 <span style=''>  /**
+</span>53 <span style=''>   * Given an `org.reactivestreams.Subscriber` as defined by the [[http://www.reactive-streams.org/ Reactive Streams]]
+</span>54 <span style=''>   * specification, it builds an [[Observer]] instance compliant with the Monifu Rx implementation.
+</span>55 <span style=''>   */
+</span>56 <span style=''>  def from[T](subscriber: RSubscriber[T])(implicit s: Scheduler): Observer[T] = {
+</span>57 <span style=''>    </span><span style='background: #AEF1AE'>SubscriberAsObserver(subscriber)</span><span style=''>
+</span>58 <span style=''>  }
+</span>59 <span style=''>
+</span>60 <span style=''>  /**
+</span>61 <span style=''>   * Transforms the source [[Observer]] into a `org.reactivestreams.Subscriber`
+</span>62 <span style=''>   * instance as defined by the [[http://www.reactive-streams.org/ Reactive Streams]]
+</span>63 <span style=''>   * specification.
+</span>64 <span style=''>   */
+</span>65 <span style=''>  def asSubscriber[T](observer: Observer[T], requestSize: Int = 128)(implicit s: Scheduler): RSubscriber[T] = {
+</span>66 <span style=''>    observer match {
+</span>67 <span style=''>      case sync: SynchronousObserver[_] =>
+</span>68 <span style=''>        val inst = </span><span style='background: #F0ADAD'>sync.asInstanceOf[SynchronousObserver[T]]</span><span style=''>
+</span>69 <span style=''>        </span><span style='background: #F0ADAD'>SynchronousSubscriberAsReactiveSubscriber(SynchronousSubscriber(inst, s), requestSize)</span><span style=''>
+</span>70 <span style=''>      case async =>
+</span>71 <span style=''>        </span><span style='background: #AEF1AE'>SubscriberAsReactiveSubscriber(Subscriber(async, s), requestSize)</span><span style=''>
+</span>72 <span style=''>    }
+</span>73 <span style=''>  }
+</span>74 <span style=''>
+</span>75 <span style=''>  /**
+</span>76 <span style=''>   * Implicit conversion from [[Observer]] to `org.reactivestreams.Subscriber`.
+</span>77 <span style=''>   */
+</span>78 <span style=''>  def ObserverIsSubscriber[T](source: Observer[T])(implicit s: Scheduler): RSubscriber[T] =
+</span>79 <span style=''>    </span><span style='background: #F0ADAD'>Observer.asSubscriber(source)</span><span style=''>
+</span>80 <span style=''>
+</span>81 <span style=''>  /**
+</span>82 <span style=''>   * Feeds the given [[Observer]] instance with elements from the given iterable,
+</span>83 <span style=''>   * respecting the contract and returning a `Future[Ack]` with the last
+</span>84 <span style=''>   * acknowledgement given after the last emitted element.
+</span>85 <span style=''>   */
+</span>86 <span style=''>  def feed[T](observer: Observer[T], iterable: Iterable[T])(implicit s: Scheduler): Future[Ack] = {
+</span>87 <span style=''>    def scheduleFeedLoop(promise: Promise[Ack], iterator: Iterator[T]): Future[Ack] = {
+</span>88 <span style=''>      </span><span style='background: #F0ADAD'>s.execute(new Runnable {
+</span>89 <span style=''></span><span style='background: #F0ADAD'>        @tailrec
+</span>90 <span style=''></span><span style='background: #F0ADAD'>        def fastLoop(): Unit = {
+</span>91 <span style=''></span><span style='background: #F0ADAD'>          val ack = observer.onNext(iterator.next())
+</span>92 <span style=''></span><span style='background: #F0ADAD'>
+</span>93 <span style=''></span><span style='background: #F0ADAD'>          if (iterator.hasNext)
+</span>94 <span style=''></span><span style='background: #F0ADAD'>            ack match {
+</span>95 <span style=''></span><span style='background: #F0ADAD'>              case sync if sync.isCompleted =>
+</span>96 <span style=''></span><span style='background: #F0ADAD'>                if (sync == Continue || sync.value.get == Continue.IsSuccess)
+</span>97 <span style=''></span><span style='background: #F0ADAD'>                  fastLoop()
+</span>98 <span style=''></span><span style='background: #F0ADAD'>                else
+</span>99 <span style=''></span><span style='background: #F0ADAD'>                  promise.completeWith(sync)
+</span>100 <span style=''></span><span style='background: #F0ADAD'>              case async =>
+</span>101 <span style=''></span><span style='background: #F0ADAD'>                async.onComplete {
+</span>102 <span style=''></span><span style='background: #F0ADAD'>                  case Success(Continue) =>
+</span>103 <span style=''></span><span style='background: #F0ADAD'>                    scheduleFeedLoop(promise, iterator)
+</span>104 <span style=''></span><span style='background: #F0ADAD'>                  case Success(Cancel) =>
+</span>105 <span style=''></span><span style='background: #F0ADAD'>                    promise.success(Cancel)
+</span>106 <span style=''></span><span style='background: #F0ADAD'>                  case Failure(ex) =>
+</span>107 <span style=''></span><span style='background: #F0ADAD'>                    promise.failure(ex)
+</span>108 <span style=''></span><span style='background: #F0ADAD'>                }
+</span>109 <span style=''></span><span style='background: #F0ADAD'>            }
+</span>110 <span style=''></span><span style='background: #F0ADAD'>          else
+</span>111 <span style=''></span><span style='background: #F0ADAD'>            promise.completeWith(ack)
+</span>112 <span style=''></span><span style='background: #F0ADAD'>        }
+</span>113 <span style=''></span><span style='background: #F0ADAD'>
+</span>114 <span style=''></span><span style='background: #F0ADAD'>        def run(): Unit = {
+</span>115 <span style=''></span><span style='background: #F0ADAD'>          try fastLoop() catch {
+</span>116 <span style=''></span><span style='background: #F0ADAD'>            case NonFatal(ex) =>
+</span>117 <span style=''></span><span style='background: #F0ADAD'>              try observer.onError(ex) finally {
+</span>118 <span style=''></span><span style='background: #F0ADAD'>                promise.failure(ex)
+</span>119 <span style=''></span><span style='background: #F0ADAD'>              }
+</span>120 <span style=''></span><span style='background: #F0ADAD'>          }
+</span>121 <span style=''></span><span style='background: #F0ADAD'>        }
+</span>122 <span style=''></span><span style='background: #F0ADAD'>      })</span><span style=''>
+</span>123 <span style=''>
+</span>124 <span style=''>      </span><span style='background: #F0ADAD'>promise.future</span><span style=''>
+</span>125 <span style=''>    }
+</span>126 <span style=''>
+</span>127 <span style=''>    val iterator = </span><span style='background: #F0ADAD'>iterable.iterator</span><span style=''>
+</span>128 <span style=''>    if (</span><span style='background: #F0ADAD'>iterator.hasNext</span><span style=''>) </span><span style='background: #F0ADAD'>scheduleFeedLoop(Promise[Ack](), iterator)</span><span style=''> else </span><span style='background: #F0ADAD'>Continue</span><span style=''>
+</span>129 <span style=''>  }
+</span>130 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          57
+        </td>
+        <td>
+          2693
+        </td>
+        <td>
+          2099
+          -
+          2131
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.streams.SubscriberAsObserver.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.streams.SubscriberAsObserver.apply[T](subscriber)(s)
+        </td>
+      </tr><tr>
+        <td>
+          68
+        </td>
+        <td>
+          2694
+        </td>
+        <td>
+          2530
+          -
+          2571
+        </td>
+        <td>
+          TypeApply
+        </td>
+        <td>
+          scala.Any.asInstanceOf
+        </td>
+        <td style="background: #F0ADAD">
+          sync.asInstanceOf[monifu.reactive.observers.SynchronousObserver[T]]
+        </td>
+      </tr><tr>
+        <td>
+          69
+        </td>
+        <td>
+          2696
+        </td>
+        <td>
+          2580
+          -
+          2666
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.streams.SynchronousSubscriberAsReactiveSubscriber.apply
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.streams.SynchronousSubscriberAsReactiveSubscriber.apply[T](monifu.reactive.observers.SynchronousSubscriber.apply[T](inst, s), requestSize)
+        </td>
+      </tr><tr>
+        <td>
+          69
+        </td>
+        <td>
+          2695
+        </td>
+        <td>
+          2622
+          -
+          2652
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousSubscriber.apply
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.observers.SynchronousSubscriber.apply[T](inst, s)
+        </td>
+      </tr><tr>
+        <td>
+          71
+        </td>
+        <td>
+          2697
+        </td>
+        <td>
+          2726
+          -
+          2746
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Subscriber.apply
+        </td>
+        <td style="background: #AEF1AE">
+          Subscriber.apply[T](async, s)
+        </td>
+      </tr><tr>
+        <td>
+          71
+        </td>
+        <td>
+          2698
+        </td>
+        <td>
+          2695
+          -
+          2760
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.streams.SubscriberAsReactiveSubscriber.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.streams.SubscriberAsReactiveSubscriber.apply[T](Subscriber.apply[T](async, s), requestSize)
+        </td>
+      </tr><tr>
+        <td>
+          79
+        </td>
+        <td>
+          2699
+        </td>
+        <td>
+          2960
+          -
+          2989
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.Observer.asSubscriber
+        </td>
+        <td style="background: #F0ADAD">
+          Observer.asSubscriber[T](source, Observer.asSubscriber$default$2[Nothing])(s)
+        </td>
+      </tr><tr>
+        <td>
+          88
+        </td>
+        <td>
+          2726
+        </td>
+        <td>
+          3411
+          -
+          4464
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.execute
+        </td>
+        <td style="background: #F0ADAD">
+          s.execute({
+  final class $anon extends Object with Runnable {
+    def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    @scala.annotation.tailrec def fastLoop(): Unit = {
+      val ack: scala.concurrent.Future[monifu.reactive.Ack] = observer.onNext(iterator.next());
+      if (iterator.hasNext)
+        ack match {
+          case (sync @ _) if sync.isCompleted =&gt; if (sync.==(monifu.reactive.Ack.Continue).||(sync.value.get.==(monifu.reactive.Ack.Continue.IsSuccess)))
+            $anon.this.fastLoop()
+          else
+            {
+              promise.completeWith(sync);
+              ()
+            }
+          case (async @ _) =&gt; async.onComplete[Object](((x0$1: scala.util.Try[monifu.reactive.Ack]) =&gt; x0$1 match {
+            case (value: monifu.reactive.Ack)scala.util.Success[monifu.reactive.Ack](monifu.reactive.Ack.Continue) =&gt; scheduleFeedLoop(promise, iterator)
+            case (value: monifu.reactive.Ack)scala.util.Success[monifu.reactive.Ack](monifu.reactive.Ack.Cancel) =&gt; promise.success(monifu.reactive.Ack.Cancel)
+            case (exception: Throwable)scala.util.Failure[monifu.reactive.Ack]((ex @ _)) =&gt; promise.failure(ex)
+          }))(s)
+        }
+      else
+        {
+          promise.completeWith(ack);
+          ()
+        }
+    };
+    def run(): Unit = try {
+      $anon.this.fastLoop()
+    } catch {
+      case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((ex @ _)) =&gt; try {
+        observer.onError(ex)
+      } finally {
+        promise.failure(ex);
+        ()
+      }
+    }
+  };
+  new $anon()
+})
+        </td>
+      </tr><tr>
+        <td>
+          88
+        </td>
+        <td>
+          2725
+        </td>
+        <td>
+          3421
+          -
+          3424
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          91
+        </td>
+        <td>
+          2701
+        </td>
+        <td>
+          3506
+          -
+          3538
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onNext
+        </td>
+        <td style="background: #F0ADAD">
+          observer.onNext(iterator.next())
+        </td>
+      </tr><tr>
+        <td>
+          91
+        </td>
+        <td>
+          2700
+        </td>
+        <td>
+          3522
+          -
+          3537
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.collection.Iterator.next
+        </td>
+        <td style="background: #F0ADAD">
+          iterator.next()
+        </td>
+      </tr><tr>
+        <td>
+          93
+        </td>
+        <td>
+          2702
+        </td>
+        <td>
+          3554
+          -
+          3570
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.collection.Iterator.hasNext
+        </td>
+        <td style="background: #F0ADAD">
+          iterator.hasNext
+        </td>
+      </tr><tr>
+        <td>
+          94
+        </td>
+        <td>
+          2714
+        </td>
+        <td>
+          3584
+          -
+          4174
+        </td>
+        <td>
+          Match
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ack match {
+  case (sync @ _) if sync.isCompleted =&gt; if (sync.==(monifu.reactive.Ack.Continue).||(sync.value.get.==(monifu.reactive.Ack.Continue.IsSuccess)))
+    $anon.this.fastLoop()
+  else
+    {
+      promise.completeWith(sync);
+      ()
+    }
+  case (async @ _) =&gt; async.onComplete[Object](((x0$1: scala.util.Try[monifu.reactive.Ack]) =&gt; x0$1 match {
+    case (value: monifu.reactive.Ack)scala.util.Success[monifu.reactive.Ack](monifu.reactive.Ack.Continue) =&gt; scheduleFeedLoop(promise, iterator)
+    case (value: monifu.reactive.Ack)scala.util.Success[monifu.reactive.Ack](monifu.reactive.Ack.Cancel) =&gt; promise.success(monifu.reactive.Ack.Cancel)
+    case (exception: Throwable)scala.util.Failure[monifu.reactive.Ack]((ex @ _)) =&gt; promise.failure(ex)
+  }))(s)
+}
+        </td>
+      </tr><tr>
+        <td>
+          95
+        </td>
+        <td>
+          2703
+        </td>
+        <td>
+          3623
+          -
+          3639
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.Future.isCompleted
+        </td>
+        <td style="background: #F0ADAD">
+          sync.isCompleted
+        </td>
+      </tr><tr>
+        <td>
+          96
+        </td>
+        <td>
+          2706
+        </td>
+        <td>
+          3683
+          -
+          3719
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.==
+        </td>
+        <td style="background: #F0ADAD">
+          sync.value.get.==(monifu.reactive.Ack.Continue.IsSuccess)
+        </td>
+      </tr><tr>
+        <td>
+          96
+        </td>
+        <td>
+          2705
+        </td>
+        <td>
+          3701
+          -
+          3719
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue.IsSuccess
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Ack.Continue.IsSuccess
+        </td>
+      </tr><tr>
+        <td>
+          96
+        </td>
+        <td>
+          2704
+        </td>
+        <td>
+          3671
+          -
+          3679
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Ack.Continue
+        </td>
+      </tr><tr>
+        <td>
+          96
+        </td>
+        <td>
+          2707
+        </td>
+        <td>
+          3663
+          -
+          3719
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Boolean.||
+        </td>
+        <td style="background: #F0ADAD">
+          sync.==(monifu.reactive.Ack.Continue).||(sync.value.get.==(monifu.reactive.Ack.Continue.IsSuccess))
+        </td>
+      </tr><tr>
+        <td>
+          97
+        </td>
+        <td>
+          2708
+        </td>
+        <td>
+          3739
+          -
+          3749
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.$anon.fastLoop
+        </td>
+        <td style="background: #F0ADAD">
+          $anon.this.fastLoop()
+        </td>
+      </tr><tr>
+        <td>
+          97
+        </td>
+        <td>
+          2709
+        </td>
+        <td>
+          3739
+          -
+          3749
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Observer.$anon.fastLoop
+        </td>
+        <td style="background: #F0ADAD">
+          $anon.this.fastLoop()
+        </td>
+      </tr><tr>
+        <td>
+          99
+        </td>
+        <td>
+          2712
+        </td>
+        <td>
+          3789
+          -
+          3815
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          {
+  promise.completeWith(sync);
+  ()
+}
+        </td>
+      </tr><tr>
+        <td>
+          99
+        </td>
+        <td>
+          2711
+        </td>
+        <td>
+          3809
+          -
+          3809
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          99
+        </td>
+        <td>
+          2710
+        </td>
+        <td>
+          3789
+          -
+          3815
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Promise.completeWith
+        </td>
+        <td style="background: #F0ADAD">
+          promise.completeWith(sync)
+        </td>
+      </tr><tr>
+        <td>
+          101
+        </td>
+        <td>
+          2713
+        </td>
+        <td>
+          3860
+          -
+          4160
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.concurrent.Future.onComplete
+        </td>
+        <td style="background: #F0ADAD">
+          async.onComplete[Object](((x0$1: scala.util.Try[monifu.reactive.Ack]) =&gt; x0$1 match {
+  case (value: monifu.reactive.Ack)scala.util.Success[monifu.reactive.Ack](monifu.reactive.Ack.Continue) =&gt; scheduleFeedLoop(promise, iterator)
+  case (value: monifu.reactive.Ack)scala.util.Success[monifu.reactive.Ack](monifu.reactive.Ack.Cancel) =&gt; promise.success(monifu.reactive.Ack.Cancel)
+  case (exception: Throwable)scala.util.Failure[monifu.reactive.Ack]((ex @ _)) =&gt; promise.failure(ex)
+}))(s)
+        </td>
+      </tr><tr>
+        <td>
+          111
+        </td>
+        <td>
+          2715
+        </td>
+        <td>
+          4202
+          -
+          4227
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Promise.completeWith
+        </td>
+        <td style="background: #F0ADAD">
+          promise.completeWith(ack)
+        </td>
+      </tr><tr>
+        <td>
+          111
+        </td>
+        <td>
+          2717
+        </td>
+        <td>
+          4202
+          -
+          4227
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          {
+  promise.completeWith(ack);
+  ()
+}
+        </td>
+      </tr><tr>
+        <td>
+          111
+        </td>
+        <td>
+          2716
+        </td>
+        <td>
+          4222
+          -
+          4222
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          115
+        </td>
+        <td>
+          2719
+        </td>
+        <td>
+          4281
+          -
+          4291
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Observer.$anon.fastLoop
+        </td>
+        <td style="background: #F0ADAD">
+          $anon.this.fastLoop()
+        </td>
+      </tr><tr>
+        <td>
+          115
+        </td>
+        <td>
+          2718
+        </td>
+        <td>
+          4281
+          -
+          4291
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.$anon.fastLoop
+        </td>
+        <td style="background: #F0ADAD">
+          $anon.this.fastLoop()
+        </td>
+      </tr><tr>
+        <td>
+          117
+        </td>
+        <td>
+          2721
+        </td>
+        <td>
+          4351
+          -
+          4371
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #F0ADAD">
+          observer.onError(ex)
+        </td>
+      </tr><tr>
+        <td>
+          117
+        </td>
+        <td>
+          2720
+        </td>
+        <td>
+          4351
+          -
+          4371
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #F0ADAD">
+          observer.onError(ex)
+        </td>
+      </tr><tr>
+        <td>
+          118
+        </td>
+        <td>
+          2724
+        </td>
+        <td>
+          4398
+          -
+          4417
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          {
+  promise.failure(ex);
+  ()
+}
+        </td>
+      </tr><tr>
+        <td>
+          118
+        </td>
+        <td>
+          2723
+        </td>
+        <td>
+          4413
+          -
+          4413
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          118
+        </td>
+        <td>
+          2722
+        </td>
+        <td>
+          4398
+          -
+          4417
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Promise.failure
+        </td>
+        <td style="background: #F0ADAD">
+          promise.failure(ex)
+        </td>
+      </tr><tr>
+        <td>
+          124
+        </td>
+        <td>
+          2727
+        </td>
+        <td>
+          4472
+          -
+          4486
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.Promise.future
+        </td>
+        <td style="background: #F0ADAD">
+          promise.future
+        </td>
+      </tr><tr>
+        <td>
+          127
+        </td>
+        <td>
+          2728
+        </td>
+        <td>
+          4513
+          -
+          4530
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.collection.IterableLike.iterator
+        </td>
+        <td style="background: #F0ADAD">
+          iterable.iterator
+        </td>
+      </tr><tr>
+        <td>
+          128
+        </td>
+        <td>
+          2730
+        </td>
+        <td>
+          4574
+          -
+          4588
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Promise.apply
+        </td>
+        <td style="background: #F0ADAD">
+          scala.concurrent.Promise.apply[monifu.reactive.Ack]()
+        </td>
+      </tr><tr>
+        <td>
+          128
+        </td>
+        <td>
+          2733
+        </td>
+        <td>
+          4605
+          -
+          4613
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Ack.Continue
+        </td>
+      </tr><tr>
+        <td>
+          128
+        </td>
+        <td>
+          2732
+        </td>
+        <td>
+          4557
+          -
+          4599
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Observer.scheduleFeedLoop
+        </td>
+        <td style="background: #F0ADAD">
+          scheduleFeedLoop(scala.concurrent.Promise.apply[monifu.reactive.Ack](), iterator)
+        </td>
+      </tr><tr>
+        <td>
+          128
+        </td>
+        <td>
+          2729
+        </td>
+        <td>
+          4539
+          -
+          4555
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.collection.Iterator.hasNext
+        </td>
+        <td style="background: #F0ADAD">
+          iterator.hasNext
+        </td>
+      </tr><tr>
+        <td>
+          128
+        </td>
+        <td>
+          2731
+        </td>
+        <td>
+          4557
+          -
+          4599
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.scheduleFeedLoop
+        </td>
+        <td style="background: #F0ADAD">
+          scheduleFeedLoop(scala.concurrent.Promise.apply[monifu.reactive.Ack](), iterator)
+        </td>
+      </tr><tr>
+        <td>
+          128
+        </td>
+        <td>
+          2734
+        </td>
+        <td>
+          4605
+          -
+          4613
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Ack.Continue
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

@@ -1,0 +1,1475 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          monifu/reactive/streams/SingleAssignmentSubscription.scala.html
+        </title>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''>
+</span>17 <span style=''>package monifu.reactive.streams
+</span>18 <span style=''>
+</span>19 <span style=''>import monifu.concurrent.atomic.Atomic
+</span>20 <span style=''>import org.reactivestreams.Subscription
+</span>21 <span style=''>import scala.annotation.tailrec
+</span>22 <span style=''>
+</span>23 <span style=''>/**
+</span>24 <span style=''> * Represents a `org.reactivestreams.Subscription` that can be assigned
+</span>25 <span style=''> * only once to another subscription reference.
+</span>26 <span style=''> *
+</span>27 <span style=''> * If the assignment happens after this subscription has been canceled, then on
+</span>28 <span style=''> * assignment the reference will get canceled too. If the assignment
+</span>29 <span style=''> * after `request(n)` has been called on this subscription, then
+</span>30 <span style=''> * `request(n)` will get called immediately on the assigned reference as well.
+</span>31 <span style=''> *
+</span>32 <span style=''> * Useful in case you need a thread-safe forward reference.
+</span>33 <span style=''> */
+</span>34 <span style=''>final class SingleAssignmentSubscription private () extends Subscription {
+</span>35 <span style=''>  import SingleAssignmentSubscription.State
+</span>36 <span style=''>  import SingleAssignmentSubscription.State._
+</span>37 <span style=''>
+</span>38 <span style=''>  private[this] val state = </span><span style='background: #AEF1AE'>Atomic(Empty : State)</span><span style=''>
+</span>39 <span style=''>
+</span>40 <span style=''>  def :=(s: Subscription): Unit = </span><span style='background: #AEF1AE'>set(s)</span><span style=''>
+</span>41 <span style=''>
+</span>42 <span style=''>  def set(s: Subscription): Unit = {
+</span>43 <span style=''>    val current = </span><span style='background: #AEF1AE'>state.get</span><span style=''>
+</span>44 <span style=''>
+</span>45 <span style=''>    current match {
+</span>46 <span style=''>      case Empty =>
+</span>47 <span style=''>        if (</span><span style='background: #AEF1AE'>!state.compareAndSet(current, WithSubscription(s))</span><span style=''>)
+</span>48 <span style=''>          </span><span style='background: #F0ADAD'>set(s)</span><span style=''> // retry
+</span>49 <span style=''>
+</span>50 <span style=''>      case EmptyRequest(n) =>
+</span>51 <span style=''>        if (</span><span style='background: #AEF1AE'>!state.compareAndSet(current, WithSubscription(s))</span><span style=''>)
+</span>52 <span style=''>          </span><span style='background: #F0ADAD'>set(s)</span><span style=''> // retry
+</span>53 <span style=''>        else
+</span>54 <span style=''>          </span><span style='background: #AEF1AE'>s.request(n)</span><span style=''>
+</span>55 <span style=''>
+</span>56 <span style=''>      case WithSubscription(_) =>
+</span>57 <span style=''>        </span><span style='background: #F0ADAD'>throw new IllegalArgumentException(
+</span>58 <span style=''></span><span style='background: #F0ADAD'>          "SingleAssignmentSubscription as already initialized")</span><span style=''>
+</span>59 <span style=''>
+</span>60 <span style=''>      case EmptyCanceled =>
+</span>61 <span style=''>        if (</span><span style='background: #AEF1AE'>!state.compareAndSet(current, Canceled)</span><span style=''>)
+</span>62 <span style=''>          </span><span style='background: #F0ADAD'>set(s)</span><span style=''> // retry
+</span>63 <span style=''>        else
+</span>64 <span style=''>          </span><span style='background: #AEF1AE'>s.cancel()</span><span style=''>
+</span>65 <span style=''>
+</span>66 <span style=''>      case Canceled =>
+</span>67 <span style=''>        </span><span style='background: #F0ADAD'>throw new IllegalArgumentException(
+</span>68 <span style=''></span><span style='background: #F0ADAD'>          "SingleAssignmentSubscription as already initialized")</span><span style=''>
+</span>69 <span style=''>    }
+</span>70 <span style=''>  }
+</span>71 <span style=''>
+</span>72 <span style=''>  @tailrec
+</span>73 <span style=''>  def cancel(): Unit = {
+</span>74 <span style=''>    val current = </span><span style='background: #AEF1AE'>state.get</span><span style=''>
+</span>75 <span style=''>
+</span>76 <span style=''>    current match {
+</span>77 <span style=''>      case Empty =>
+</span>78 <span style=''>        if (</span><span style='background: #AEF1AE'>!state.compareAndSet(current, EmptyCanceled)</span><span style=''>)
+</span>79 <span style=''>          </span><span style='background: #F0ADAD'>cancel()</span><span style=''> // retry
+</span>80 <span style=''>
+</span>81 <span style=''>      case EmptyRequest(_) =>
+</span>82 <span style=''>        if (</span><span style='background: #AEF1AE'>!state.compareAndSet(current, EmptyCanceled)</span><span style=''>)
+</span>83 <span style=''>          </span><span style='background: #F0ADAD'>cancel()</span><span style=''> // retry
+</span>84 <span style=''>
+</span>85 <span style=''>      case WithSubscription(s) =>
+</span>86 <span style=''>        if (</span><span style='background: #AEF1AE'>!state.compareAndSet(current, Canceled)</span><span style=''>)
+</span>87 <span style=''>          </span><span style='background: #F0ADAD'>cancel()</span><span style=''> // retry
+</span>88 <span style=''>        else
+</span>89 <span style=''>          </span><span style='background: #AEF1AE'>s.cancel()</span><span style=''>
+</span>90 <span style=''>
+</span>91 <span style=''>      case EmptyCanceled | Canceled =>
+</span>92 <span style=''>        </span><span style='background: #F0ADAD'>()</span><span style=''> // do nothing
+</span>93 <span style=''>    }
+</span>94 <span style=''>  }
+</span>95 <span style=''>
+</span>96 <span style=''>  @tailrec
+</span>97 <span style=''>  def request(n: Long): Unit = {
+</span>98 <span style=''>    val current = </span><span style='background: #AEF1AE'>state.get</span><span style=''>
+</span>99 <span style=''>
+</span>100 <span style=''>    current match {
+</span>101 <span style=''>      case Empty =>
+</span>102 <span style=''>        if (</span><span style='background: #AEF1AE'>!state.compareAndSet(current, EmptyRequest(n))</span><span style=''>)
+</span>103 <span style=''>          </span><span style='background: #F0ADAD'>request(n)</span><span style=''> // retry
+</span>104 <span style=''>
+</span>105 <span style=''>      case EmptyRequest(previous) =>
+</span>106 <span style=''>        if (</span><span style='background: #AEF1AE'>!state.compareAndSet(current, EmptyRequest(previous + n))</span><span style=''>)
+</span>107 <span style=''>          </span><span style='background: #F0ADAD'>request(n)</span><span style=''> // retry
+</span>108 <span style=''>
+</span>109 <span style=''>      case WithSubscription(s) =>
+</span>110 <span style=''>        </span><span style='background: #AEF1AE'>s.request(n)</span><span style=''>
+</span>111 <span style=''>
+</span>112 <span style=''>      case EmptyCanceled | Canceled =>
+</span>113 <span style=''>        </span><span style='background: #AEF1AE'>()</span><span style=''>
+</span>114 <span style=''>    }
+</span>115 <span style=''>  }
+</span>116 <span style=''>}
+</span>117 <span style=''>
+</span>118 <span style=''>object SingleAssignmentSubscription {
+</span>119 <span style=''>  /** Builder for [[SingleAssignmentSubscription]] */
+</span>120 <span style=''>  def apply(): SingleAssignmentSubscription =
+</span>121 <span style=''>    </span><span style='background: #AEF1AE'>new SingleAssignmentSubscription</span><span style=''>
+</span>122 <span style=''>
+</span>123 <span style=''>  private sealed trait State
+</span>124 <span style=''>
+</span>125 <span style=''>  private object State {
+</span>126 <span style=''>    case object Empty extends State
+</span>127 <span style=''>    case class EmptyRequest(nr: Long) extends State
+</span>128 <span style=''>    case object EmptyCanceled extends State
+</span>129 <span style=''>    case class WithSubscription(s: Subscription) extends State
+</span>130 <span style=''>    case object Canceled extends State
+</span>131 <span style=''>  }
+</span>132 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          38
+        </td>
+        <td>
+          4354
+        </td>
+        <td>
+          1443
+          -
+          1443
+        </td>
+        <td>
+          TypeApply
+        </td>
+        <td>
+          monifu.concurrent.atomic.Implicits.Level1.AtomicRefBuilder
+        </td>
+        <td style="background: #AEF1AE">
+          atomic.this.AtomicBuilder.AtomicRefBuilder[monifu.reactive.streams.SingleAssignmentSubscription.State]
+        </td>
+      </tr><tr>
+        <td>
+          38
+        </td>
+        <td>
+          4353
+        </td>
+        <td>
+          1444
+          -
+          1449
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.State.Empty
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentSubscription.State.Empty
+        </td>
+      </tr><tr>
+        <td>
+          38
+        </td>
+        <td>
+          4355
+        </td>
+        <td>
+          1437
+          -
+          1458
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.concurrent.atomic.Atomic.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.atomic.Atomic.apply[monifu.reactive.streams.SingleAssignmentSubscription.State, monifu.concurrent.atomic.AtomicAny[monifu.reactive.streams.SingleAssignmentSubscription.State]]((SingleAssignmentSubscription.State.Empty: monifu.reactive.streams.SingleAssignmentSubscription.State))(atomic.this.AtomicBuilder.AtomicRefBuilder[monifu.reactive.streams.SingleAssignmentSubscription.State])
+        </td>
+      </tr><tr>
+        <td>
+          40
+        </td>
+        <td>
+          4356
+        </td>
+        <td>
+          1494
+          -
+          1500
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.set
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentSubscription.this.set(s)
+        </td>
+      </tr><tr>
+        <td>
+          43
+        </td>
+        <td>
+          4357
+        </td>
+        <td>
+          1557
+          -
+          1566
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicAny.get
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentSubscription.this.state.get
+        </td>
+      </tr><tr>
+        <td>
+          47
+        </td>
+        <td>
+          4363
+        </td>
+        <td>
+          1616
+          -
+          1616
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          47
+        </td>
+        <td>
+          4362
+        </td>
+        <td>
+          1616
+          -
+          1616
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          47
+        </td>
+        <td>
+          4359
+        </td>
+        <td>
+          1620
+          -
+          1670
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentSubscription.this.state.compareAndSet(current, SingleAssignmentSubscription.State.WithSubscription.apply(s)).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          47
+        </td>
+        <td>
+          4358
+        </td>
+        <td>
+          1650
+          -
+          1669
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.State.WithSubscription.apply
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentSubscription.State.WithSubscription.apply(s)
+        </td>
+      </tr><tr>
+        <td>
+          48
+        </td>
+        <td>
+          4361
+        </td>
+        <td>
+          1682
+          -
+          1688
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.set
+        </td>
+        <td style="background: #F0ADAD">
+          SingleAssignmentSubscription.this.set(s)
+        </td>
+      </tr><tr>
+        <td>
+          48
+        </td>
+        <td>
+          4360
+        </td>
+        <td>
+          1682
+          -
+          1688
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.set
+        </td>
+        <td style="background: #F0ADAD">
+          SingleAssignmentSubscription.this.set(s)
+        </td>
+      </tr><tr>
+        <td>
+          51
+        </td>
+        <td>
+          4365
+        </td>
+        <td>
+          1741
+          -
+          1791
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentSubscription.this.state.compareAndSet(current, SingleAssignmentSubscription.State.WithSubscription.apply(s)).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          51
+        </td>
+        <td>
+          4364
+        </td>
+        <td>
+          1771
+          -
+          1790
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.State.WithSubscription.apply
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentSubscription.State.WithSubscription.apply(s)
+        </td>
+      </tr><tr>
+        <td>
+          52
+        </td>
+        <td>
+          4367
+        </td>
+        <td>
+          1803
+          -
+          1809
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.set
+        </td>
+        <td style="background: #F0ADAD">
+          SingleAssignmentSubscription.this.set(s)
+        </td>
+      </tr><tr>
+        <td>
+          52
+        </td>
+        <td>
+          4366
+        </td>
+        <td>
+          1803
+          -
+          1809
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.set
+        </td>
+        <td style="background: #F0ADAD">
+          SingleAssignmentSubscription.this.set(s)
+        </td>
+      </tr><tr>
+        <td>
+          54
+        </td>
+        <td>
+          4368
+        </td>
+        <td>
+          1842
+          -
+          1854
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          org.reactivestreams.Subscription.request
+        </td>
+        <td style="background: #AEF1AE">
+          s.request(n)
+        </td>
+      </tr><tr>
+        <td>
+          54
+        </td>
+        <td>
+          4369
+        </td>
+        <td>
+          1842
+          -
+          1854
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          org.reactivestreams.Subscription.request
+        </td>
+        <td style="background: #AEF1AE">
+          s.request(n)
+        </td>
+      </tr><tr>
+        <td>
+          57
+        </td>
+        <td>
+          4370
+        </td>
+        <td>
+          1898
+          -
+          1998
+        </td>
+        <td>
+          Throw
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          throw new scala.`package`.IllegalArgumentException(&quot;SingleAssignmentSubscription as already initialized&quot;)
+        </td>
+      </tr><tr>
+        <td>
+          61
+        </td>
+        <td>
+          4372
+        </td>
+        <td>
+          2040
+          -
+          2079
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentSubscription.this.state.compareAndSet(current, SingleAssignmentSubscription.State.Canceled).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          61
+        </td>
+        <td>
+          4371
+        </td>
+        <td>
+          2070
+          -
+          2078
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.State.Canceled
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentSubscription.State.Canceled
+        </td>
+      </tr><tr>
+        <td>
+          62
+        </td>
+        <td>
+          4374
+        </td>
+        <td>
+          2091
+          -
+          2097
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.set
+        </td>
+        <td style="background: #F0ADAD">
+          SingleAssignmentSubscription.this.set(s)
+        </td>
+      </tr><tr>
+        <td>
+          62
+        </td>
+        <td>
+          4373
+        </td>
+        <td>
+          2091
+          -
+          2097
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.set
+        </td>
+        <td style="background: #F0ADAD">
+          SingleAssignmentSubscription.this.set(s)
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          4376
+        </td>
+        <td>
+          2130
+          -
+          2140
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          org.reactivestreams.Subscription.cancel
+        </td>
+        <td style="background: #AEF1AE">
+          s.cancel()
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          4375
+        </td>
+        <td>
+          2130
+          -
+          2140
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          org.reactivestreams.Subscription.cancel
+        </td>
+        <td style="background: #AEF1AE">
+          s.cancel()
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          4377
+        </td>
+        <td>
+          2173
+          -
+          2273
+        </td>
+        <td>
+          Throw
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          throw new scala.`package`.IllegalArgumentException(&quot;SingleAssignmentSubscription as already initialized&quot;)
+        </td>
+      </tr><tr>
+        <td>
+          74
+        </td>
+        <td>
+          4378
+        </td>
+        <td>
+          2339
+          -
+          2348
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicAny.get
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentSubscription.this.state.get
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          4380
+        </td>
+        <td>
+          2402
+          -
+          2446
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentSubscription.this.state.compareAndSet(current, SingleAssignmentSubscription.State.EmptyCanceled).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          4383
+        </td>
+        <td>
+          2398
+          -
+          2398
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          4379
+        </td>
+        <td>
+          2432
+          -
+          2445
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.State.EmptyCanceled
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentSubscription.State.EmptyCanceled
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          4384
+        </td>
+        <td>
+          2398
+          -
+          2398
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          79
+        </td>
+        <td>
+          4381
+        </td>
+        <td>
+          2458
+          -
+          2466
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.cancel
+        </td>
+        <td style="background: #F0ADAD">
+          SingleAssignmentSubscription.this.cancel()
+        </td>
+      </tr><tr>
+        <td>
+          79
+        </td>
+        <td>
+          4382
+        </td>
+        <td>
+          2458
+          -
+          2466
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.cancel
+        </td>
+        <td style="background: #F0ADAD">
+          SingleAssignmentSubscription.this.cancel()
+        </td>
+      </tr><tr>
+        <td>
+          82
+        </td>
+        <td>
+          4390
+        </td>
+        <td>
+          2515
+          -
+          2515
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          82
+        </td>
+        <td>
+          4389
+        </td>
+        <td>
+          2515
+          -
+          2515
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          82
+        </td>
+        <td>
+          4386
+        </td>
+        <td>
+          2519
+          -
+          2563
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentSubscription.this.state.compareAndSet(current, SingleAssignmentSubscription.State.EmptyCanceled).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          82
+        </td>
+        <td>
+          4385
+        </td>
+        <td>
+          2549
+          -
+          2562
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.State.EmptyCanceled
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentSubscription.State.EmptyCanceled
+        </td>
+      </tr><tr>
+        <td>
+          83
+        </td>
+        <td>
+          4388
+        </td>
+        <td>
+          2575
+          -
+          2583
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.cancel
+        </td>
+        <td style="background: #F0ADAD">
+          SingleAssignmentSubscription.this.cancel()
+        </td>
+      </tr><tr>
+        <td>
+          83
+        </td>
+        <td>
+          4387
+        </td>
+        <td>
+          2575
+          -
+          2583
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.cancel
+        </td>
+        <td style="background: #F0ADAD">
+          SingleAssignmentSubscription.this.cancel()
+        </td>
+      </tr><tr>
+        <td>
+          86
+        </td>
+        <td>
+          4392
+        </td>
+        <td>
+          2640
+          -
+          2679
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentSubscription.this.state.compareAndSet(current, SingleAssignmentSubscription.State.Canceled).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          86
+        </td>
+        <td>
+          4391
+        </td>
+        <td>
+          2670
+          -
+          2678
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.State.Canceled
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentSubscription.State.Canceled
+        </td>
+      </tr><tr>
+        <td>
+          87
+        </td>
+        <td>
+          4394
+        </td>
+        <td>
+          2691
+          -
+          2699
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.cancel
+        </td>
+        <td style="background: #F0ADAD">
+          SingleAssignmentSubscription.this.cancel()
+        </td>
+      </tr><tr>
+        <td>
+          87
+        </td>
+        <td>
+          4393
+        </td>
+        <td>
+          2691
+          -
+          2699
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.cancel
+        </td>
+        <td style="background: #F0ADAD">
+          SingleAssignmentSubscription.this.cancel()
+        </td>
+      </tr><tr>
+        <td>
+          89
+        </td>
+        <td>
+          4395
+        </td>
+        <td>
+          2732
+          -
+          2742
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          org.reactivestreams.Subscription.cancel
+        </td>
+        <td style="background: #AEF1AE">
+          s.cancel()
+        </td>
+      </tr><tr>
+        <td>
+          89
+        </td>
+        <td>
+          4396
+        </td>
+        <td>
+          2732
+          -
+          2742
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          org.reactivestreams.Subscription.cancel
+        </td>
+        <td style="background: #AEF1AE">
+          s.cancel()
+        </td>
+      </tr><tr>
+        <td>
+          92
+        </td>
+        <td>
+          4397
+        </td>
+        <td>
+          2791
+          -
+          2793
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          98
+        </td>
+        <td>
+          4398
+        </td>
+        <td>
+          2881
+          -
+          2890
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicAny.get
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentSubscription.this.state.get
+        </td>
+      </tr><tr>
+        <td>
+          102
+        </td>
+        <td>
+          4399
+        </td>
+        <td>
+          2974
+          -
+          2989
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.State.EmptyRequest.apply
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentSubscription.State.EmptyRequest.apply(n)
+        </td>
+      </tr><tr>
+        <td>
+          102
+        </td>
+        <td>
+          4404
+        </td>
+        <td>
+          2940
+          -
+          2940
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          102
+        </td>
+        <td>
+          4403
+        </td>
+        <td>
+          2940
+          -
+          2940
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          102
+        </td>
+        <td>
+          4400
+        </td>
+        <td>
+          2944
+          -
+          2990
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentSubscription.this.state.compareAndSet(current, SingleAssignmentSubscription.State.EmptyRequest.apply(n)).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          103
+        </td>
+        <td>
+          4401
+        </td>
+        <td>
+          3002
+          -
+          3012
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.request
+        </td>
+        <td style="background: #F0ADAD">
+          SingleAssignmentSubscription.this.request(n)
+        </td>
+      </tr><tr>
+        <td>
+          103
+        </td>
+        <td>
+          4402
+        </td>
+        <td>
+          3002
+          -
+          3012
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.request
+        </td>
+        <td style="background: #F0ADAD">
+          SingleAssignmentSubscription.this.request(n)
+        </td>
+      </tr><tr>
+        <td>
+          106
+        </td>
+        <td>
+          4407
+        </td>
+        <td>
+          3072
+          -
+          3129
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentSubscription.this.state.compareAndSet(current, SingleAssignmentSubscription.State.EmptyRequest.apply(previous.+(n))).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          106
+        </td>
+        <td>
+          4410
+        </td>
+        <td>
+          3068
+          -
+          3068
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          106
+        </td>
+        <td>
+          4406
+        </td>
+        <td>
+          3102
+          -
+          3128
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.State.EmptyRequest.apply
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentSubscription.State.EmptyRequest.apply(previous.+(n))
+        </td>
+      </tr><tr>
+        <td>
+          106
+        </td>
+        <td>
+          4411
+        </td>
+        <td>
+          3068
+          -
+          3068
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          106
+        </td>
+        <td>
+          4405
+        </td>
+        <td>
+          3115
+          -
+          3127
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.+
+        </td>
+        <td style="background: #AEF1AE">
+          previous.+(n)
+        </td>
+      </tr><tr>
+        <td>
+          107
+        </td>
+        <td>
+          4409
+        </td>
+        <td>
+          3141
+          -
+          3151
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.request
+        </td>
+        <td style="background: #F0ADAD">
+          SingleAssignmentSubscription.this.request(n)
+        </td>
+      </tr><tr>
+        <td>
+          107
+        </td>
+        <td>
+          4408
+        </td>
+        <td>
+          3141
+          -
+          3151
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.request
+        </td>
+        <td style="background: #F0ADAD">
+          SingleAssignmentSubscription.this.request(n)
+        </td>
+      </tr><tr>
+        <td>
+          110
+        </td>
+        <td>
+          4412
+        </td>
+        <td>
+          3204
+          -
+          3216
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          org.reactivestreams.Subscription.request
+        </td>
+        <td style="background: #AEF1AE">
+          s.request(n)
+        </td>
+      </tr><tr>
+        <td>
+          113
+        </td>
+        <td>
+          4413
+        </td>
+        <td>
+          3265
+          -
+          3267
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          121
+        </td>
+        <td>
+          4414
+        </td>
+        <td>
+          3423
+          -
+          3455
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.streams.SingleAssignmentSubscription.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new SingleAssignmentSubscription()
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

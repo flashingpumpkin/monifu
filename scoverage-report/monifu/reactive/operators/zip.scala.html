@@ -1,0 +1,580 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          monifu/reactive/operators/zip.scala.html
+        </title>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''>
+</span>17 <span style=''>package monifu.reactive.operators
+</span>18 <span style=''>
+</span>19 <span style=''>import monifu.reactive.{Observable, Observer, Ack}
+</span>20 <span style=''>import monifu.reactive.Ack.{Cancel, Continue}
+</span>21 <span style=''>import monifu.reactive.internals._
+</span>22 <span style=''>
+</span>23 <span style=''>import scala.collection.mutable
+</span>24 <span style=''>import scala.concurrent.{Future, Promise}
+</span>25 <span style=''>
+</span>26 <span style=''>object zip {
+</span>27 <span style=''>  /**
+</span>28 <span style=''>   * Implements [[Observable.zip]].
+</span>29 <span style=''>   */
+</span>30 <span style=''>  def apply[T, U](first: Observable[T], second: Observable[U]) = {
+</span>31 <span style=''>    </span><span style='background: #AEF1AE'>Observable.create[(T, U)] { subscriber =>
+</span>32 <span style=''></span><span style='background: #AEF1AE'>      implicit val s = subscriber.scheduler
+</span>33 <span style=''></span><span style='background: #AEF1AE'>      val observerOfPairs = subscriber.observer
+</span>34 <span style=''></span><span style='background: #AEF1AE'>
+</span>35 <span style=''></span><span style='background: #AEF1AE'>      // using mutability, receiving data from 2 producers, so must synchronize
+</span>36 <span style=''></span><span style='background: #AEF1AE'>      val lock = new AnyRef
+</span>37 <span style=''></span><span style='background: #AEF1AE'>      val queueA = mutable.Queue.empty[(Promise[U], Promise[Ack])]
+</span>38 <span style=''></span><span style='background: #AEF1AE'>      val queueB = mutable.Queue.empty[(U, Promise[Ack])]
+</span>39 <span style=''></span><span style='background: #AEF1AE'>      var isCompleted = false
+</span>40 <span style=''></span><span style='background: #AEF1AE'>      var ack = Continue : Future[Ack]
+</span>41 <span style=''></span><span style='background: #AEF1AE'>
+</span>42 <span style=''></span><span style='background: #AEF1AE'>      def _onError(ex: Throwable) =
+</span>43 <span style=''></span><span style='background: #AEF1AE'>        ack.onContinue {
+</span>44 <span style=''></span><span style='background: #AEF1AE'>          lock.synchronized {
+</span>45 <span style=''></span><span style='background: #AEF1AE'>            if (!isCompleted) {
+</span>46 <span style=''></span><span style='background: #AEF1AE'>              isCompleted = true
+</span>47 <span style=''></span><span style='background: #AEF1AE'>              queueA.clear()
+</span>48 <span style=''></span><span style='background: #AEF1AE'>              queueB.clear()
+</span>49 <span style=''></span><span style='background: #AEF1AE'>              observerOfPairs.onError(ex)
+</span>50 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>51 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>52 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>53 <span style=''></span><span style='background: #AEF1AE'>
+</span>54 <span style=''></span><span style='background: #AEF1AE'>      first.unsafeSubscribe(new Observer[T] {
+</span>55 <span style=''></span><span style='background: #AEF1AE'>        def onNext(a: T): Future[Ack] =
+</span>56 <span style=''></span><span style='background: #AEF1AE'>          lock.synchronized {
+</span>57 <span style=''></span><span style='background: #AEF1AE'>            if (isCompleted)
+</span>58 <span style=''></span><span style='background: #AEF1AE'>              Cancel
+</span>59 <span style=''></span><span style='background: #AEF1AE'>            else if (queueB.isEmpty) {
+</span>60 <span style=''></span><span style='background: #AEF1AE'>              val resp = Promise[Ack]()
+</span>61 <span style=''></span><span style='background: #AEF1AE'>              val promiseForB = Promise[U]()
+</span>62 <span style=''></span><span style='background: #AEF1AE'>              queueA.enqueue((promiseForB, resp))
+</span>63 <span style=''></span><span style='background: #AEF1AE'>
+</span>64 <span style=''></span><span style='background: #AEF1AE'>              ack = promiseForB.future.flatMap(b => observerOfPairs.onNext((a, b)))
+</span>65 <span style=''></span><span style='background: #AEF1AE'>              resp.completeWith(ack)
+</span>66 <span style=''></span><span style='background: #AEF1AE'>              ack
+</span>67 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>68 <span style=''></span><span style='background: #AEF1AE'>            else {
+</span>69 <span style=''></span><span style='background: #AEF1AE'>              val (b, bResponse) = queueB.dequeue()
+</span>70 <span style=''></span><span style='background: #AEF1AE'>              val f = observerOfPairs.onNext((a, b))
+</span>71 <span style=''></span><span style='background: #AEF1AE'>              bResponse.completeWith(f)
+</span>72 <span style=''></span><span style='background: #AEF1AE'>              f
+</span>73 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>74 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>75 <span style=''></span><span style='background: #AEF1AE'>
+</span>76 <span style=''></span><span style='background: #AEF1AE'>        def onError(ex: Throwable) =
+</span>77 <span style=''></span><span style='background: #AEF1AE'>          _onError(ex)
+</span>78 <span style=''></span><span style='background: #AEF1AE'>
+</span>79 <span style=''></span><span style='background: #AEF1AE'>        def onComplete() =
+</span>80 <span style=''></span><span style='background: #AEF1AE'>          ack.onContinue {
+</span>81 <span style=''></span><span style='background: #AEF1AE'>            lock.synchronized {
+</span>82 <span style=''></span><span style='background: #AEF1AE'>              if (!isCompleted && queueA.isEmpty) {
+</span>83 <span style=''></span><span style='background: #AEF1AE'>                isCompleted = true
+</span>84 <span style=''></span><span style='background: #AEF1AE'>                queueA.clear()
+</span>85 <span style=''></span><span style='background: #AEF1AE'>                queueB.clear()
+</span>86 <span style=''></span><span style='background: #AEF1AE'>                observerOfPairs.onComplete()
+</span>87 <span style=''></span><span style='background: #AEF1AE'>              }
+</span>88 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>89 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>90 <span style=''></span><span style='background: #AEF1AE'>      })
+</span>91 <span style=''></span><span style='background: #AEF1AE'>
+</span>92 <span style=''></span><span style='background: #AEF1AE'>      second.unsafeSubscribe(new Observer[U] {
+</span>93 <span style=''></span><span style='background: #AEF1AE'>        def onNext(b: U): Future[Ack] =
+</span>94 <span style=''></span><span style='background: #AEF1AE'>          lock.synchronized {
+</span>95 <span style=''></span><span style='background: #AEF1AE'>            if (isCompleted)
+</span>96 <span style=''></span><span style='background: #AEF1AE'>              Cancel
+</span>97 <span style=''></span><span style='background: #AEF1AE'>            else if (queueA.nonEmpty) {
+</span>98 <span style=''></span><span style='background: #AEF1AE'>              val (bPromise, response) = queueA.dequeue()
+</span>99 <span style=''></span><span style='background: #AEF1AE'>              bPromise.success(b)
+</span>100 <span style=''></span><span style='background: #AEF1AE'>              response.future
+</span>101 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>102 <span style=''></span><span style='background: #AEF1AE'>            else {
+</span>103 <span style=''></span><span style='background: #AEF1AE'>              val p = Promise[Ack]()
+</span>104 <span style=''></span><span style='background: #AEF1AE'>              queueB.enqueue((b, p))
+</span>105 <span style=''></span><span style='background: #AEF1AE'>              p.future
+</span>106 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>107 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>108 <span style=''></span><span style='background: #AEF1AE'>
+</span>109 <span style=''></span><span style='background: #AEF1AE'>        def onError(ex: Throwable) = _onError(ex)
+</span>110 <span style=''></span><span style='background: #AEF1AE'>
+</span>111 <span style=''></span><span style='background: #AEF1AE'>        def onComplete() =
+</span>112 <span style=''></span><span style='background: #AEF1AE'>          ack.onContinue {
+</span>113 <span style=''></span><span style='background: #AEF1AE'>            lock.synchronized {
+</span>114 <span style=''></span><span style='background: #AEF1AE'>              if (!isCompleted && queueB.isEmpty) {
+</span>115 <span style=''></span><span style='background: #AEF1AE'>                isCompleted = true
+</span>116 <span style=''></span><span style='background: #AEF1AE'>                queueA.clear()
+</span>117 <span style=''></span><span style='background: #AEF1AE'>                queueB.clear()
+</span>118 <span style=''></span><span style='background: #AEF1AE'>                observerOfPairs.onComplete()
+</span>119 <span style=''></span><span style='background: #AEF1AE'>              }
+</span>120 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>121 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>122 <span style=''></span><span style='background: #AEF1AE'>      })
+</span>123 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>124 <span style=''>  }
+</span>125 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          31
+        </td>
+        <td>
+          4352
+        </td>
+        <td>
+          986
+          -
+          3684
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observable.create
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Observable.create[(T, U)](((subscriber: monifu.reactive.Subscriber[(T, U)]) =&gt; {
+  implicit val s: monifu.concurrent.Scheduler = subscriber.scheduler;
+  val observerOfPairs: monifu.reactive.Observer[(T, U)] = subscriber.observer;
+  val lock: Object = new scala.AnyRef();
+  val queueA: scala.collection.mutable.Queue[(scala.concurrent.Promise[U], scala.concurrent.Promise[monifu.reactive.Ack])] = scala.collection.mutable.Queue.empty[(scala.concurrent.Promise[U], scala.concurrent.Promise[monifu.reactive.Ack])];
+  val queueB: scala.collection.mutable.Queue[(U, scala.concurrent.Promise[monifu.reactive.Ack])] = scala.collection.mutable.Queue.empty[(U, scala.concurrent.Promise[monifu.reactive.Ack])];
+  var isCompleted: Boolean = false;
+  var ack: scala.concurrent.Future[monifu.reactive.Ack] = (monifu.reactive.Ack.Continue: scala.concurrent.Future[monifu.reactive.Ack]);
+  def _onError(ex: Throwable): Unit = monifu.reactive.internals.`package`.FutureAckExtensions(ack).onContinue(lock.synchronized[Unit](if (isCompleted.unary_!)
+    {
+      isCompleted = true;
+      queueA.clear();
+      queueB.clear();
+      observerOfPairs.onError(ex)
+    }
+  else
+    ()))(s);
+  first.unsafeSubscribe({
+    final class $anon extends AnyRef with monifu.reactive.Observer[T] {
+      def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[T]&gt; = {
+        $anon.super.&lt;init&gt;();
+        ()
+      };
+      def onNext(a: T): scala.concurrent.Future[monifu.reactive.Ack] = lock.synchronized[scala.concurrent.Future[monifu.reactive.Ack]](if (isCompleted)
+        monifu.reactive.Ack.Cancel
+      else
+        if (queueB.isEmpty)
+          {
+            val resp: scala.concurrent.Promise[monifu.reactive.Ack] = scala.concurrent.Promise.apply[monifu.reactive.Ack]();
+            val promiseForB: scala.concurrent.Promise[U] = scala.concurrent.Promise.apply[U]();
+            queueA.enqueue(scala.Tuple2.apply[scala.concurrent.Promise[U], scala.concurrent.Promise[monifu.reactive.Ack]](promiseForB, resp));
+            ack = promiseForB.future.flatMap[monifu.reactive.Ack](((b: U) =&gt; observerOfPairs.onNext(scala.Tuple2.apply[T, U](a, b))))(s);
+            resp.completeWith(ack);
+            ack
+          }
+        else
+          {
+            &lt;synthetic&gt; &lt;artifact&gt; private[this] val x$1: (U, scala.concurrent.Promise[monifu.reactive.Ack]) = (queueB.dequeue(): (U, scala.concurrent.Promise[monifu.reactive.Ack]) @unchecked) match {
+              case (_1: U, _2: scala.concurrent.Promise[monifu.reactive.Ack])(U, scala.concurrent.Promise[monifu.reactive.Ack])((b @ _), (bResponse @ _)) =&gt; scala.Tuple2.apply[U, scala.concurrent.Promise[monifu.reactive.Ack]](b, bResponse)
+            };
+            val b: U = x$1._1;
+            val bResponse: scala.concurrent.Promise[monifu.reactive.Ack] = x$1._2;
+            val f: scala.concurrent.Future[monifu.reactive.Ack] = observerOfPairs.onNext(scala.Tuple2.apply[T, U](a, b));
+            bResponse.completeWith(f);
+            f
+          });
+      def onError(ex: Throwable): Unit = _onError(ex);
+      def onComplete(): Unit = monifu.reactive.internals.`package`.FutureAckExtensions(ack).onContinue(lock.synchronized[Unit](if (isCompleted.unary_!.&amp;&amp;(queueA.isEmpty))
+        {
+          isCompleted = true;
+          queueA.clear();
+          queueB.clear();
+          observerOfPairs.onComplete()
+        }
+      else
+        ()))(s)
+    };
+    new $anon()
+  })(s);
+  second.unsafeSubscribe({
+    final class $anon extends AnyRef with monifu.reactive.Observer[U] {
+      def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[U]&gt; = {
+        $anon.super.&lt;init&gt;();
+        ()
+      };
+      def onNext(b: U): scala.concurrent.Future[monifu.reactive.Ack] = lock.synchronized[scala.concurrent.Future[monifu.reactive.Ack]](if (isCompleted)
+        monifu.reactive.Ack.Cancel
+      else
+        if (queueA.nonEmpty)
+          {
+            &lt;synthetic&gt; &lt;artifact&gt; private[this] val x$2: (scala.concurrent.Promise[U], scala.concurrent.Promise[monifu.reactive.Ack]) = (queueA.dequeue(): (scala.concurrent.Promise[U], scala.concurrent.Promise[monifu.reactive.Ack]) @unchecked) match {
+              case (_1: scala.concurrent.Promise[U], _2: scala.concurrent.Promise[monifu.reactive.Ack])(scala.concurrent.Promise[U], scala.concurrent.Promise[monifu.reactive.Ack])((bPromise @ _), (response @ _)) =&gt; scala.Tuple2.apply[scala.concurrent.Promise[U], scala.concurrent.Promise[monifu.reactive.Ack]](bPromise, response)
+            };
+            val bPromise: scala.concurrent.Promise[U] = x$2._1;
+            val response: scala.concurrent.Promise[monifu.reactive.Ack] = x$2._2;
+            bPromise.success(b);
+            response.future
+          }
+        else
+          {
+            val p: scala.concurrent.Promise[monifu.reactive.Ack] = scala.concurrent.Promise.apply[monifu.reactive.Ack]();
+            queueB.enqueue(scala.Tuple2.apply[U, scala.concurrent.Promise[monifu.reactive.Ack]](b, p));
+            p.future
+          });
+      def onError(ex: Throwable): Unit = _onError(ex);
+      def onComplete(): Unit = monifu.reactive.internals.`package`.FutureAckExtensions(ack).onContinue(lock.synchronized[Unit](if (isCompleted.unary_!.&amp;&amp;(queueB.isEmpty))
+        {
+          isCompleted = true;
+          queueA.clear();
+          queueB.clear();
+          observerOfPairs.onComplete()
+        }
+      else
+        ()))(s)
+    };
+    new $anon()
+  })(s)
+}))
+        </td>
+      </tr><tr>
+        <td>
+          32
+        </td>
+        <td>
+          4342
+        </td>
+        <td>
+          1051
+          -
+          1071
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          33
+        </td>
+        <td>
+          4343
+        </td>
+        <td>
+          1100
+          -
+          1119
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.observer
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.observer
+        </td>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          4344
+        </td>
+        <td>
+          1218
+          -
+          1228
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new scala.AnyRef()
+        </td>
+      </tr><tr>
+        <td>
+          37
+        </td>
+        <td>
+          4345
+        </td>
+        <td>
+          1248
+          -
+          1295
+        </td>
+        <td>
+          TypeApply
+        </td>
+        <td>
+          scala.collection.generic.GenericCompanion.empty
+        </td>
+        <td style="background: #AEF1AE">
+          scala.collection.mutable.Queue.empty[(scala.concurrent.Promise[U], scala.concurrent.Promise[monifu.reactive.Ack])]
+        </td>
+      </tr><tr>
+        <td>
+          38
+        </td>
+        <td>
+          4346
+        </td>
+        <td>
+          1315
+          -
+          1353
+        </td>
+        <td>
+          TypeApply
+        </td>
+        <td>
+          scala.collection.generic.GenericCompanion.empty
+        </td>
+        <td style="background: #AEF1AE">
+          scala.collection.mutable.Queue.empty[(U, scala.concurrent.Promise[monifu.reactive.Ack])]
+        </td>
+      </tr><tr>
+        <td>
+          39
+        </td>
+        <td>
+          4347
+        </td>
+        <td>
+          1378
+          -
+          1383
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          false
+        </td>
+      </tr><tr>
+        <td>
+          40
+        </td>
+        <td>
+          4348
+        </td>
+        <td>
+          1400
+          -
+          1408
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Continue
+        </td>
+      </tr><tr>
+        <td>
+          43
+        </td>
+        <td>
+          4349
+        </td>
+        <td>
+          1468
+          -
+          1715
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.internals.FutureAckExtensions.onContinue
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.internals.`package`.FutureAckExtensions(ack).onContinue(lock.synchronized[Unit](if (isCompleted.unary_!)
+  {
+    isCompleted = true;
+    queueA.clear();
+    queueB.clear();
+    observerOfPairs.onError(ex)
+  }
+else
+  ()))(s)
+        </td>
+      </tr><tr>
+        <td>
+          54
+        </td>
+        <td>
+          4350
+        </td>
+        <td>
+          1723
+          -
+          2809
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.Observable.unsafeSubscribe
+        </td>
+        <td style="background: #AEF1AE">
+          first.unsafeSubscribe({
+  final class $anon extends AnyRef with monifu.reactive.Observer[T] {
+    def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[T]&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def onNext(a: T): scala.concurrent.Future[monifu.reactive.Ack] = lock.synchronized[scala.concurrent.Future[monifu.reactive.Ack]](if (isCompleted)
+      monifu.reactive.Ack.Cancel
+    else
+      if (queueB.isEmpty)
+        {
+          val resp: scala.concurrent.Promise[monifu.reactive.Ack] = scala.concurrent.Promise.apply[monifu.reactive.Ack]();
+          val promiseForB: scala.concurrent.Promise[U] = scala.concurrent.Promise.apply[U]();
+          queueA.enqueue(scala.Tuple2.apply[scala.concurrent.Promise[U], scala.concurrent.Promise[monifu.reactive.Ack]](promiseForB, resp));
+          ack = promiseForB.future.flatMap[monifu.reactive.Ack](((b: U) =&gt; observerOfPairs.onNext(scala.Tuple2.apply[T, U](a, b))))(s);
+          resp.completeWith(ack);
+          ack
+        }
+      else
+        {
+          &lt;synthetic&gt; &lt;artifact&gt; private[this] val x$1: (U, scala.concurrent.Promise[monifu.reactive.Ack]) = (queueB.dequeue(): (U, scala.concurrent.Promise[monifu.reactive.Ack]) @unchecked) match {
+            case (_1: U, _2: scala.concurrent.Promise[monifu.reactive.Ack])(U, scala.concurrent.Promise[monifu.reactive.Ack])((b @ _), (bResponse @ _)) =&gt; scala.Tuple2.apply[U, scala.concurrent.Promise[monifu.reactive.Ack]](b, bResponse)
+          };
+          val b: U = x$1._1;
+          val bResponse: scala.concurrent.Promise[monifu.reactive.Ack] = x$1._2;
+          val f: scala.concurrent.Future[monifu.reactive.Ack] = observerOfPairs.onNext(scala.Tuple2.apply[T, U](a, b));
+          bResponse.completeWith(f);
+          f
+        });
+    def onError(ex: Throwable): Unit = _onError(ex);
+    def onComplete(): Unit = monifu.reactive.internals.`package`.FutureAckExtensions(ack).onContinue(lock.synchronized[Unit](if (isCompleted.unary_!.&amp;&amp;(queueA.isEmpty))
+      {
+        isCompleted = true;
+        queueA.clear();
+        queueB.clear();
+        observerOfPairs.onComplete()
+      }
+    else
+      ()))(s)
+  };
+  new $anon()
+})(s)
+        </td>
+      </tr><tr>
+        <td>
+          92
+        </td>
+        <td>
+          4351
+        </td>
+        <td>
+          2817
+          -
+          3678
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.Observable.unsafeSubscribe
+        </td>
+        <td style="background: #AEF1AE">
+          second.unsafeSubscribe({
+  final class $anon extends AnyRef with monifu.reactive.Observer[U] {
+    def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[U]&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def onNext(b: U): scala.concurrent.Future[monifu.reactive.Ack] = lock.synchronized[scala.concurrent.Future[monifu.reactive.Ack]](if (isCompleted)
+      monifu.reactive.Ack.Cancel
+    else
+      if (queueA.nonEmpty)
+        {
+          &lt;synthetic&gt; &lt;artifact&gt; private[this] val x$2: (scala.concurrent.Promise[U], scala.concurrent.Promise[monifu.reactive.Ack]) = (queueA.dequeue(): (scala.concurrent.Promise[U], scala.concurrent.Promise[monifu.reactive.Ack]) @unchecked) match {
+            case (_1: scala.concurrent.Promise[U], _2: scala.concurrent.Promise[monifu.reactive.Ack])(scala.concurrent.Promise[U], scala.concurrent.Promise[monifu.reactive.Ack])((bPromise @ _), (response @ _)) =&gt; scala.Tuple2.apply[scala.concurrent.Promise[U], scala.concurrent.Promise[monifu.reactive.Ack]](bPromise, response)
+          };
+          val bPromise: scala.concurrent.Promise[U] = x$2._1;
+          val response: scala.concurrent.Promise[monifu.reactive.Ack] = x$2._2;
+          bPromise.success(b);
+          response.future
+        }
+      else
+        {
+          val p: scala.concurrent.Promise[monifu.reactive.Ack] = scala.concurrent.Promise.apply[monifu.reactive.Ack]();
+          queueB.enqueue(scala.Tuple2.apply[U, scala.concurrent.Promise[monifu.reactive.Ack]](b, p));
+          p.future
+        });
+    def onError(ex: Throwable): Unit = _onError(ex);
+    def onComplete(): Unit = monifu.reactive.internals.`package`.FutureAckExtensions(ack).onContinue(lock.synchronized[Unit](if (isCompleted.unary_!.&amp;&amp;(queueB.isEmpty))
+      {
+        isCompleted = true;
+        queueA.clear();
+        queueB.clear();
+        observerOfPairs.onComplete()
+      }
+    else
+      ()))(s)
+  };
+  new $anon()
+})(s)
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

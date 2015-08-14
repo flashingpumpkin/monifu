@@ -1,0 +1,5274 @@
+<html>
+      <head>
+      <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+      <title id="title">Scoverage Code Coverage</title>
+      <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+      <style>
+        .meter {
+        height: 14px;
+        position: relative;
+        background: #BB2020;
+}
+
+.meter span {
+	display: block;
+	height: 100%;
+	background-color: rgb(43,194,83);
+	background-image: -webkit-gradient(
+	  linear,
+	  left bottom,
+	  left top,
+	  color-stop(0, rgb(43,194,83)),
+	  color-stop(1, rgb(84,240,84))
+	 );
+	background-image: -webkit-linear-gradient(
+	  center bottom,
+	  rgb(43,194,83) 37%,
+	  rgb(84,240,84) 69%
+	 );
+	background-image: -moz-linear-gradient(
+	  center bottom,
+	  rgb(43,194,83) 37%,
+	  rgb(84,240,84) 69%
+	 );
+	background-image: -ms-linear-gradient(
+	  center bottom,
+	  rgb(43,194,83) 37%,
+	  rgb(84,240,84) 69%
+	 );
+	background-image: -o-linear-gradient(
+	  center bottom,
+	  rgb(43,194,83) 37%,
+	  rgb(84,240,84) 69%
+	 );
+	-webkit-box-shadow:
+	  inset 0 2px 9px  rgba(255,255,255,0.3),
+	  inset 0 -2px 6px rgba(0,0,0,0.4);
+	-moz-box-shadow:
+	  inset 0 2px 9px  rgba(255,255,255,0.3),
+	  inset 0 -2px 6px rgba(0,0,0,0.4);
+	position: relative;
+	overflow: hidden;
+}
+      </style>
+    </head><body style="font-family: monospace;">
+      <div class="alert alert-info">
+        <b>
+          SCoverage
+        </b>
+        generated at
+        Fri Aug 14 16:57:08 EEST 2015
+      </div>
+      <div class="overview">
+        <div class="stats">
+          <table class="table">
+      <tr>
+        <td>
+          Lines of code:
+        </td>
+        <td>
+          13350
+        </td>
+        <td>
+          Files:
+        </td>
+        <td>
+          95
+        </td>
+        <td>
+          Classes:
+        </td>
+        <td>
+          112
+        </td>
+        <td>
+          Methods:
+        </td>
+        <td>
+          808
+        </td>
+      </tr>
+      <tr>
+        <td>
+          Lines per file
+        </td>
+        <td>
+          140.53
+        </td>
+        <td>
+          Packages:
+        </td>
+        <td>
+          15
+        </td>
+        <td>
+          Clases per package:
+        </td>
+        <td>
+          7.47
+        </td>
+        <td>
+          Methods per class:
+        </td>
+        <td>
+          7.21
+        </td>
+      </tr>
+      <tr>
+        <td>
+          Total statements:
+        </td>
+        <td>
+          4971
+        </td>
+        <td>
+          Invoked statements:
+        </td>
+        <td>
+          3707
+        </td>
+        <td>
+          Total branches:
+        </td>
+        <td>
+          867
+        </td>
+        <td>
+          Invoked branches:
+        </td>
+        <td>
+          594
+        </td>
+      </tr>
+      <tr>
+        <td>
+          Ignored statements:
+        </td>
+        <td>
+          0
+        </td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>
+          Statement coverage:
+        </td>
+        <td>
+          74.57
+          %
+        </td>
+        <td colspan="2">
+          <div class="meter">
+            <span style="width: 75%"></span>
+          </div>
+        </td>
+        <td>
+          Branch coverage:
+        </td>
+        <td>
+          68.51
+          %
+        </td>
+        <td colspan="2">
+          <div class="meter">
+            <span style="width: 69%"></span>
+          </div>
+        </td>
+      </tr>
+    </table>
+        </div>
+        <div>
+          <table class="tablesorter table table-striped" style="font-size:13px">
+      <thead>
+        <tr>
+          <th>
+            Class
+          </th>
+          <th>
+            Source file
+          </th>
+          <th>
+            Lines
+          </th>
+          <th>
+            Methods
+          </th>
+          <th>
+            Statements
+          </th>
+          <th>
+            Invoked
+          </th>
+          <th>
+            Coverage
+          </th>
+          <th>
+          </th>
+          <th>
+            Branches
+          </th>
+          <th>
+            Invoked
+          </th>
+          <th>
+            Coverage
+          </th>
+          <th>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+      <td>
+        <a href="monifu/reactive/Ack.scala.html">
+          AckIsFuture
+        </a>
+      </td>
+      <td>
+        Ack.scala
+      </td>
+      <td>
+        62
+      </td>
+      <td>
+        3
+      </td>
+      <td>
+        7
+      </td>
+      <td>
+        5
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 71%"></span>
+        </div>
+      </td>
+      <td>
+        71.43
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/channels/AsyncChannel.scala.html">
+          AsyncChannel
+        </a>
+      </td>
+      <td>
+        AsyncChannel.scala
+      </td>
+      <td>
+        39
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/async/AsyncQueue.scala.html">
+          AsyncQueue
+        </a>
+      </td>
+      <td>
+        AsyncQueue.scala
+      </td>
+      <td>
+        65
+      </td>
+      <td>
+        7
+      </td>
+      <td>
+        45
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 0%"></span>
+        </div>
+      </td>
+      <td>
+        0.00
+        %
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 0%"></span>
+        </div>
+      </td>
+      <td>
+        0.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/schedulers/AsyncScheduler.scala.html">
+          AsyncScheduler
+        </a>
+      </td>
+      <td>
+        AsyncScheduler.scala
+      </td>
+      <td>
+        79
+      </td>
+      <td>
+        6
+      </td>
+      <td>
+        37
+      </td>
+      <td>
+        25
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 68%"></span>
+        </div>
+      </td>
+      <td>
+        67.57
+        %
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 50%"></span>
+        </div>
+      </td>
+      <td>
+        50.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/async/AsyncSemaphore.scala.html">
+          AsyncSemaphore
+        </a>
+      </td>
+      <td>
+        AsyncSemaphore.scala
+      </td>
+      <td>
+        47
+      </td>
+      <td>
+        3
+      </td>
+      <td>
+        9
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 0%"></span>
+        </div>
+      </td>
+      <td>
+        0.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 0%"></span>
+        </div>
+      </td>
+      <td>
+        0.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/subjects/AsyncSubject.scala.html">
+          AsyncSubject
+        </a>
+      </td>
+      <td>
+        AsyncSubject.scala
+      </td>
+      <td>
+        114
+      </td>
+      <td>
+        6
+      </td>
+      <td>
+        61
+      </td>
+      <td>
+        53
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 87%"></span>
+        </div>
+      </td>
+      <td>
+        86.89
+        %
+      </td>
+      <td>
+        14
+      </td>
+      <td>
+        10
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 71%"></span>
+        </div>
+      </td>
+      <td>
+        71.43
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/padded/base.scala.html">
+          Atomic
+        </a>
+      </td>
+      <td>
+        base.scala
+      </td>
+      <td>
+        141
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        3
+      </td>
+      <td>
+        3
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicAny.scala.html">
+          AtomicAny
+        </a>
+      </td>
+      <td>
+        AtomicAny.scala
+      </td>
+      <td>
+        180
+      </td>
+      <td>
+        17
+      </td>
+      <td>
+        101
+      </td>
+      <td>
+        92
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 91%"></span>
+        </div>
+      </td>
+      <td>
+        91.09
+        %
+      </td>
+      <td>
+        24
+      </td>
+      <td>
+        21
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 88%"></span>
+        </div>
+      </td>
+      <td>
+        87.50
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicBoolean.scala.html">
+          AtomicBoolean
+        </a>
+      </td>
+      <td>
+        AtomicBoolean.scala
+      </td>
+      <td>
+        182
+      </td>
+      <td>
+        18
+      </td>
+      <td>
+        103
+      </td>
+      <td>
+        90
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 87%"></span>
+        </div>
+      </td>
+      <td>
+        87.38
+        %
+      </td>
+      <td>
+        24
+      </td>
+      <td>
+        21
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 88%"></span>
+        </div>
+      </td>
+      <td>
+        87.50
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicByte.scala.html">
+          AtomicByte
+        </a>
+      </td>
+      <td>
+        AtomicByte.scala
+      </td>
+      <td>
+        297
+      </td>
+      <td>
+        36
+      </td>
+      <td>
+        195
+      </td>
+      <td>
+        152
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 78%"></span>
+        </div>
+      </td>
+      <td>
+        77.95
+        %
+      </td>
+      <td>
+        48
+      </td>
+      <td>
+        33
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 69%"></span>
+        </div>
+      </td>
+      <td>
+        68.75
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicChar.scala.html">
+          AtomicChar
+        </a>
+      </td>
+      <td>
+        AtomicChar.scala
+      </td>
+      <td>
+        298
+      </td>
+      <td>
+        36
+      </td>
+      <td>
+        195
+      </td>
+      <td>
+        152
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 78%"></span>
+        </div>
+      </td>
+      <td>
+        77.95
+        %
+      </td>
+      <td>
+        48
+      </td>
+      <td>
+        33
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 69%"></span>
+        </div>
+      </td>
+      <td>
+        68.75
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicDouble.scala.html">
+          AtomicDouble
+        </a>
+      </td>
+      <td>
+        AtomicDouble.scala
+      </td>
+      <td>
+        293
+      </td>
+      <td>
+        35
+      </td>
+      <td>
+        193
+      </td>
+      <td>
+        150
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 78%"></span>
+        </div>
+      </td>
+      <td>
+        77.72
+        %
+      </td>
+      <td>
+        48
+      </td>
+      <td>
+        33
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 69%"></span>
+        </div>
+      </td>
+      <td>
+        68.75
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicFloat.scala.html">
+          AtomicFloat
+        </a>
+      </td>
+      <td>
+        AtomicFloat.scala
+      </td>
+      <td>
+        293
+      </td>
+      <td>
+        35
+      </td>
+      <td>
+        193
+      </td>
+      <td>
+        150
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 78%"></span>
+        </div>
+      </td>
+      <td>
+        77.72
+        %
+      </td>
+      <td>
+        48
+      </td>
+      <td>
+        33
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 69%"></span>
+        </div>
+      </td>
+      <td>
+        68.75
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicInt.scala.html">
+          AtomicInt
+        </a>
+      </td>
+      <td>
+        AtomicInt.scala
+      </td>
+      <td>
+        267
+      </td>
+      <td>
+        33
+      </td>
+      <td>
+        170
+      </td>
+      <td>
+        135
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 79%"></span>
+        </div>
+      </td>
+      <td>
+        79.41
+        %
+      </td>
+      <td>
+        42
+      </td>
+      <td>
+        32
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 76%"></span>
+        </div>
+      </td>
+      <td>
+        76.19
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicLong.scala.html">
+          AtomicLong
+        </a>
+      </td>
+      <td>
+        AtomicLong.scala
+      </td>
+      <td>
+        267
+      </td>
+      <td>
+        33
+      </td>
+      <td>
+        170
+      </td>
+      <td>
+        138
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 81%"></span>
+        </div>
+      </td>
+      <td>
+        81.18
+        %
+      </td>
+      <td>
+        42
+      </td>
+      <td>
+        32
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 76%"></span>
+        </div>
+      </td>
+      <td>
+        76.19
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicNumber.scala.html">
+          AtomicNumber
+        </a>
+      </td>
+      <td>
+        AtomicNumber.scala
+      </td>
+      <td>
+        54
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 0%"></span>
+        </div>
+      </td>
+      <td>
+        0.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 0%"></span>
+        </div>
+      </td>
+      <td>
+        0.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicNumberAny.scala.html">
+          AtomicNumberAny
+        </a>
+      </td>
+      <td>
+        AtomicNumberAny.scala
+      </td>
+      <td>
+        287
+      </td>
+      <td>
+        33
+      </td>
+      <td>
+        185
+      </td>
+      <td>
+        143
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 77%"></span>
+        </div>
+      </td>
+      <td>
+        77.30
+        %
+      </td>
+      <td>
+        48
+      </td>
+      <td>
+        33
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 69%"></span>
+        </div>
+      </td>
+      <td>
+        68.75
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicShort.scala.html">
+          AtomicShort
+        </a>
+      </td>
+      <td>
+        AtomicShort.scala
+      </td>
+      <td>
+        292
+      </td>
+      <td>
+        36
+      </td>
+      <td>
+        195
+      </td>
+      <td>
+        152
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 78%"></span>
+        </div>
+      </td>
+      <td>
+        77.95
+        %
+      </td>
+      <td>
+        48
+      </td>
+      <td>
+        33
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 69%"></span>
+        </div>
+      </td>
+      <td>
+        68.75
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/BufferPolicy.scala.html">
+          BackPressured
+        </a>
+      </td>
+      <td>
+        BufferPolicy.scala
+      </td>
+      <td>
+        80
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        3
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 67%"></span>
+        </div>
+      </td>
+      <td>
+        66.67
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/observers/BackPressuredBufferedSubscriber.scala.html">
+          BackPressuredBufferedSubscriber
+        </a>
+      </td>
+      <td>
+        BackPressuredBufferedSubscriber.scala
+      </td>
+      <td>
+        226
+      </td>
+      <td>
+        9
+      </td>
+      <td>
+        170
+      </td>
+      <td>
+        110
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 65%"></span>
+        </div>
+      </td>
+      <td>
+        64.71
+        %
+      </td>
+      <td>
+        35
+      </td>
+      <td>
+        24
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 69%"></span>
+        </div>
+      </td>
+      <td>
+        68.57
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/channels/BehaviorChannel.scala.html">
+          BehaviorChannel
+        </a>
+      </td>
+      <td>
+        BehaviorChannel.scala
+      </td>
+      <td>
+        83
+      </td>
+      <td>
+        7
+      </td>
+      <td>
+        40
+      </td>
+      <td>
+        27
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 68%"></span>
+        </div>
+      </td>
+      <td>
+        67.50
+        %
+      </td>
+      <td>
+        8
+      </td>
+      <td>
+        3
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 38%"></span>
+        </div>
+      </td>
+      <td>
+        37.50
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/subjects/BehaviorSubject.scala.html">
+          BehaviorSubject
+        </a>
+      </td>
+      <td>
+        BehaviorSubject.scala
+      </td>
+      <td>
+        194
+      </td>
+      <td>
+        8
+      </td>
+      <td>
+        123
+      </td>
+      <td>
+        83
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 67%"></span>
+        </div>
+      </td>
+      <td>
+        67.48
+        %
+      </td>
+      <td>
+        30
+      </td>
+      <td>
+        15
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 50%"></span>
+        </div>
+      </td>
+      <td>
+        50.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/cancelables/BooleanCancelable.scala.html">
+          BooleanCancelable
+        </a>
+      </td>
+      <td>
+        BooleanCancelable.scala
+      </td>
+      <td>
+        63
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        19
+      </td>
+      <td>
+        18
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 95%"></span>
+        </div>
+      </td>
+      <td>
+        94.74
+        %
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/BufferPolicy.scala.html">
+          BufferPolicy
+        </a>
+      </td>
+      <td>
+        BufferPolicy.scala
+      </td>
+      <td>
+        118
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/observers/BufferedSubscriber.scala.html">
+          BufferedSubscriber
+        </a>
+      </td>
+      <td>
+        BufferedSubscriber.scala
+      </td>
+      <td>
+        81
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        5
+      </td>
+      <td>
+        5
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/Ack.scala.html">
+          Cancel
+        </a>
+      </td>
+      <td>
+        Ack.scala
+      </td>
+      <td>
+        50
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/Cancelable.scala.html">
+          Cancelable
+        </a>
+      </td>
+      <td>
+        Cancelable.scala
+      </td>
+      <td>
+        62
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        14
+      </td>
+      <td>
+        12
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 86%"></span>
+        </div>
+      </td>
+      <td>
+        85.71
+        %
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 50%"></span>
+        </div>
+      </td>
+      <td>
+        50.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/cancelables/CompositeCancelable.scala.html">
+          CompositeCancelable
+        </a>
+      </td>
+      <td>
+        CompositeCancelable.scala
+      </td>
+      <td>
+        82
+      </td>
+      <td>
+        3
+      </td>
+      <td>
+        7
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 29%"></span>
+        </div>
+      </td>
+      <td>
+        28.57
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/cancelables/CompositeCancelable.scala.html">
+          CompositeCancelableImpl
+        </a>
+      </td>
+      <td>
+        CompositeCancelable.scala
+      </td>
+      <td>
+        127
+      </td>
+      <td>
+        5
+      </td>
+      <td>
+        48
+      </td>
+      <td>
+        29
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 60%"></span>
+        </div>
+      </td>
+      <td>
+        60.42
+        %
+      </td>
+      <td>
+        12
+      </td>
+      <td>
+        5
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 42%"></span>
+        </div>
+      </td>
+      <td>
+        41.67
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/collection/mutable/ConcurrentQueue.scala.html">
+          ConcurrentQueue
+        </a>
+      </td>
+      <td>
+        ConcurrentQueue.scala
+      </td>
+      <td>
+        148
+      </td>
+      <td>
+        13
+      </td>
+      <td>
+        24
+      </td>
+      <td>
+        12
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 50%"></span>
+        </div>
+      </td>
+      <td>
+        50.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/ConnectableObservable.scala.html">
+          ConnectableObservable
+        </a>
+      </td>
+      <td>
+        ConnectableObservable.scala
+      </td>
+      <td>
+        56
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        3
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 0%"></span>
+        </div>
+      </td>
+      <td>
+        0.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 0%"></span>
+        </div>
+      </td>
+      <td>
+        0.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/observers/ConnectableSubscriber.scala.html">
+          ConnectableSubscriber
+        </a>
+      </td>
+      <td>
+        ConnectableSubscriber.scala
+      </td>
+      <td>
+        237
+      </td>
+      <td>
+        9
+      </td>
+      <td>
+        130
+      </td>
+      <td>
+        97
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 75%"></span>
+        </div>
+      </td>
+      <td>
+        74.62
+        %
+      </td>
+      <td>
+        30
+      </td>
+      <td>
+        16
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 53%"></span>
+        </div>
+      </td>
+      <td>
+        53.33
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/Ack.scala.html">
+          Continue
+        </a>
+      </td>
+      <td>
+        Ack.scala
+      </td>
+      <td>
+        39
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/BufferPolicy.scala.html">
+          DropIncoming
+        </a>
+      </td>
+      <td>
+        BufferPolicy.scala
+      </td>
+      <td>
+        94
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        3
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 67%"></span>
+        </div>
+      </td>
+      <td>
+        66.67
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/observers/DropIncomingBufferedSubscriber.scala.html">
+          DropIncomingBufferedSubscriber
+        </a>
+      </td>
+      <td>
+        DropIncomingBufferedSubscriber.scala
+      </td>
+      <td>
+        237
+      </td>
+      <td>
+        10
+      </td>
+      <td>
+        150
+      </td>
+      <td>
+        115
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 77%"></span>
+        </div>
+      </td>
+      <td>
+        76.67
+        %
+      </td>
+      <td>
+        31
+      </td>
+      <td>
+        27
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 87%"></span>
+        </div>
+      </td>
+      <td>
+        87.10
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/BufferPolicy.scala.html">
+          DropIncomingThenSignal
+        </a>
+      </td>
+      <td>
+        BufferPolicy.scala
+      </td>
+      <td>
+        111
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        3
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 67%"></span>
+        </div>
+      </td>
+      <td>
+        66.67
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/internals/package.scala.html">
+          FutureAckExtensions
+        </a>
+      </td>
+      <td>
+        package.scala
+      </td>
+      <td>
+        330
+      </td>
+      <td>
+        10
+      </td>
+      <td>
+        123
+      </td>
+      <td>
+        65
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 53%"></span>
+        </div>
+      </td>
+      <td>
+        52.85
+        %
+      </td>
+      <td>
+        11
+      </td>
+      <td>
+        6
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 55%"></span>
+        </div>
+      </td>
+      <td>
+        54.55
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/extensions.scala.html">
+          FutureCompanionExtensions
+        </a>
+      </td>
+      <td>
+        extensions.scala
+      </td>
+      <td>
+        72
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/extensions.scala.html">
+          FutureExtensions
+        </a>
+      </td>
+      <td>
+        extensions.scala
+      </td>
+      <td>
+        60
+      </td>
+      <td>
+        3
+      </td>
+      <td>
+        3
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 67%"></span>
+        </div>
+      </td>
+      <td>
+        66.67
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/FutureUtils.scala.html">
+          FutureUtils
+        </a>
+      </td>
+      <td>
+        FutureUtils.scala
+      </td>
+      <td>
+        99
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        25
+      </td>
+      <td>
+        17
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 68%"></span>
+        </div>
+      </td>
+      <td>
+        68.00
+        %
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 0%"></span>
+        </div>
+      </td>
+      <td>
+        0.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/Subscriber.scala.html">
+          Implementation
+        </a>
+      </td>
+      <td>
+        Subscriber.scala
+      </td>
+      <td>
+        62
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        30
+      </td>
+      <td>
+        12
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 40%"></span>
+        </div>
+      </td>
+      <td>
+        40.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/Implicits.scala.html">
+          Implicits
+        </a>
+      </td>
+      <td>
+        Implicits.scala
+      </td>
+      <td>
+        78
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicBuilder.scala.html">
+          Level1
+        </a>
+      </td>
+      <td>
+        AtomicBuilder.scala
+      </td>
+      <td>
+        207
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/padded/base.scala.html">
+          Level2
+        </a>
+      </td>
+      <td>
+        base.scala
+      </td>
+      <td>
+        215
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/AtomicBuilder.scala.html">
+          Level3
+        </a>
+      </td>
+      <td>
+        AtomicBuilder.scala
+      </td>
+      <td>
+        265
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        32
+      </td>
+      <td>
+        32
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/cancelables/MultiAssignmentCancelable.scala.html">
+          MultiAssignmentCancelable
+        </a>
+      </td>
+      <td>
+        MultiAssignmentCancelable.scala
+      </td>
+      <td>
+        86
+      </td>
+      <td>
+        6
+      </td>
+      <td>
+        29
+      </td>
+      <td>
+        25
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 86%"></span>
+        </div>
+      </td>
+      <td>
+        86.21
+        %
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 50%"></span>
+        </div>
+      </td>
+      <td>
+        50.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/Observable.scala.html">
+          Observable
+        </a>
+      </td>
+      <td>
+        Observable.scala
+      </td>
+      <td>
+        1544
+      </td>
+      <td>
+        112
+      </td>
+      <td>
+        189
+      </td>
+      <td>
+        125
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 66%"></span>
+        </div>
+      </td>
+      <td>
+        66.14
+        %
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/Observer.scala.html">
+          Observer
+        </a>
+      </td>
+      <td>
+        Observer.scala
+      </td>
+      <td>
+        128
+      </td>
+      <td>
+        6
+      </td>
+      <td>
+        42
+      </td>
+      <td>
+        3
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 7%"></span>
+        </div>
+      </td>
+      <td>
+        7.14
+        %
+      </td>
+      <td>
+        9
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 0%"></span>
+        </div>
+      </td>
+      <td>
+        0.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/internals/ObserverState.scala.html">
+          ObserverState
+        </a>
+      </td>
+      <td>
+        ObserverState.scala
+      </td>
+      <td>
+        24
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/BufferPolicy.scala.html">
+          OverflowTriggering
+        </a>
+      </td>
+      <td>
+        BufferPolicy.scala
+      </td>
+      <td>
+        65
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        3
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 67%"></span>
+        </div>
+      </td>
+      <td>
+        66.67
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/padded/base.scala.html">
+          PaddedJavaAtomicBoolean
+        </a>
+      </td>
+      <td>
+        base.scala
+      </td>
+      <td>
+        67
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        30
+      </td>
+      <td>
+        15
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 50%"></span>
+        </div>
+      </td>
+      <td>
+        50.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/padded/base.scala.html">
+          PaddedJavaAtomicInteger
+        </a>
+      </td>
+      <td>
+        base.scala
+      </td>
+      <td>
+        53
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        30
+      </td>
+      <td>
+        15
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 50%"></span>
+        </div>
+      </td>
+      <td>
+        50.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/padded/base.scala.html">
+          PaddedJavaAtomicLong
+        </a>
+      </td>
+      <td>
+        base.scala
+      </td>
+      <td>
+        39
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        30
+      </td>
+      <td>
+        15
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 50%"></span>
+        </div>
+      </td>
+      <td>
+        50.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/padded/base.scala.html">
+          PaddedJavaAtomicReference
+        </a>
+      </td>
+      <td>
+        base.scala
+      </td>
+      <td>
+        81
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        30
+      </td>
+      <td>
+        15
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 50%"></span>
+        </div>
+      </td>
+      <td>
+        50.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/internals/PromiseCounter.scala.html">
+          PromiseCounter
+        </a>
+      </td>
+      <td>
+        PromiseCounter.scala
+      </td>
+      <td>
+        46
+      </td>
+      <td>
+        5
+      </td>
+      <td>
+        19
+      </td>
+      <td>
+        17
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 89%"></span>
+        </div>
+      </td>
+      <td>
+        89.47
+        %
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/channels/PublishChannel.scala.html">
+          PublishChannel
+        </a>
+      </td>
+      <td>
+        PublishChannel.scala
+      </td>
+      <td>
+        37
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/subjects/PublishSubject.scala.html">
+          PublishSubject
+        </a>
+      </td>
+      <td>
+        PublishSubject.scala
+      </td>
+      <td>
+        132
+      </td>
+      <td>
+        9
+      </td>
+      <td>
+        82
+      </td>
+      <td>
+        78
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 95%"></span>
+        </div>
+      </td>
+      <td>
+        95.12
+        %
+      </td>
+      <td>
+        20
+      </td>
+      <td>
+        18
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 90%"></span>
+        </div>
+      </td>
+      <td>
+        90.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/cancelables/RefCountCancelable.scala.html">
+          RefCountCancelable
+        </a>
+      </td>
+      <td>
+        RefCountCancelable.scala
+      </td>
+      <td>
+        72
+      </td>
+      <td>
+        5
+      </td>
+      <td>
+        47
+      </td>
+      <td>
+        39
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 83%"></span>
+        </div>
+      </td>
+      <td>
+        82.98
+        %
+      </td>
+      <td>
+        12
+      </td>
+      <td>
+        8
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 67%"></span>
+        </div>
+      </td>
+      <td>
+        66.67
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/schedulers/ReferenceScheduler.scala.html">
+          ReferenceScheduler
+        </a>
+      </td>
+      <td>
+        ReferenceScheduler.scala
+      </td>
+      <td>
+        143
+      </td>
+      <td>
+        5
+      </td>
+      <td>
+        62
+      </td>
+      <td>
+        10
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 16%"></span>
+        </div>
+      </td>
+      <td>
+        16.13
+        %
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 0%"></span>
+        </div>
+      </td>
+      <td>
+        0.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/channels/ReplayChannel.scala.html">
+          ReplayChannel
+        </a>
+      </td>
+      <td>
+        ReplayChannel.scala
+      </td>
+      <td>
+        39
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/subjects/ReplaySubject.scala.html">
+          ReplaySubject
+        </a>
+      </td>
+      <td>
+        ReplaySubject.scala
+      </td>
+      <td>
+        203
+      </td>
+      <td>
+        8
+      </td>
+      <td>
+        129
+      </td>
+      <td>
+        103
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 80%"></span>
+        </div>
+      </td>
+      <td>
+        79.84
+        %
+      </td>
+      <td>
+        28
+      </td>
+      <td>
+        18
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 64%"></span>
+        </div>
+      </td>
+      <td>
+        64.29
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/streams/SubscriberAsObserver.scala.html">
+          RequestsQueue
+        </a>
+      </td>
+      <td>
+        SubscriberAsObserver.scala
+      </td>
+      <td>
+        177
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        66
+      </td>
+      <td>
+        29
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 44%"></span>
+        </div>
+      </td>
+      <td>
+        43.94
+        %
+      </td>
+      <td>
+        14
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 29%"></span>
+        </div>
+      </td>
+      <td>
+        28.57
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/observers/SafeObserver.scala.html">
+          SafeObserver
+        </a>
+      </td>
+      <td>
+        SafeObserver.scala
+      </td>
+      <td>
+        139
+      </td>
+      <td>
+        6
+      </td>
+      <td>
+        54
+      </td>
+      <td>
+        50
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 93%"></span>
+        </div>
+      </td>
+      <td>
+        92.59
+        %
+      </td>
+      <td>
+        10
+      </td>
+      <td>
+        10
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/sample.scala.html">
+          SampleObserver
+        </a>
+      </td>
+      <td>
+        sample.scala
+      </td>
+      <td>
+        138
+      </td>
+      <td>
+        6
+      </td>
+      <td>
+        47
+      </td>
+      <td>
+        47
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        8
+      </td>
+      <td>
+        8
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/schedulers/SchedulerCompanion.scala.html">
+          SchedulerCompanion
+        </a>
+      </td>
+      <td>
+        SchedulerCompanion.scala
+      </td>
+      <td>
+        189
+      </td>
+      <td>
+        7
+      </td>
+      <td>
+        44
+      </td>
+      <td>
+        5
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 11%"></span>
+        </div>
+      </td>
+      <td>
+        11.36
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/cancelables/SingleAssignmentCancelable.scala.html">
+          SingleAssignmentCancelable
+        </a>
+      </td>
+      <td>
+        SingleAssignmentCancelable.scala
+      </td>
+      <td>
+        106
+      </td>
+      <td>
+        6
+      </td>
+      <td>
+        40
+      </td>
+      <td>
+        31
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 78%"></span>
+        </div>
+      </td>
+      <td>
+        77.50
+        %
+      </td>
+      <td>
+        8
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 50%"></span>
+        </div>
+      </td>
+      <td>
+        50.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/streams/SingleAssignmentSubscription.scala.html">
+          SingleAssignmentSubscription
+        </a>
+      </td>
+      <td>
+        SingleAssignmentSubscription.scala
+      </td>
+      <td>
+        121
+      </td>
+      <td>
+        6
+      </td>
+      <td>
+        62
+      </td>
+      <td>
+        43
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 69%"></span>
+        </div>
+      </td>
+      <td>
+        69.35
+        %
+      </td>
+      <td>
+        16
+      </td>
+      <td>
+        8
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 50%"></span>
+        </div>
+      </td>
+      <td>
+        50.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/schedulers/TestScheduler.scala.html">
+          State
+        </a>
+      </td>
+      <td>
+        TestScheduler.scala
+      </td>
+      <td>
+        210
+      </td>
+      <td>
+        3
+      </td>
+      <td>
+        30
+      </td>
+      <td>
+        28
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 93%"></span>
+        </div>
+      </td>
+      <td>
+        93.33
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/channels/SubjectChannel.scala.html">
+          SubjectChannel
+        </a>
+      </td>
+      <td>
+        SubjectChannel.scala
+      </td>
+      <td>
+        56
+      </td>
+      <td>
+        6
+      </td>
+      <td>
+        10
+      </td>
+      <td>
+        9
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 90%"></span>
+        </div>
+      </td>
+      <td>
+        90.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/Subscriber.scala.html">
+          Subscriber
+        </a>
+      </td>
+      <td>
+        Subscriber.scala
+      </td>
+      <td>
+        44
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        5
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 20%"></span>
+        </div>
+      </td>
+      <td>
+        20.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/streams/SubscriberAsObserver.scala.html">
+          SubscriberAsObserver
+        </a>
+      </td>
+      <td>
+        SubscriberAsObserver.scala
+      </td>
+      <td>
+        97
+      </td>
+      <td>
+        7
+      </td>
+      <td>
+        35
+      </td>
+      <td>
+        33
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 94%"></span>
+        </div>
+      </td>
+      <td>
+        94.29
+        %
+      </td>
+      <td>
+        6
+      </td>
+      <td>
+        6
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/streams/SubscriberAsReactiveSubscriber.scala.html">
+          SubscriberAsReactiveSubscriber
+        </a>
+      </td>
+      <td>
+        SubscriberAsReactiveSubscriber.scala
+      </td>
+      <td>
+        127
+      </td>
+      <td>
+        6
+      </td>
+      <td>
+        15
+      </td>
+      <td>
+        11
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 73%"></span>
+        </div>
+      </td>
+      <td>
+        73.33
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/observers/SynchronousBufferedSubscriber.scala.html">
+          SynchronousBufferedSubscriber
+        </a>
+      </td>
+      <td>
+        SynchronousBufferedSubscriber.scala
+      </td>
+      <td>
+        222
+      </td>
+      <td>
+        10
+      </td>
+      <td>
+        143
+      </td>
+      <td>
+        117
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 82%"></span>
+        </div>
+      </td>
+      <td>
+        81.82
+        %
+      </td>
+      <td>
+        31
+      </td>
+      <td>
+        29
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 94%"></span>
+        </div>
+      </td>
+      <td>
+        93.55
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/observers/SynchronousSubscriber.scala.html">
+          SynchronousSubscriber
+        </a>
+      </td>
+      <td>
+        SynchronousSubscriber.scala
+      </td>
+      <td>
+        39
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        5
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 0%"></span>
+        </div>
+      </td>
+      <td>
+        0.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 0%"></span>
+        </div>
+      </td>
+      <td>
+        0.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/streams/SubscriberAsReactiveSubscriber.scala.html">
+          SynchronousSubscriberAsReactiveSubscriber
+        </a>
+      </td>
+      <td>
+        SubscriberAsReactiveSubscriber.scala
+      </td>
+      <td>
+        251
+      </td>
+      <td>
+        6
+      </td>
+      <td>
+        46
+      </td>
+      <td>
+        33
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 72%"></span>
+        </div>
+      </td>
+      <td>
+        71.74
+        %
+      </td>
+      <td>
+        12
+      </td>
+      <td>
+        7
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 58%"></span>
+        </div>
+      </td>
+      <td>
+        58.33
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/schedulers/TestScheduler.scala.html">
+          Task
+        </a>
+      </td>
+      <td>
+        TestScheduler.scala
+      </td>
+      <td>
+        168
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        9
+      </td>
+      <td>
+        9
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/schedulers/TestScheduler.scala.html">
+          TestScheduler
+        </a>
+      </td>
+      <td>
+        TestScheduler.scala
+      </td>
+      <td>
+        149
+      </td>
+      <td>
+        10
+      </td>
+      <td>
+        98
+      </td>
+      <td>
+        88
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 90%"></span>
+        </div>
+      </td>
+      <td>
+        89.80
+        %
+      </td>
+      <td>
+        8
+      </td>
+      <td>
+        5
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 63%"></span>
+        </div>
+      </td>
+      <td>
+        62.50
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/UncaughtExceptionReporter.scala.html">
+          UncaughtExceptionReporter
+        </a>
+      </td>
+      <td>
+        UncaughtExceptionReporter.scala
+      </td>
+      <td>
+        55
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 50%"></span>
+        </div>
+      </td>
+      <td>
+        50.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/observers/WhileBusyBufferSubscriber.scala.html">
+          WhileBusyBufferSubscriber
+        </a>
+      </td>
+      <td>
+        WhileBusyBufferSubscriber.scala
+      </td>
+      <td>
+        248
+      </td>
+      <td>
+        9
+      </td>
+      <td>
+        171
+      </td>
+      <td>
+        107
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 63%"></span>
+        </div>
+      </td>
+      <td>
+        62.57
+        %
+      </td>
+      <td>
+        35
+      </td>
+      <td>
+        22
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 63%"></span>
+        </div>
+      </td>
+      <td>
+        62.86
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/builders/amb.scala.html">
+          amb
+        </a>
+      </td>
+      <td>
+        amb.scala
+      </td>
+      <td>
+        65
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        16
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 0%"></span>
+        </div>
+      </td>
+      <td>
+        0.00
+        %
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 0%"></span>
+        </div>
+      </td>
+      <td>
+        0.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/buffer.scala.html">
+          buffer
+        </a>
+      </td>
+      <td>
+        buffer.scala
+      </td>
+      <td>
+        137
+      </td>
+      <td>
+        3
+      </td>
+      <td>
+        20
+      </td>
+      <td>
+        20
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/collect.scala.html">
+          collect
+        </a>
+      </td>
+      <td>
+        collect.scala
+      </td>
+      <td>
+        33
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/combineLatest.scala.html">
+          combineLatest
+        </a>
+      </td>
+      <td>
+        combineLatest.scala
+      </td>
+      <td>
+        104
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        48
+      </td>
+      <td>
+        46
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 96%"></span>
+        </div>
+      </td>
+      <td>
+        95.83
+        %
+      </td>
+      <td>
+        10
+      </td>
+      <td>
+        9
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 90%"></span>
+        </div>
+      </td>
+      <td>
+        90.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/debounce.scala.html">
+          debounce
+        </a>
+      </td>
+      <td>
+        debounce.scala
+      </td>
+      <td>
+        40
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        5
+      </td>
+      <td>
+        5
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/debug.scala.html">
+          debug
+        </a>
+      </td>
+      <td>
+        debug.scala
+      </td>
+      <td>
+        38
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/delaySubscription.scala.html">
+          delaySubscription
+        </a>
+      </td>
+      <td>
+        delaySubscription.scala
+      </td>
+      <td>
+        54
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        13
+      </td>
+      <td>
+        13
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/distinct.scala.html">
+          distinct
+        </a>
+      </td>
+      <td>
+        distinct.scala
+      </td>
+      <td>
+        128
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        16
+      </td>
+      <td>
+        16
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/doWork.scala.html">
+          doWork
+        </a>
+      </td>
+      <td>
+        doWork.scala
+      </td>
+      <td>
+        158
+      </td>
+      <td>
+        5
+      </td>
+      <td>
+        21
+      </td>
+      <td>
+        21
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/drop.scala.html">
+          drop
+        </a>
+      </td>
+      <td>
+        drop.scala
+      </td>
+      <td>
+        144
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        16
+      </td>
+      <td>
+        16
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/filter.scala.html">
+          filter
+        </a>
+      </td>
+      <td>
+        filter.scala
+      </td>
+      <td>
+        33
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/flatScan.scala.html">
+          flatScan
+        </a>
+      </td>
+      <td>
+        flatScan.scala
+      </td>
+      <td>
+        105
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        8
+      </td>
+      <td>
+        8
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/flatten.scala.html">
+          flatten
+        </a>
+      </td>
+      <td>
+        flatten.scala
+      </td>
+      <td>
+        111
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        9
+      </td>
+      <td>
+        9
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/foldLeft.scala.html">
+          foldLeft
+        </a>
+      </td>
+      <td>
+        foldLeft.scala
+      </td>
+      <td>
+        33
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/builders/from.scala.html">
+          from
+        </a>
+      </td>
+      <td>
+        from.scala
+      </td>
+      <td>
+        132
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        47
+      </td>
+      <td>
+        47
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        10
+      </td>
+      <td>
+        10
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/builders/interval.scala.html">
+          interval
+        </a>
+      </td>
+      <td>
+        interval.scala
+      </td>
+      <td>
+        94
+      </td>
+      <td>
+        3
+      </td>
+      <td>
+        42
+      </td>
+      <td>
+        40
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 95%"></span>
+        </div>
+      </td>
+      <td>
+        95.24
+        %
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 50%"></span>
+        </div>
+      </td>
+      <td>
+        50.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/map.scala.html">
+          map
+        </a>
+      </td>
+      <td>
+        map.scala
+      </td>
+      <td>
+        33
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/materialize.scala.html">
+          materialize
+        </a>
+      </td>
+      <td>
+        materialize.scala
+      </td>
+      <td>
+        34
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/math.scala.html">
+          math
+        </a>
+      </td>
+      <td>
+        math.scala
+      </td>
+      <td>
+        227
+      </td>
+      <td>
+        6
+      </td>
+      <td>
+        24
+      </td>
+      <td>
+        24
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/misc.scala.html">
+          misc
+        </a>
+      </td>
+      <td>
+        misc.scala
+      </td>
+      <td>
+        117
+      </td>
+      <td>
+        5
+      </td>
+      <td>
+        20
+      </td>
+      <td>
+        20
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/onError.scala.html">
+          onError
+        </a>
+      </td>
+      <td>
+        onError.scala
+      </td>
+      <td>
+        185
+      </td>
+      <td>
+        3
+      </td>
+      <td>
+        24
+      </td>
+      <td>
+        24
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/concurrent/atomic/package.scala.html">
+          package
+        </a>
+      </td>
+      <td>
+        package.scala
+      </td>
+      <td>
+        76
+      </td>
+      <td>
+        3
+      </td>
+      <td>
+        11
+      </td>
+      <td>
+        8
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 73%"></span>
+        </div>
+      </td>
+      <td>
+        72.73
+        %
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        3
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 75%"></span>
+        </div>
+      </td>
+      <td>
+        75.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/builders/range.scala.html">
+          range
+        </a>
+      </td>
+      <td>
+        range.scala
+      </td>
+      <td>
+        77
+      </td>
+      <td>
+        5
+      </td>
+      <td>
+        28
+      </td>
+      <td>
+        28
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/reduce.scala.html">
+          reduce
+        </a>
+      </td>
+      <td>
+        reduce.scala
+      </td>
+      <td>
+        34
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/repeat.scala.html">
+          repeat
+        </a>
+      </td>
+      <td>
+        repeat.scala
+      </td>
+      <td>
+        52
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        21
+      </td>
+      <td>
+        17
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 81%"></span>
+        </div>
+      </td>
+      <td>
+        80.95
+        %
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 50%"></span>
+        </div>
+      </td>
+      <td>
+        50.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/sample.scala.html">
+          sample
+        </a>
+      </td>
+      <td>
+        sample.scala
+      </td>
+      <td>
+        61
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        8
+      </td>
+      <td>
+        8
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/scan.scala.html">
+          scan
+        </a>
+      </td>
+      <td>
+        scan.scala
+      </td>
+      <td>
+        33
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        4
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/take.scala.html">
+          take
+        </a>
+      </td>
+      <td>
+        take.scala
+      </td>
+      <td>
+        233
+      </td>
+      <td>
+        5
+      </td>
+      <td>
+        20
+      </td>
+      <td>
+        20
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/timeout.scala.html">
+          timeout
+        </a>
+      </td>
+      <td>
+        timeout.scala
+      </td>
+      <td>
+        39
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        7
+      </td>
+      <td>
+        7
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/builders/timer.scala.html">
+          timer
+        </a>
+      </td>
+      <td>
+        timer.scala
+      </td>
+      <td>
+        62
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        24
+      </td>
+      <td>
+        22
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 92%"></span>
+        </div>
+      </td>
+      <td>
+        91.67
+        %
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        1
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 50%"></span>
+        </div>
+      </td>
+      <td>
+        50.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/builders/unit.scala.html">
+          unit
+        </a>
+      </td>
+      <td>
+        unit.scala
+      </td>
+      <td>
+        61
+      </td>
+      <td>
+        5
+      </td>
+      <td>
+        18
+      </td>
+      <td>
+        18
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/whileBusy.scala.html">
+          whileBusy
+        </a>
+      </td>
+      <td>
+        whileBusy.scala
+      </td>
+      <td>
+        187
+      </td>
+      <td>
+        3
+      </td>
+      <td>
+        13
+      </td>
+      <td>
+        13
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr><tr>
+      <td>
+        <a href="monifu/reactive/operators/zip.scala.html">
+          zip
+        </a>
+      </td>
+      <td>
+        zip.scala
+      </td>
+      <td>
+        92
+      </td>
+      <td>
+        2
+      </td>
+      <td>
+        11
+      </td>
+      <td>
+        11
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        0
+      </td>
+      <td>
+        <div class="meter">
+          <span style="width: 100%"></span>
+        </div>
+      </td>
+      <td>
+        100.00
+        %
+      </td>
+    </tr>
+      </tbody>
+    </table>
+        </div>
+      </div>
+    </body>
+    </html>

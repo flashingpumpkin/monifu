@@ -1,0 +1,3032 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          /Users/alex/Projects/org.monifu/monifu/shared/src/main/scala/monifu/reactive/internals/package.scala.html
+        </title>
+        <link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css"/>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+        <script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script>
+        <script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.18.3/addons/pager/jquery.tablesorter.pager.min.js"></script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''>
+</span>17 <span style=''>package monifu.reactive
+</span>18 <span style=''>
+</span>19 <span style=''>import language.implicitConversions
+</span>20 <span style=''>import monifu.concurrent.{Cancelable, Scheduler}
+</span>21 <span style=''>import monifu.reactive.Ack.{Cancel, Continue}
+</span>22 <span style=''>import scala.concurrent.{ExecutionContext, Future, Promise}
+</span>23 <span style=''>import scala.util.control.NonFatal
+</span>24 <span style=''>import scala.util.{Success, Failure, Try}
+</span>25 <span style=''>
+</span>26 <span style=''>
+</span>27 <span style=''>package object internals {
+</span>28 <span style=''>  /**
+</span>29 <span style=''>   * Internal extensions to Future[Ack] used in the implementation of Observable.
+</span>30 <span style=''>   */
+</span>31 <span style=''>  protected[monifu] implicit class FutureAckExtensions(val source: Future[Ack]) extends AnyVal {
+</span>32 <span style=''>    /**
+</span>33 <span style=''>     * If the result of this `Future` is a `Continue`, then completes
+</span>34 <span style=''>     * the stream with an `onComplete`.
+</span>35 <span style=''>     *
+</span>36 <span style=''>     * Note that it doesn't do exception handling - if the future is a failure
+</span>37 <span style=''>     * then the behavior is undefined.
+</span>38 <span style=''>     */
+</span>39 <span style=''>    def onContinueSignalComplete[T](observer: Observer[T])(implicit s: Scheduler): Unit =
+</span>40 <span style=''>      </span><span style='background: #AEF1AE'>source</span><span style=''> match {
+</span>41 <span style=''>        case sync if </span><span style='background: #AEF1AE'>sync.isCompleted</span><span style=''> =>
+</span>42 <span style=''>          </span><span style='background: #AEF1AE'>sync.value.get</span><span style=''> match {
+</span>43 <span style=''>            case Continue.IsSuccess =>
+</span>44 <span style=''>              </span><span style='background: #AEF1AE'>observer.onComplete()</span><span style=''>
+</span>45 <span style=''>            case _ =>
+</span>46 <span style=''>              </span><span style='background: #AEF1AE'>()</span><span style=''> // do nothing
+</span>47 <span style=''>          }
+</span>48 <span style=''>
+</span>49 <span style=''>        case async =>
+</span>50 <span style=''>          </span><span style='background: #AEF1AE'>async.onComplete {
+</span>51 <span style=''></span><span style='background: #AEF1AE'>            case Continue.IsSuccess =>
+</span>52 <span style=''></span><span style='background: #AEF1AE'>              observer.onComplete()
+</span>53 <span style=''></span><span style='background: #AEF1AE'>            case _ =>
+</span>54 <span style=''></span><span style='background: #AEF1AE'>              () // do nothing
+</span>55 <span style=''></span><span style='background: #AEF1AE'>          }</span><span style=''>
+</span>56 <span style=''>      }
+</span>57 <span style=''>
+</span>58 <span style=''>    /**
+</span>59 <span style=''>     * If the result of this `Future` is a `Continue`, then completes
+</span>60 <span style=''>     * the stream with an `onError`.
+</span>61 <span style=''>     *
+</span>62 <span style=''>     * Note that it doesn't do exception handling - if the future is a failure
+</span>63 <span style=''>     * then the behavior is undefined.
+</span>64 <span style=''>     */
+</span>65 <span style=''>    def onContinueSignalError[T](observer: Observer[T], ex: Throwable)(implicit s: Scheduler): Unit =
+</span>66 <span style=''>      </span><span style='background: #AEF1AE'>source</span><span style=''> match {
+</span>67 <span style=''>        case sync if </span><span style='background: #AEF1AE'>sync.isCompleted</span><span style=''> =>
+</span>68 <span style=''>          </span><span style='background: #AEF1AE'>sync.value.get</span><span style=''> match {
+</span>69 <span style=''>            case Continue.IsSuccess =>
+</span>70 <span style=''>              </span><span style='background: #AEF1AE'>observer.onError(ex)</span><span style=''>
+</span>71 <span style=''>            case _ =>
+</span>72 <span style=''>              </span><span style='background: #AEF1AE'>()</span><span style=''> // do nothing
+</span>73 <span style=''>          }
+</span>74 <span style=''>        case async =>
+</span>75 <span style=''>          </span><span style='background: #AEF1AE'>async.onComplete {
+</span>76 <span style=''></span><span style='background: #AEF1AE'>            case Continue.IsSuccess =>
+</span>77 <span style=''></span><span style='background: #AEF1AE'>              observer.onError(ex)
+</span>78 <span style=''></span><span style='background: #AEF1AE'>            case _ =>
+</span>79 <span style=''></span><span style='background: #AEF1AE'>              () // do nothing
+</span>80 <span style=''></span><span style='background: #AEF1AE'>          }</span><span style=''>
+</span>81 <span style=''>      }
+</span>82 <span style=''>
+</span>83 <span style=''>    /**
+</span>84 <span style=''>     * On Continue, triggers the execution of the given callback.
+</span>85 <span style=''>     */
+</span>86 <span style=''>    def onContinue(callback: => Unit)(implicit s: Scheduler): Unit =
+</span>87 <span style=''>      </span><span style='background: #AEF1AE'>source</span><span style=''> match {
+</span>88 <span style=''>        case sync if </span><span style='background: #AEF1AE'>sync.isCompleted</span><span style=''> =>
+</span>89 <span style=''>          if (</span><span style='background: #AEF1AE'>sync == Continue || (sync != Cancel && sync.value.get == Continue.IsSuccess)</span><span style=''>)
+</span>90 <span style=''>            </span><span style='background: #AEF1AE'>try callback catch {
+</span>91 <span style=''></span><span style='background: #AEF1AE'>              case NonFatal(ex) =>
+</span>92 <span style=''></span><span style='background: #AEF1AE'>                </span><span style='background: #F0ADAD'>s.reportFailure(ex)</span><span style='background: #AEF1AE'>
+</span>93 <span style=''></span><span style='background: #AEF1AE'>            }</span><span style=''>
+</span>94 <span style=''>
+</span>95 <span style=''>        case async =>
+</span>96 <span style=''>          </span><span style='background: #AEF1AE'>async.onComplete {
+</span>97 <span style=''></span><span style='background: #AEF1AE'>            case Continue.IsSuccess =>
+</span>98 <span style=''></span><span style='background: #AEF1AE'>              try callback catch {
+</span>99 <span style=''></span><span style='background: #AEF1AE'>                case NonFatal(ex) =>
+</span>100 <span style=''></span><span style='background: #AEF1AE'>                  s.reportFailure(ex)
+</span>101 <span style=''></span><span style='background: #AEF1AE'>              }
+</span>102 <span style=''></span><span style='background: #AEF1AE'>            case _ =>
+</span>103 <span style=''></span><span style='background: #AEF1AE'>              () // do nothing
+</span>104 <span style=''></span><span style='background: #AEF1AE'>          }</span><span style=''>
+</span>105 <span style=''>      }
+</span>106 <span style=''>
+</span>107 <span style=''>    /**
+</span>108 <span style=''>     * On Continue, triggers the execution of the given runnable.
+</span>109 <span style=''>     */
+</span>110 <span style=''>    def onContinue(r: Runnable)(implicit s: Scheduler): Unit = {
+</span>111 <span style=''>      </span><span style='background: #AEF1AE'>source</span><span style=''> match {
+</span>112 <span style=''>        case sync if </span><span style='background: #AEF1AE'>sync.isCompleted</span><span style=''> =>
+</span>113 <span style=''>          </span><span style='background: #AEF1AE'>sync.value.get</span><span style=''> match {
+</span>114 <span style=''>            case Continue.IsSuccess =>
+</span>115 <span style=''>              try </span><span style='background: #AEF1AE'>r.run()</span><span style=''> catch {
+</span>116 <span style=''>                case NonFatal(ex) =>
+</span>117 <span style=''>                  </span><span style='background: #F0ADAD'>s.reportFailure(ex)</span><span style=''>
+</span>118 <span style=''>              }
+</span>119 <span style=''>            case _ =>
+</span>120 <span style=''>              </span><span style='background: #AEF1AE'>()</span><span style=''> // do nothing
+</span>121 <span style=''>          }
+</span>122 <span style=''>
+</span>123 <span style=''>        case async =>
+</span>124 <span style=''>          </span><span style='background: #AEF1AE'>async.onComplete {
+</span>125 <span style=''></span><span style='background: #AEF1AE'>            case Continue.IsSuccess =>
+</span>126 <span style=''></span><span style='background: #AEF1AE'>              try r.run() catch {
+</span>127 <span style=''></span><span style='background: #AEF1AE'>                case NonFatal(ex) =>
+</span>128 <span style=''></span><span style='background: #AEF1AE'>                  s.reportFailure(ex)
+</span>129 <span style=''></span><span style='background: #AEF1AE'>              }
+</span>130 <span style=''></span><span style='background: #AEF1AE'>            case _ =>
+</span>131 <span style=''></span><span style='background: #AEF1AE'>              () // do nothing
+</span>132 <span style=''></span><span style='background: #AEF1AE'>          }</span><span style=''>
+</span>133 <span style=''>      }
+</span>134 <span style=''>    }
+</span>135 <span style=''>
+</span>136 <span style=''>    /**
+</span>137 <span style=''>     * Helper that triggers [[Cancelable.cancel]] on the given reference,
+</span>138 <span style=''>     * in case our source is a [[Cancel]] or a failure.
+</span>139 <span style=''>     */
+</span>140 <span style=''>    def ifCanceledDoCancel(cancelable: Cancelable)(implicit s: Scheduler): Future[Ack] = {
+</span>141 <span style=''>      </span><span style='background: #AEF1AE'>source</span><span style=''> match {
+</span>142 <span style=''>        case sync if </span><span style='background: #AEF1AE'>sync.isCompleted</span><span style=''> =>
+</span>143 <span style=''>          </span><span style='background: #AEF1AE'>sync.value.get</span><span style=''> match {
+</span>144 <span style=''>            case Cancel.IsSuccess | Failure(_) =>
+</span>145 <span style=''>              </span><span style='background: #AEF1AE'>cancelable.cancel()</span><span style=''>
+</span>146 <span style=''>              sync
+</span>147 <span style=''>            case _ =>
+</span>148 <span style=''>              sync
+</span>149 <span style=''>          }
+</span>150 <span style=''>
+</span>151 <span style=''>        case async =>
+</span>152 <span style=''>          </span><span style='background: #AEF1AE'>async.onComplete {
+</span>153 <span style=''></span><span style='background: #AEF1AE'>            case Cancel.IsSuccess | Failure(_) =>
+</span>154 <span style=''></span><span style='background: #AEF1AE'>              cancelable.cancel()
+</span>155 <span style=''></span><span style='background: #AEF1AE'>            case _ =>
+</span>156 <span style=''></span><span style='background: #AEF1AE'>              ()
+</span>157 <span style=''></span><span style='background: #AEF1AE'>          }</span><span style=''>
+</span>158 <span style=''>          async
+</span>159 <span style=''>      }
+</span>160 <span style=''>    }
+</span>161 <span style=''>
+</span>162 <span style=''>    /**
+</span>163 <span style=''>     * An implementation of `flatMap` that executes
+</span>164 <span style=''>     * synchronously if the source is already completed.
+</span>165 <span style=''>     */
+</span>166 <span style=''>    def fastFlatMap[R](f: Ack => Future[R])(implicit ec: ExecutionContext): Future[R] =
+</span>167 <span style=''>      </span><span style='background: #AEF1AE'>source.value</span><span style=''> match {
+</span>168 <span style=''>        case Some(sync) =>
+</span>169 <span style=''>          sync match {
+</span>170 <span style=''>            case Success(ack) =>
+</span>171 <span style=''>              try </span><span style='background: #AEF1AE'>f(ack)</span><span style=''> catch {
+</span>172 <span style=''>                case NonFatal(ex) =>
+</span>173 <span style=''>                  </span><span style='background: #F0ADAD'>Future.failed(ex)</span><span style=''>
+</span>174 <span style=''>              }
+</span>175 <span style=''>            case Failure(_) =>
+</span>176 <span style=''>              </span><span style='background: #AEF1AE'>source.asInstanceOf[Future[R]]</span><span style=''>
+</span>177 <span style=''>          }
+</span>178 <span style=''>        case None =>
+</span>179 <span style=''>          </span><span style='background: #AEF1AE'>source.flatMap(f)</span><span style=''>
+</span>180 <span style=''>      }
+</span>181 <span style=''>
+</span>182 <span style=''>    // -----
+</span>183 <span style=''>
+</span>184 <span style=''>    def onContinueStreamOnNext[T](observer: Observer[T], nextElem: T)(implicit s: Scheduler) =
+</span>185 <span style=''>      </span><span style='background: #AEF1AE'>source</span><span style=''> match {
+</span>186 <span style=''>        case sync if </span><span style='background: #AEF1AE'>sync.isCompleted</span><span style=''> =>
+</span>187 <span style=''>          if (</span><span style='background: #AEF1AE'>sync == Continue || sync.value.get == Continue.IsSuccess</span><span style=''>)
+</span>188 <span style=''>            </span><span style='background: #AEF1AE'>observer.onNext(nextElem)</span><span style=''>
+</span>189 <span style=''>          else
+</span>190 <span style=''>            </span><span style='background: #F0ADAD'>Cancel</span><span style=''>
+</span>191 <span style=''>        case async =>
+</span>192 <span style=''>          </span><span style='background: #F0ADAD'>async.flatMap {
+</span>193 <span style=''></span><span style='background: #F0ADAD'>            case Continue =>
+</span>194 <span style=''></span><span style='background: #F0ADAD'>              observer.onNext(nextElem)
+</span>195 <span style=''></span><span style='background: #F0ADAD'>            case Cancel =>
+</span>196 <span style=''></span><span style='background: #F0ADAD'>              Cancel
+</span>197 <span style=''></span><span style='background: #F0ADAD'>          }</span><span style=''>
+</span>198 <span style=''>      }
+</span>199 <span style=''>
+</span>200 <span style=''>    def onContinueCompleteWith[T](observer: Observer[T], lastElem: T)(implicit s: Scheduler): Unit =
+</span>201 <span style=''>      </span><span style='background: #F0ADAD'>source</span><span style=''> match {
+</span>202 <span style=''>        case sync if </span><span style='background: #F0ADAD'>sync.isCompleted</span><span style=''> =>
+</span>203 <span style=''>          if (</span><span style='background: #F0ADAD'>sync == Continue || ((sync != Cancel) && sync.value.get == Continue.IsSuccess)</span><span style=''>) {
+</span>204 <span style=''>            </span><span style='background: #F0ADAD'>try {
+</span>205 <span style=''></span><span style='background: #F0ADAD'>              observer.onNext(lastElem)
+</span>206 <span style=''></span><span style='background: #F0ADAD'>              observer.onComplete()
+</span>207 <span style=''></span><span style='background: #F0ADAD'>            }
+</span>208 <span style=''></span><span style='background: #F0ADAD'>            catch {
+</span>209 <span style=''></span><span style='background: #F0ADAD'>              case NonFatal(err) =>
+</span>210 <span style=''></span><span style='background: #F0ADAD'>                observer.onError(err)
+</span>211 <span style=''></span><span style='background: #F0ADAD'>            }</span><span style=''>
+</span>212 <span style=''>          }
+</span>213 <span style=''>        case async =>
+</span>214 <span style=''>          </span><span style='background: #F0ADAD'>async.onSuccess {
+</span>215 <span style=''></span><span style='background: #F0ADAD'>            case Continue =>
+</span>216 <span style=''></span><span style='background: #F0ADAD'>              try {
+</span>217 <span style=''></span><span style='background: #F0ADAD'>                observer.onNext(lastElem)
+</span>218 <span style=''></span><span style='background: #F0ADAD'>                observer.onComplete()
+</span>219 <span style=''></span><span style='background: #F0ADAD'>              }
+</span>220 <span style=''></span><span style='background: #F0ADAD'>              catch {
+</span>221 <span style=''></span><span style='background: #F0ADAD'>                case NonFatal(err) =>
+</span>222 <span style=''></span><span style='background: #F0ADAD'>                  observer.onError(err)
+</span>223 <span style=''></span><span style='background: #F0ADAD'>              }
+</span>224 <span style=''></span><span style='background: #F0ADAD'>          }</span><span style=''>
+</span>225 <span style=''>      }
+</span>226 <span style=''>
+</span>227 <span style=''>    /**
+</span>228 <span style=''>     * On Cancel, triggers Continue on the given Promise.
+</span>229 <span style=''>     */
+</span>230 <span style=''>    def onCancelContinue(p: Promise[Ack])(implicit s: Scheduler): Future[Ack] = {
+</span>231 <span style=''>      </span><span style='background: #F0ADAD'>source</span><span style=''> match {
+</span>232 <span style=''>        case Continue </span><span style='background: #F0ADAD'>=></span><span style=''> // do nothing
+</span>233 <span style=''>        case Cancel => </span><span style='background: #F0ADAD'>p.success(Continue)</span><span style=''>
+</span>234 <span style=''>
+</span>235 <span style=''>        case sync if </span><span style='background: #F0ADAD'>sync.isCompleted && sync.value.get.isSuccess</span><span style=''> =>
+</span>236 <span style=''>          </span><span style='background: #F0ADAD'>sync.value.get.get</span><span style=''> match {
+</span>237 <span style=''>            case Continue </span><span style='background: #F0ADAD'>=></span><span style=''> // do nothing
+</span>238 <span style=''>            case Cancel => </span><span style='background: #F0ADAD'>p.success(Continue)</span><span style=''>
+</span>239 <span style=''>          }
+</span>240 <span style=''>
+</span>241 <span style=''>        case async =>
+</span>242 <span style=''>          </span><span style='background: #F0ADAD'>async.onComplete {
+</span>243 <span style=''></span><span style='background: #F0ADAD'>            case Continue.IsSuccess => // nothing
+</span>244 <span style=''></span><span style='background: #F0ADAD'>            case Cancel.IsSuccess => p.success(Continue)
+</span>245 <span style=''></span><span style='background: #F0ADAD'>            case Failure(ex) => p.failure(ex)
+</span>246 <span style=''></span><span style='background: #F0ADAD'>            case other =>
+</span>247 <span style=''></span><span style='background: #F0ADAD'>              // branch not necessary, but Scala's compiler emits warnings if missing
+</span>248 <span style=''></span><span style='background: #F0ADAD'>              s.reportFailure(new MatchError(other.toString))
+</span>249 <span style=''></span><span style='background: #F0ADAD'>          }</span><span style=''>
+</span>250 <span style=''>      }
+</span>251 <span style=''>      </span><span style='background: #F0ADAD'>source</span><span style=''>
+</span>252 <span style=''>    }
+</span>253 <span style=''>
+</span>254 <span style=''>    /**
+</span>255 <span style=''>     * On Cancel, try to trigger Cancel on the given Promise.
+</span>256 <span style=''>     */
+</span>257 <span style=''>    def ifCancelTryCanceling(p: Promise[Ack])(implicit s: Scheduler): Future[Ack] = {
+</span>258 <span style=''>      </span><span style='background: #AEF1AE'>source</span><span style=''> match {
+</span>259 <span style=''>        case Continue </span><span style='background: #AEF1AE'>=></span><span style=''> // do nothing
+</span>260 <span style=''>        case Cancel => </span><span style='background: #AEF1AE'>p.trySuccess(Cancel)</span><span style=''>
+</span>261 <span style=''>
+</span>262 <span style=''>        case sync if </span><span style='background: #AEF1AE'>sync.isCompleted</span><span style=''> =>
+</span>263 <span style=''>          </span><span style='background: #AEF1AE'>sync.value.get</span><span style=''> match {
+</span>264 <span style=''>            case Continue.IsSuccess </span><span style='background: #AEF1AE'>=></span><span style=''> // do nothing
+</span>265 <span style=''>            case Cancel.IsSuccess => </span><span style='background: #F0ADAD'>p.trySuccess(Cancel)</span><span style=''>
+</span>266 <span style=''>            case Failure(ex) => </span><span style='background: #F0ADAD'>p.tryFailure(ex)</span><span style=''>
+</span>267 <span style=''>            case other =>
+</span>268 <span style=''>              // branch not necessary, but Scala's compiler emits warnings if missing
+</span>269 <span style=''>              </span><span style='background: #F0ADAD'>s.reportFailure(new MatchError(other.toString))</span><span style=''>
+</span>270 <span style=''>          }
+</span>271 <span style=''>
+</span>272 <span style=''>        case async =>
+</span>273 <span style=''>          </span><span style='background: #AEF1AE'>async.onComplete {
+</span>274 <span style=''></span><span style='background: #AEF1AE'>            case Continue.IsSuccess => // nothing
+</span>275 <span style=''></span><span style='background: #AEF1AE'>            case Cancel.IsSuccess => p.trySuccess(Cancel)
+</span>276 <span style=''></span><span style='background: #AEF1AE'>            case Failure(ex) => p.tryFailure(ex)
+</span>277 <span style=''></span><span style='background: #AEF1AE'>            case other =>
+</span>278 <span style=''></span><span style='background: #AEF1AE'>              // branch not necessary, but Scala's compiler emits warnings if missing
+</span>279 <span style=''></span><span style='background: #AEF1AE'>              s.reportFailure(new MatchError(other.toString))
+</span>280 <span style=''></span><span style='background: #AEF1AE'>          }</span><span style=''>
+</span>281 <span style=''>      }
+</span>282 <span style=''>      </span><span style='background: #AEF1AE'>source</span><span style=''>
+</span>283 <span style=''>    }
+</span>284 <span style=''>
+</span>285 <span style=''>    /**
+</span>286 <span style=''>     * On Cancel, try to trigger Cancel on the given Promise.
+</span>287 <span style=''>     */
+</span>288 <span style=''>    def ifCanceledDoCancel(p: Promise[Ack])(implicit s: Scheduler): Future[Ack] = {
+</span>289 <span style=''>      </span><span style='background: #F0ADAD'>source</span><span style=''> match {
+</span>290 <span style=''>        case Continue </span><span style='background: #F0ADAD'>=></span><span style=''> // do nothing
+</span>291 <span style=''>        case Cancel => </span><span style='background: #F0ADAD'>p.success(Cancel)</span><span style=''>
+</span>292 <span style=''>
+</span>293 <span style=''>        case sync if </span><span style='background: #F0ADAD'>sync.isCompleted</span><span style=''> =>
+</span>294 <span style=''>          </span><span style='background: #F0ADAD'>sync.value.get</span><span style=''> match {
+</span>295 <span style=''>            case Continue.IsSuccess </span><span style='background: #F0ADAD'>=></span><span style=''> // do nothing
+</span>296 <span style=''>            case Cancel.IsSuccess => </span><span style='background: #F0ADAD'>p.success(Cancel)</span><span style=''>
+</span>297 <span style=''>            case Failure(ex) => </span><span style='background: #F0ADAD'>p.failure(ex)</span><span style=''>
+</span>298 <span style=''>            case other =>
+</span>299 <span style=''>              // branch not necessary, but Scala's compiler emits warnings if missing
+</span>300 <span style=''>              </span><span style='background: #F0ADAD'>s.reportFailure(new MatchError(other.toString))</span><span style=''>
+</span>301 <span style=''>          }
+</span>302 <span style=''>
+</span>303 <span style=''>        case async =>
+</span>304 <span style=''>          </span><span style='background: #F0ADAD'>async.onComplete {
+</span>305 <span style=''></span><span style='background: #F0ADAD'>            case Continue.IsSuccess => // nothing
+</span>306 <span style=''></span><span style='background: #F0ADAD'>            case Cancel.IsSuccess => p.success(Cancel)
+</span>307 <span style=''></span><span style='background: #F0ADAD'>            case Failure(ex) => p.failure(ex)
+</span>308 <span style=''></span><span style='background: #F0ADAD'>            case other =>
+</span>309 <span style=''></span><span style='background: #F0ADAD'>              // branch not necessary, but Scala's compiler emits warnings if missing
+</span>310 <span style=''></span><span style='background: #F0ADAD'>              s.reportFailure(new MatchError(other.toString))
+</span>311 <span style=''></span><span style='background: #F0ADAD'>          }</span><span style=''>
+</span>312 <span style=''>      }
+</span>313 <span style=''>      </span><span style='background: #F0ADAD'>source</span><span style=''>
+</span>314 <span style=''>    }
+</span>315 <span style=''>
+</span>316 <span style=''>    /**
+</span>317 <span style=''>     * Unsafe version of `onComplete` that triggers execution synchronously
+</span>318 <span style=''>     * in case the source is already completed.
+</span>319 <span style=''>     */
+</span>320 <span style=''>    def onCompleteNow(f: Try[Ack] => Unit)(implicit s: Scheduler): Future[Ack] =
+</span>321 <span style=''>      </span><span style='background: #AEF1AE'>source</span><span style=''> match {
+</span>322 <span style=''>        case sync if </span><span style='background: #AEF1AE'>sync.isCompleted</span><span style=''> =>
+</span>323 <span style=''>          try </span><span style='background: #AEF1AE'>f(sync.value.get)</span><span style=''> catch {
+</span>324 <span style=''>            case NonFatal(ex) =>
+</span>325 <span style=''>              </span><span style='background: #F0ADAD'>s.reportFailure(ex)</span><span style=''>
+</span>326 <span style=''>          }
+</span>327 <span style=''>          </span><span style='background: #AEF1AE'>source</span><span style=''>
+</span>328 <span style=''>        case async =>
+</span>329 <span style=''>          </span><span style='background: #AEF1AE'>source.onComplete(f)</span><span style=''>
+</span>330 <span style=''>          </span><span style='background: #AEF1AE'>source</span><span style=''>
+</span>331 <span style=''>      }
+</span>332 <span style=''>  }
+</span>333 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          40
+        </td>
+        <td>
+          3018
+        </td>
+        <td>
+          1471
+          -
+          1477
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.FutureAckExtensions.source
+        </td>
+        <td style="background: #AEF1AE">
+          FutureAckExtensions.this.source
+        </td>
+      </tr><tr>
+        <td>
+          41
+        </td>
+        <td>
+          3019
+        </td>
+        <td>
+          1507
+          -
+          1523
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.Future.isCompleted
+        </td>
+        <td style="background: #AEF1AE">
+          sync.isCompleted
+        </td>
+      </tr><tr>
+        <td>
+          42
+        </td>
+        <td>
+          3020
+        </td>
+        <td>
+          1537
+          -
+          1551
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Option.get
+        </td>
+        <td style="background: #AEF1AE">
+          sync.value.get
+        </td>
+      </tr><tr>
+        <td>
+          44
+        </td>
+        <td>
+          3021
+        </td>
+        <td>
+          1613
+          -
+          1634
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          observer.onComplete()
+        </td>
+      </tr><tr>
+        <td>
+          46
+        </td>
+        <td>
+          3022
+        </td>
+        <td>
+          1671
+          -
+          1673
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          3023
+        </td>
+        <td>
+          1733
+          -
+          1891
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.concurrent.Future.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          async.onComplete[Unit](((x0$1: scala.util.Try[monifu.reactive.Ack]) =&gt; x0$1 match {
+  case monifu.reactive.Ack.Continue.IsSuccess =&gt; observer.onComplete()
+  case _ =&gt; ()
+}))(s)
+        </td>
+      </tr><tr>
+        <td>
+          66
+        </td>
+        <td>
+          3024
+        </td>
+        <td>
+          2257
+          -
+          2263
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.FutureAckExtensions.source
+        </td>
+        <td style="background: #AEF1AE">
+          FutureAckExtensions.this.source
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          3025
+        </td>
+        <td>
+          2293
+          -
+          2309
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.Future.isCompleted
+        </td>
+        <td style="background: #AEF1AE">
+          sync.isCompleted
+        </td>
+      </tr><tr>
+        <td>
+          68
+        </td>
+        <td>
+          3026
+        </td>
+        <td>
+          2323
+          -
+          2337
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Option.get
+        </td>
+        <td style="background: #AEF1AE">
+          sync.value.get
+        </td>
+      </tr><tr>
+        <td>
+          70
+        </td>
+        <td>
+          3027
+        </td>
+        <td>
+          2399
+          -
+          2419
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #AEF1AE">
+          observer.onError(ex)
+        </td>
+      </tr><tr>
+        <td>
+          72
+        </td>
+        <td>
+          3028
+        </td>
+        <td>
+          2456
+          -
+          2458
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          75
+        </td>
+        <td>
+          3029
+        </td>
+        <td>
+          2517
+          -
+          2674
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.concurrent.Future.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          async.onComplete[Unit](((x0$2: scala.util.Try[monifu.reactive.Ack]) =&gt; x0$2 match {
+  case monifu.reactive.Ack.Continue.IsSuccess =&gt; observer.onError(ex)
+  case _ =&gt; ()
+}))(s)
+        </td>
+      </tr><tr>
+        <td>
+          87
+        </td>
+        <td>
+          3030
+        </td>
+        <td>
+          2841
+          -
+          2847
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.FutureAckExtensions.source
+        </td>
+        <td style="background: #AEF1AE">
+          FutureAckExtensions.this.source
+        </td>
+      </tr><tr>
+        <td>
+          88
+        </td>
+        <td>
+          3031
+        </td>
+        <td>
+          2877
+          -
+          2893
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.Future.isCompleted
+        </td>
+        <td style="background: #AEF1AE">
+          sync.isCompleted
+        </td>
+      </tr><tr>
+        <td>
+          89
+        </td>
+        <td>
+          3035
+        </td>
+        <td>
+          2950
+          -
+          2986
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.==
+        </td>
+        <td style="background: #AEF1AE">
+          sync.value.get.==(monifu.reactive.Ack.Continue.IsSuccess)
+        </td>
+      </tr><tr>
+        <td>
+          89
+        </td>
+        <td>
+          3037
+        </td>
+        <td>
+          2911
+          -
+          2987
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Boolean.||
+        </td>
+        <td style="background: #AEF1AE">
+          sync.==(monifu.reactive.Ack.Continue).||(sync.!=(monifu.reactive.Ack.Cancel).&amp;&amp;(sync.value.get.==(monifu.reactive.Ack.Continue.IsSuccess)))
+        </td>
+      </tr><tr>
+        <td>
+          89
+        </td>
+        <td>
+          3034
+        </td>
+        <td>
+          2968
+          -
+          2986
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue.IsSuccess
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Continue.IsSuccess
+        </td>
+      </tr><tr>
+        <td>
+          89
+        </td>
+        <td>
+          3036
+        </td>
+        <td>
+          2932
+          -
+          2986
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Boolean.&amp;&amp;
+        </td>
+        <td style="background: #AEF1AE">
+          sync.!=(monifu.reactive.Ack.Cancel).&amp;&amp;(sync.value.get.==(monifu.reactive.Ack.Continue.IsSuccess))
+        </td>
+      </tr><tr>
+        <td>
+          89
+        </td>
+        <td>
+          3033
+        </td>
+        <td>
+          2940
+          -
+          2946
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          89
+        </td>
+        <td>
+          3042
+        </td>
+        <td>
+          2907
+          -
+          2907
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          89
+        </td>
+        <td>
+          3032
+        </td>
+        <td>
+          2919
+          -
+          2927
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Continue
+        </td>
+      </tr><tr>
+        <td>
+          89
+        </td>
+        <td>
+          3041
+        </td>
+        <td>
+          2907
+          -
+          2907
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          90
+        </td>
+        <td>
+          3038
+        </td>
+        <td>
+          3005
+          -
+          3013
+        </td>
+        <td>
+          Ident
+        </td>
+        <td>
+          monifu.reactive.internals.FutureAckExtensions.callback
+        </td>
+        <td style="background: #AEF1AE">
+          callback
+        </td>
+      </tr><tr>
+        <td>
+          90
+        </td>
+        <td>
+          3040
+        </td>
+        <td>
+          3001
+          -
+          3106
+        </td>
+        <td>
+          Try
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          try {
+  callback
+} catch {
+  case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((ex @ _)) =&gt; s.reportFailure(ex)
+}
+        </td>
+      </tr><tr>
+        <td>
+          92
+        </td>
+        <td>
+          3039
+        </td>
+        <td>
+          3073
+          -
+          3092
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.reportFailure
+        </td>
+        <td style="background: #F0ADAD">
+          s.reportFailure(ex)
+        </td>
+      </tr><tr>
+        <td>
+          96
+        </td>
+        <td>
+          3043
+        </td>
+        <td>
+          3140
+          -
+          3388
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.concurrent.Future.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          async.onComplete[Unit](((x0$3: scala.util.Try[monifu.reactive.Ack]) =&gt; x0$3 match {
+  case monifu.reactive.Ack.Continue.IsSuccess =&gt; try {
+    callback
+  } catch {
+    case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((ex @ _)) =&gt; s.reportFailure(ex)
+  }
+  case _ =&gt; ()
+}))(s)
+        </td>
+      </tr><tr>
+        <td>
+          111
+        </td>
+        <td>
+          3044
+        </td>
+        <td>
+          3551
+          -
+          3557
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.FutureAckExtensions.source
+        </td>
+        <td style="background: #AEF1AE">
+          FutureAckExtensions.this.source
+        </td>
+      </tr><tr>
+        <td>
+          112
+        </td>
+        <td>
+          3045
+        </td>
+        <td>
+          3587
+          -
+          3603
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.Future.isCompleted
+        </td>
+        <td style="background: #AEF1AE">
+          sync.isCompleted
+        </td>
+      </tr><tr>
+        <td>
+          113
+        </td>
+        <td>
+          3046
+        </td>
+        <td>
+          3617
+          -
+          3631
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Option.get
+        </td>
+        <td style="background: #AEF1AE">
+          sync.value.get
+        </td>
+      </tr><tr>
+        <td>
+          115
+        </td>
+        <td>
+          3047
+        </td>
+        <td>
+          3697
+          -
+          3704
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Runnable.run
+        </td>
+        <td style="background: #AEF1AE">
+          r.run()
+        </td>
+      </tr><tr>
+        <td>
+          115
+        </td>
+        <td>
+          3048
+        </td>
+        <td>
+          3697
+          -
+          3704
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          java.lang.Runnable.run
+        </td>
+        <td style="background: #AEF1AE">
+          r.run()
+        </td>
+      </tr><tr>
+        <td>
+          117
+        </td>
+        <td>
+          3049
+        </td>
+        <td>
+          3768
+          -
+          3787
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.reportFailure
+        </td>
+        <td style="background: #F0ADAD">
+          s.reportFailure(ex)
+        </td>
+      </tr><tr>
+        <td>
+          120
+        </td>
+        <td>
+          3050
+        </td>
+        <td>
+          3840
+          -
+          3842
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          124
+        </td>
+        <td>
+          3051
+        </td>
+        <td>
+          3902
+          -
+          4149
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.concurrent.Future.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          async.onComplete[Unit](((x0$4: scala.util.Try[monifu.reactive.Ack]) =&gt; x0$4 match {
+  case monifu.reactive.Ack.Continue.IsSuccess =&gt; try {
+    r.run()
+  } catch {
+    case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((ex @ _)) =&gt; s.reportFailure(ex)
+  }
+  case _ =&gt; ()
+}))(s)
+        </td>
+      </tr><tr>
+        <td>
+          141
+        </td>
+        <td>
+          3052
+        </td>
+        <td>
+          4408
+          -
+          4414
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.FutureAckExtensions.source
+        </td>
+        <td style="background: #AEF1AE">
+          FutureAckExtensions.this.source
+        </td>
+      </tr><tr>
+        <td>
+          142
+        </td>
+        <td>
+          3053
+        </td>
+        <td>
+          4444
+          -
+          4460
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.Future.isCompleted
+        </td>
+        <td style="background: #AEF1AE">
+          sync.isCompleted
+        </td>
+      </tr><tr>
+        <td>
+          143
+        </td>
+        <td>
+          3054
+        </td>
+        <td>
+          4474
+          -
+          4488
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Option.get
+        </td>
+        <td style="background: #AEF1AE">
+          sync.value.get
+        </td>
+      </tr><tr>
+        <td>
+          145
+        </td>
+        <td>
+          3055
+        </td>
+        <td>
+          4561
+          -
+          4580
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Cancelable.cancel
+        </td>
+        <td style="background: #AEF1AE">
+          cancelable.cancel()
+        </td>
+      </tr><tr>
+        <td>
+          152
+        </td>
+        <td>
+          3056
+        </td>
+        <td>
+          4686
+          -
+          4839
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.concurrent.Future.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          async.onComplete[AnyVal](((x0$5: scala.util.Try[monifu.reactive.Ack]) =&gt; x0$5 match {
+  case (monifu.reactive.Ack.Cancel.IsSuccess| (exception: Throwable)scala.util.Failure[monifu.reactive.Ack](_)) =&gt; cancelable.cancel()
+  case _ =&gt; ()
+}))(s)
+        </td>
+      </tr><tr>
+        <td>
+          167
+        </td>
+        <td>
+          3057
+        </td>
+        <td>
+          5090
+          -
+          5102
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.Future.value
+        </td>
+        <td style="background: #AEF1AE">
+          FutureAckExtensions.this.source.value
+        </td>
+      </tr><tr>
+        <td>
+          171
+        </td>
+        <td>
+          3058
+        </td>
+        <td>
+          5212
+          -
+          5218
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Function1.apply
+        </td>
+        <td style="background: #AEF1AE">
+          f.apply(ack)
+        </td>
+      </tr><tr>
+        <td>
+          171
+        </td>
+        <td>
+          3059
+        </td>
+        <td>
+          5212
+          -
+          5218
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          scala.Function1.apply
+        </td>
+        <td style="background: #AEF1AE">
+          f.apply(ack)
+        </td>
+      </tr><tr>
+        <td>
+          173
+        </td>
+        <td>
+          3060
+        </td>
+        <td>
+          5282
+          -
+          5299
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Future.failed
+        </td>
+        <td style="background: #F0ADAD">
+          scala.concurrent.Future.failed[Nothing](ex)
+        </td>
+      </tr><tr>
+        <td>
+          176
+        </td>
+        <td>
+          3061
+        </td>
+        <td>
+          5361
+          -
+          5391
+        </td>
+        <td>
+          TypeApply
+        </td>
+        <td>
+          scala.Any.asInstanceOf
+        </td>
+        <td style="background: #AEF1AE">
+          FutureAckExtensions.this.source.asInstanceOf[scala.concurrent.Future[R]]
+        </td>
+      </tr><tr>
+        <td>
+          179
+        </td>
+        <td>
+          3062
+        </td>
+        <td>
+          5435
+          -
+          5452
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.concurrent.Future.flatMap
+        </td>
+        <td style="background: #AEF1AE">
+          FutureAckExtensions.this.source.flatMap[R](f)(ec)
+        </td>
+      </tr><tr>
+        <td>
+          185
+        </td>
+        <td>
+          3063
+        </td>
+        <td>
+          5577
+          -
+          5583
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.FutureAckExtensions.source
+        </td>
+        <td style="background: #AEF1AE">
+          FutureAckExtensions.this.source
+        </td>
+      </tr><tr>
+        <td>
+          186
+        </td>
+        <td>
+          3064
+        </td>
+        <td>
+          5613
+          -
+          5629
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.Future.isCompleted
+        </td>
+        <td style="background: #AEF1AE">
+          sync.isCompleted
+        </td>
+      </tr><tr>
+        <td>
+          187
+        </td>
+        <td>
+          3065
+        </td>
+        <td>
+          5655
+          -
+          5663
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Continue
+        </td>
+      </tr><tr>
+        <td>
+          187
+        </td>
+        <td>
+          3067
+        </td>
+        <td>
+          5667
+          -
+          5703
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.==
+        </td>
+        <td style="background: #AEF1AE">
+          sync.value.get.==(monifu.reactive.Ack.Continue.IsSuccess)
+        </td>
+      </tr><tr>
+        <td>
+          187
+        </td>
+        <td>
+          3066
+        </td>
+        <td>
+          5685
+          -
+          5703
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue.IsSuccess
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Continue.IsSuccess
+        </td>
+      </tr><tr>
+        <td>
+          187
+        </td>
+        <td>
+          3068
+        </td>
+        <td>
+          5647
+          -
+          5703
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Boolean.||
+        </td>
+        <td style="background: #AEF1AE">
+          sync.==(monifu.reactive.Ack.Continue).||(sync.value.get.==(monifu.reactive.Ack.Continue.IsSuccess))
+        </td>
+      </tr><tr>
+        <td>
+          188
+        </td>
+        <td>
+          3070
+        </td>
+        <td>
+          5717
+          -
+          5742
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Observer.onNext
+        </td>
+        <td style="background: #AEF1AE">
+          observer.onNext(nextElem)
+        </td>
+      </tr><tr>
+        <td>
+          188
+        </td>
+        <td>
+          3069
+        </td>
+        <td>
+          5717
+          -
+          5742
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onNext
+        </td>
+        <td style="background: #AEF1AE">
+          observer.onNext(nextElem)
+        </td>
+      </tr><tr>
+        <td>
+          190
+        </td>
+        <td>
+          3071
+        </td>
+        <td>
+          5770
+          -
+          5776
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          190
+        </td>
+        <td>
+          3072
+        </td>
+        <td>
+          5770
+          -
+          5776
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          192
+        </td>
+        <td>
+          3073
+        </td>
+        <td>
+          5809
+          -
+          5953
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.concurrent.Future.flatMap
+        </td>
+        <td style="background: #F0ADAD">
+          async.flatMap[monifu.reactive.Ack](((x0$6: monifu.reactive.Ack) =&gt; x0$6 match {
+  case monifu.reactive.Ack.Continue =&gt; observer.onNext(nextElem)
+  case monifu.reactive.Ack.Cancel =&gt; monifu.reactive.Ack.Cancel
+}))(s)
+        </td>
+      </tr><tr>
+        <td>
+          201
+        </td>
+        <td>
+          3074
+        </td>
+        <td>
+          6070
+          -
+          6076
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.FutureAckExtensions.source
+        </td>
+        <td style="background: #F0ADAD">
+          FutureAckExtensions.this.source
+        </td>
+      </tr><tr>
+        <td>
+          202
+        </td>
+        <td>
+          3075
+        </td>
+        <td>
+          6106
+          -
+          6122
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.Future.isCompleted
+        </td>
+        <td style="background: #F0ADAD">
+          sync.isCompleted
+        </td>
+      </tr><tr>
+        <td>
+          203
+        </td>
+        <td>
+          3080
+        </td>
+        <td>
+          6161
+          -
+          6217
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Boolean.&amp;&amp;
+        </td>
+        <td style="background: #F0ADAD">
+          sync.!=(monifu.reactive.Ack.Cancel).&amp;&amp;(sync.value.get.==(monifu.reactive.Ack.Continue.IsSuccess))
+        </td>
+      </tr><tr>
+        <td>
+          203
+        </td>
+        <td>
+          3088
+        </td>
+        <td>
+          6136
+          -
+          6136
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          203
+        </td>
+        <td>
+          3076
+        </td>
+        <td>
+          6148
+          -
+          6156
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Ack.Continue
+        </td>
+      </tr><tr>
+        <td>
+          203
+        </td>
+        <td>
+          3079
+        </td>
+        <td>
+          6181
+          -
+          6217
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.==
+        </td>
+        <td style="background: #F0ADAD">
+          sync.value.get.==(monifu.reactive.Ack.Continue.IsSuccess)
+        </td>
+      </tr><tr>
+        <td>
+          203
+        </td>
+        <td>
+          3078
+        </td>
+        <td>
+          6199
+          -
+          6217
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue.IsSuccess
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Ack.Continue.IsSuccess
+        </td>
+      </tr><tr>
+        <td>
+          203
+        </td>
+        <td>
+          3087
+        </td>
+        <td>
+          6136
+          -
+          6136
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          203
+        </td>
+        <td>
+          3081
+        </td>
+        <td>
+          6140
+          -
+          6218
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Boolean.||
+        </td>
+        <td style="background: #F0ADAD">
+          sync.==(monifu.reactive.Ack.Continue).||(sync.!=(monifu.reactive.Ack.Cancel).&amp;&amp;(sync.value.get.==(monifu.reactive.Ack.Continue.IsSuccess)))
+        </td>
+      </tr><tr>
+        <td>
+          203
+        </td>
+        <td>
+          3077
+        </td>
+        <td>
+          6170
+          -
+          6176
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          204
+        </td>
+        <td>
+          3084
+        </td>
+        <td>
+          6254
+          -
+          6315
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          {
+  observer.onNext(lastElem);
+  observer.onComplete()
+}
+        </td>
+      </tr><tr>
+        <td>
+          204
+        </td>
+        <td>
+          3086
+        </td>
+        <td>
+          6234
+          -
+          6437
+        </td>
+        <td>
+          Try
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          try {
+  observer.onNext(lastElem);
+  observer.onComplete()
+} catch {
+  case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((err @ _)) =&gt; observer.onError(err)
+}
+        </td>
+      </tr><tr>
+        <td>
+          205
+        </td>
+        <td>
+          3082
+        </td>
+        <td>
+          6254
+          -
+          6279
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onNext
+        </td>
+        <td style="background: #F0ADAD">
+          observer.onNext(lastElem)
+        </td>
+      </tr><tr>
+        <td>
+          206
+        </td>
+        <td>
+          3083
+        </td>
+        <td>
+          6294
+          -
+          6315
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onComplete
+        </td>
+        <td style="background: #F0ADAD">
+          observer.onComplete()
+        </td>
+      </tr><tr>
+        <td>
+          210
+        </td>
+        <td>
+          3085
+        </td>
+        <td>
+          6402
+          -
+          6423
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #F0ADAD">
+          observer.onError(err)
+        </td>
+      </tr><tr>
+        <td>
+          214
+        </td>
+        <td>
+          3089
+        </td>
+        <td>
+          6482
+          -
+          6772
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.concurrent.Future.onSuccess
+        </td>
+        <td style="background: #F0ADAD">
+          async.onSuccess[Unit](({
+  @SerialVersionUID(value = 0) final &lt;synthetic&gt; class $anonfun extends scala.runtime.AbstractPartialFunction[monifu.reactive.Ack,Unit] with Serializable {
+    def &lt;init&gt;(): &lt;$anon: monifu.reactive.Ack =&gt; Unit&gt; = {
+      $anonfun.super.&lt;init&gt;();
+      ()
+    };
+    final override def applyOrElse[A1 &lt;: monifu.reactive.Ack, B1 &gt;: Unit](x1: A1, default: A1 =&gt; B1): B1 = ((x1.asInstanceOf[monifu.reactive.Ack]: monifu.reactive.Ack): monifu.reactive.Ack @unchecked) match {
+      case monifu.reactive.Ack.Continue =&gt; try {
+        observer.onNext(lastElem);
+        observer.onComplete()
+      } catch {
+        case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((err @ _)) =&gt; observer.onError(err)
+      }
+      case (defaultCase$ @ _) =&gt; default.apply(x1)
+    };
+    final def isDefinedAt(x1: monifu.reactive.Ack): Boolean = ((x1.asInstanceOf[monifu.reactive.Ack]: monifu.reactive.Ack): monifu.reactive.Ack @unchecked) match {
+      case monifu.reactive.Ack.Continue =&gt; true
+      case (defaultCase$ @ _) =&gt; false
+    }
+  };
+  new $anonfun()
+}: PartialFunction[monifu.reactive.Ack,Unit]))(s)
+        </td>
+      </tr><tr>
+        <td>
+          231
+        </td>
+        <td>
+          3090
+        </td>
+        <td>
+          6944
+          -
+          6950
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.FutureAckExtensions.source
+        </td>
+        <td style="background: #F0ADAD">
+          FutureAckExtensions.this.source
+        </td>
+      </tr><tr>
+        <td>
+          232
+        </td>
+        <td>
+          3091
+        </td>
+        <td>
+          6981
+          -
+          6983
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          233
+        </td>
+        <td>
+          3093
+        </td>
+        <td>
+          7021
+          -
+          7040
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Promise.success
+        </td>
+        <td style="background: #F0ADAD">
+          p.success(monifu.reactive.Ack.Continue)
+        </td>
+      </tr><tr>
+        <td>
+          233
+        </td>
+        <td>
+          3092
+        </td>
+        <td>
+          7031
+          -
+          7039
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Ack.Continue
+        </td>
+      </tr><tr>
+        <td>
+          235
+        </td>
+        <td>
+          3094
+        </td>
+        <td>
+          7083
+          -
+          7107
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.util.Try.isSuccess
+        </td>
+        <td style="background: #F0ADAD">
+          sync.value.get.isSuccess
+        </td>
+      </tr><tr>
+        <td>
+          235
+        </td>
+        <td>
+          3095
+        </td>
+        <td>
+          7063
+          -
+          7107
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Boolean.&amp;&amp;
+        </td>
+        <td style="background: #F0ADAD">
+          sync.isCompleted.&amp;&amp;(sync.value.get.isSuccess)
+        </td>
+      </tr><tr>
+        <td>
+          236
+        </td>
+        <td>
+          3096
+        </td>
+        <td>
+          7121
+          -
+          7139
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.util.Try.get
+        </td>
+        <td style="background: #F0ADAD">
+          sync.value.get.get
+        </td>
+      </tr><tr>
+        <td>
+          237
+        </td>
+        <td>
+          3097
+        </td>
+        <td>
+          7174
+          -
+          7176
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          238
+        </td>
+        <td>
+          3098
+        </td>
+        <td>
+          7228
+          -
+          7236
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Ack.Continue
+        </td>
+      </tr><tr>
+        <td>
+          238
+        </td>
+        <td>
+          3099
+        </td>
+        <td>
+          7218
+          -
+          7237
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Promise.success
+        </td>
+        <td style="background: #F0ADAD">
+          p.success(monifu.reactive.Ack.Continue)
+        </td>
+      </tr><tr>
+        <td>
+          242
+        </td>
+        <td>
+          3100
+        </td>
+        <td>
+          7283
+          -
+          7640
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.concurrent.Future.onComplete
+        </td>
+        <td style="background: #F0ADAD">
+          async.onComplete[Any](((x0$7: scala.util.Try[monifu.reactive.Ack]) =&gt; x0$7 match {
+  case monifu.reactive.Ack.Continue.IsSuccess =&gt; ()
+  case monifu.reactive.Ack.Cancel.IsSuccess =&gt; p.success(monifu.reactive.Ack.Continue)
+  case (exception: Throwable)scala.util.Failure[monifu.reactive.Ack]((ex @ _)) =&gt; p.failure(ex)
+  case (other @ _) =&gt; s.reportFailure(new scala.MatchError(other.toString()))
+}))(s)
+        </td>
+      </tr><tr>
+        <td>
+          251
+        </td>
+        <td>
+          3101
+        </td>
+        <td>
+          7655
+          -
+          7661
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.FutureAckExtensions.source
+        </td>
+        <td style="background: #F0ADAD">
+          FutureAckExtensions.this.source
+        </td>
+      </tr><tr>
+        <td>
+          258
+        </td>
+        <td>
+          3102
+        </td>
+        <td>
+          7839
+          -
+          7845
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.FutureAckExtensions.source
+        </td>
+        <td style="background: #AEF1AE">
+          FutureAckExtensions.this.source
+        </td>
+      </tr><tr>
+        <td>
+          259
+        </td>
+        <td>
+          3103
+        </td>
+        <td>
+          7876
+          -
+          7878
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          260
+        </td>
+        <td>
+          3105
+        </td>
+        <td>
+          7916
+          -
+          7936
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Promise.trySuccess
+        </td>
+        <td style="background: #AEF1AE">
+          p.trySuccess(monifu.reactive.Ack.Cancel)
+        </td>
+      </tr><tr>
+        <td>
+          260
+        </td>
+        <td>
+          3104
+        </td>
+        <td>
+          7929
+          -
+          7935
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          262
+        </td>
+        <td>
+          3106
+        </td>
+        <td>
+          7959
+          -
+          7975
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.Future.isCompleted
+        </td>
+        <td style="background: #AEF1AE">
+          sync.isCompleted
+        </td>
+      </tr><tr>
+        <td>
+          263
+        </td>
+        <td>
+          3107
+        </td>
+        <td>
+          7989
+          -
+          8003
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Option.get
+        </td>
+        <td style="background: #AEF1AE">
+          sync.value.get
+        </td>
+      </tr><tr>
+        <td>
+          264
+        </td>
+        <td>
+          3108
+        </td>
+        <td>
+          8048
+          -
+          8050
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          265
+        </td>
+        <td>
+          3109
+        </td>
+        <td>
+          8115
+          -
+          8121
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          265
+        </td>
+        <td>
+          3110
+        </td>
+        <td>
+          8102
+          -
+          8122
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Promise.trySuccess
+        </td>
+        <td style="background: #F0ADAD">
+          p.trySuccess(monifu.reactive.Ack.Cancel)
+        </td>
+      </tr><tr>
+        <td>
+          266
+        </td>
+        <td>
+          3111
+        </td>
+        <td>
+          8155
+          -
+          8171
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Promise.tryFailure
+        </td>
+        <td style="background: #F0ADAD">
+          p.tryFailure(ex)
+        </td>
+      </tr><tr>
+        <td>
+          269
+        </td>
+        <td>
+          3112
+        </td>
+        <td>
+          8329
+          -
+          8343
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.toString
+        </td>
+        <td style="background: #F0ADAD">
+          other.toString()
+        </td>
+      </tr><tr>
+        <td>
+          269
+        </td>
+        <td>
+          3114
+        </td>
+        <td>
+          8298
+          -
+          8345
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.reportFailure
+        </td>
+        <td style="background: #F0ADAD">
+          s.reportFailure(new scala.MatchError(other.toString()))
+        </td>
+      </tr><tr>
+        <td>
+          269
+        </td>
+        <td>
+          3113
+        </td>
+        <td>
+          8314
+          -
+          8344
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.MatchError.&lt;init&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          new scala.MatchError(other.toString())
+        </td>
+      </tr><tr>
+        <td>
+          273
+        </td>
+        <td>
+          3115
+        </td>
+        <td>
+          8391
+          -
+          8752
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.concurrent.Future.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          async.onComplete[AnyVal](((x0$8: scala.util.Try[monifu.reactive.Ack]) =&gt; x0$8 match {
+  case monifu.reactive.Ack.Continue.IsSuccess =&gt; ()
+  case monifu.reactive.Ack.Cancel.IsSuccess =&gt; p.trySuccess(monifu.reactive.Ack.Cancel)
+  case (exception: Throwable)scala.util.Failure[monifu.reactive.Ack]((ex @ _)) =&gt; p.tryFailure(ex)
+  case (other @ _) =&gt; s.reportFailure(new scala.MatchError(other.toString()))
+}))(s)
+        </td>
+      </tr><tr>
+        <td>
+          282
+        </td>
+        <td>
+          3116
+        </td>
+        <td>
+          8767
+          -
+          8773
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.FutureAckExtensions.source
+        </td>
+        <td style="background: #AEF1AE">
+          FutureAckExtensions.this.source
+        </td>
+      </tr><tr>
+        <td>
+          289
+        </td>
+        <td>
+          3117
+        </td>
+        <td>
+          8949
+          -
+          8955
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.FutureAckExtensions.source
+        </td>
+        <td style="background: #F0ADAD">
+          FutureAckExtensions.this.source
+        </td>
+      </tr><tr>
+        <td>
+          290
+        </td>
+        <td>
+          3118
+        </td>
+        <td>
+          8986
+          -
+          8988
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          291
+        </td>
+        <td>
+          3120
+        </td>
+        <td>
+          9026
+          -
+          9043
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Promise.success
+        </td>
+        <td style="background: #F0ADAD">
+          p.success(monifu.reactive.Ack.Cancel)
+        </td>
+      </tr><tr>
+        <td>
+          291
+        </td>
+        <td>
+          3119
+        </td>
+        <td>
+          9036
+          -
+          9042
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          293
+        </td>
+        <td>
+          3121
+        </td>
+        <td>
+          9066
+          -
+          9082
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.Future.isCompleted
+        </td>
+        <td style="background: #F0ADAD">
+          sync.isCompleted
+        </td>
+      </tr><tr>
+        <td>
+          294
+        </td>
+        <td>
+          3122
+        </td>
+        <td>
+          9096
+          -
+          9110
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Option.get
+        </td>
+        <td style="background: #F0ADAD">
+          sync.value.get
+        </td>
+      </tr><tr>
+        <td>
+          295
+        </td>
+        <td>
+          3123
+        </td>
+        <td>
+          9155
+          -
+          9157
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          296
+        </td>
+        <td>
+          3125
+        </td>
+        <td>
+          9209
+          -
+          9226
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Promise.success
+        </td>
+        <td style="background: #F0ADAD">
+          p.success(monifu.reactive.Ack.Cancel)
+        </td>
+      </tr><tr>
+        <td>
+          296
+        </td>
+        <td>
+          3124
+        </td>
+        <td>
+          9219
+          -
+          9225
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          297
+        </td>
+        <td>
+          3126
+        </td>
+        <td>
+          9259
+          -
+          9272
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.Promise.failure
+        </td>
+        <td style="background: #F0ADAD">
+          p.failure(ex)
+        </td>
+      </tr><tr>
+        <td>
+          300
+        </td>
+        <td>
+          3127
+        </td>
+        <td>
+          9430
+          -
+          9444
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.toString
+        </td>
+        <td style="background: #F0ADAD">
+          other.toString()
+        </td>
+      </tr><tr>
+        <td>
+          300
+        </td>
+        <td>
+          3129
+        </td>
+        <td>
+          9399
+          -
+          9446
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.reportFailure
+        </td>
+        <td style="background: #F0ADAD">
+          s.reportFailure(new scala.MatchError(other.toString()))
+        </td>
+      </tr><tr>
+        <td>
+          300
+        </td>
+        <td>
+          3128
+        </td>
+        <td>
+          9415
+          -
+          9445
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.MatchError.&lt;init&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          new scala.MatchError(other.toString())
+        </td>
+      </tr><tr>
+        <td>
+          304
+        </td>
+        <td>
+          3130
+        </td>
+        <td>
+          9492
+          -
+          9847
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.concurrent.Future.onComplete
+        </td>
+        <td style="background: #F0ADAD">
+          async.onComplete[Any](((x0$9: scala.util.Try[monifu.reactive.Ack]) =&gt; x0$9 match {
+  case monifu.reactive.Ack.Continue.IsSuccess =&gt; ()
+  case monifu.reactive.Ack.Cancel.IsSuccess =&gt; p.success(monifu.reactive.Ack.Cancel)
+  case (exception: Throwable)scala.util.Failure[monifu.reactive.Ack]((ex @ _)) =&gt; p.failure(ex)
+  case (other @ _) =&gt; s.reportFailure(new scala.MatchError(other.toString()))
+}))(s)
+        </td>
+      </tr><tr>
+        <td>
+          313
+        </td>
+        <td>
+          3131
+        </td>
+        <td>
+          9862
+          -
+          9868
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.FutureAckExtensions.source
+        </td>
+        <td style="background: #F0ADAD">
+          FutureAckExtensions.this.source
+        </td>
+      </tr><tr>
+        <td>
+          321
+        </td>
+        <td>
+          3132
+        </td>
+        <td>
+          10103
+          -
+          10109
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.FutureAckExtensions.source
+        </td>
+        <td style="background: #AEF1AE">
+          FutureAckExtensions.this.source
+        </td>
+      </tr><tr>
+        <td>
+          322
+        </td>
+        <td>
+          3133
+        </td>
+        <td>
+          10139
+          -
+          10155
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.Future.isCompleted
+        </td>
+        <td style="background: #AEF1AE">
+          sync.isCompleted
+        </td>
+      </tr><tr>
+        <td>
+          323
+        </td>
+        <td>
+          3136
+        </td>
+        <td>
+          10173
+          -
+          10190
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          scala.Function1.apply
+        </td>
+        <td style="background: #AEF1AE">
+          f.apply(sync.value.get)
+        </td>
+      </tr><tr>
+        <td>
+          323
+        </td>
+        <td>
+          3135
+        </td>
+        <td>
+          10173
+          -
+          10190
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Function1.apply
+        </td>
+        <td style="background: #AEF1AE">
+          f.apply(sync.value.get)
+        </td>
+      </tr><tr>
+        <td>
+          323
+        </td>
+        <td>
+          3134
+        </td>
+        <td>
+          10175
+          -
+          10189
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Option.get
+        </td>
+        <td style="background: #AEF1AE">
+          sync.value.get
+        </td>
+      </tr><tr>
+        <td>
+          325
+        </td>
+        <td>
+          3137
+        </td>
+        <td>
+          10246
+          -
+          10265
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.reportFailure
+        </td>
+        <td style="background: #F0ADAD">
+          s.reportFailure(ex)
+        </td>
+      </tr><tr>
+        <td>
+          327
+        </td>
+        <td>
+          3138
+        </td>
+        <td>
+          10288
+          -
+          10294
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.FutureAckExtensions.source
+        </td>
+        <td style="background: #AEF1AE">
+          FutureAckExtensions.this.source
+        </td>
+      </tr><tr>
+        <td>
+          329
+        </td>
+        <td>
+          3139
+        </td>
+        <td>
+          10327
+          -
+          10347
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.concurrent.Future.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          FutureAckExtensions.this.source.onComplete[Unit](f)(s)
+        </td>
+      </tr><tr>
+        <td>
+          330
+        </td>
+        <td>
+          3140
+        </td>
+        <td>
+          10358
+          -
+          10364
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.FutureAckExtensions.source
+        </td>
+        <td style="background: #AEF1AE">
+          FutureAckExtensions.this.source
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

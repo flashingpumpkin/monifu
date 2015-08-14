@@ -1,0 +1,165 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          /Users/alex/Projects/org.monifu/monifu/shared/src/main/scala/monifu/reactive/ConnectableObservable.scala.html
+        </title>
+        <link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css"/>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+        <script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script>
+        <script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.18.3/addons/pager/jquery.tablesorter.pager.min.js"></script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''> 
+</span>17 <span style=''>package monifu.reactive
+</span>18 <span style=''>
+</span>19 <span style=''>import monifu.concurrent.Scheduler
+</span>20 <span style=''>import monifu.concurrent.cancelables.BooleanCancelable
+</span>21 <span style=''>
+</span>22 <span style=''>/**
+</span>23 <span style=''> * Represents an [[monifu.reactive.Observable Observable]] that waits for
+</span>24 <span style=''> * the call to `connect()` before
+</span>25 <span style=''> * starting to emit elements to its subscriber(s).
+</span>26 <span style=''> *
+</span>27 <span style=''> * Useful for converting cold observables into hot observables and thus returned by
+</span>28 <span style=''> * [[monifu.reactive.Observable.multicast Observable.multicast]].
+</span>29 <span style=''> */
+</span>30 <span style=''>trait ConnectableObservable[+T] extends Observable[T] {
+</span>31 <span style=''>  /**
+</span>32 <span style=''>   * Starts emitting events to subscribers.
+</span>33 <span style=''>   */
+</span>34 <span style=''>  def connect(): BooleanCancelable
+</span>35 <span style=''>}
+</span>36 <span style=''>
+</span>37 <span style=''>
+</span>38 <span style=''>object ConnectableObservable {
+</span>39 <span style=''>  /**
+</span>40 <span style=''>   * Builds a [[ConnectableObservable]] for the given observable source
+</span>41 <span style=''>   * and a given [[Subject]].
+</span>42 <span style=''>   */
+</span>43 <span style=''>  def apply[T, R](source: Observable[T], subject: Subject[T, R])
+</span>44 <span style=''>      (implicit s: Scheduler): ConnectableObservable[R] = {
+</span>45 <span style=''>
+</span>46 <span style=''>    </span><span style='background: #F0ADAD'>new</span><span style=''> ConnectableObservable[R] {
+</span>47 <span style=''>      private[this] lazy val connection = {
+</span>48 <span style=''>        </span><span style='background: #F0ADAD'>source.subscribe(subject)</span><span style=''>
+</span>49 <span style=''>      }
+</span>50 <span style=''>
+</span>51 <span style=''>      def connect() = {
+</span>52 <span style=''>        connection
+</span>53 <span style=''>      }
+</span>54 <span style=''>
+</span>55 <span style=''>      def subscribeFn(subscriber: Subscriber[R]): Unit = {
+</span>56 <span style=''>        </span><span style='background: #F0ADAD'>subject.unsafeSubscribe(subscriber)</span><span style=''>
+</span>57 <span style=''>      }
+</span>58 <span style=''>    }
+</span>59 <span style=''>  }
+</span>60 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          46
+        </td>
+        <td>
+          2503
+        </td>
+        <td>
+          1474
+          -
+          1477
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.ConnectableObservable.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          48
+        </td>
+        <td>
+          2501
+        </td>
+        <td>
+          1557
+          -
+          1582
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.Observable.subscribe
+        </td>
+        <td style="background: #F0ADAD">
+          source.subscribe(subject)(s)
+        </td>
+      </tr><tr>
+        <td>
+          56
+        </td>
+        <td>
+          2502
+        </td>
+        <td>
+          1711
+          -
+          1746
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observable.unsafeSubscribe
+        </td>
+        <td style="background: #F0ADAD">
+          subject.unsafeSubscribe(subscriber)
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

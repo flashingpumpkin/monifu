@@ -1,0 +1,1418 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          /Users/alex/Projects/org.monifu/monifu/shared/src/main/scala/monifu/reactive/operators/sample.scala.html
+        </title>
+        <link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css"/>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+        <script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script>
+        <script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.18.3/addons/pager/jquery.tablesorter.pager.min.js"></script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''>
+</span>17 <span style=''>package monifu.reactive.operators
+</span>18 <span style=''>
+</span>19 <span style=''>import java.util.concurrent.TimeUnit
+</span>20 <span style=''>
+</span>21 <span style=''>import monifu.concurrent.Scheduler
+</span>22 <span style=''>import monifu.reactive.Ack.Continue
+</span>23 <span style=''>import monifu.reactive.internals._
+</span>24 <span style=''>import monifu.reactive.observers.SynchronousObserver
+</span>25 <span style=''>import monifu.reactive.{Ack, Observable, Observer}
+</span>26 <span style=''>import scala.concurrent.duration._
+</span>27 <span style=''>
+</span>28 <span style=''>
+</span>29 <span style=''>object sample {
+</span>30 <span style=''>  /**
+</span>31 <span style=''>   * Implementation for `Observable.sample(initialDelay, delay)`.
+</span>32 <span style=''>   *
+</span>33 <span style=''>   * By comparison with [[monifu.reactive.Observable.sampleRepeated]],
+</span>34 <span style=''>   * this version does not emit any events if no fresh values were emitted
+</span>35 <span style=''>   * since the last sampling.
+</span>36 <span style=''>   */
+</span>37 <span style=''>  def once[T](source: Observable[T], initialDelay: FiniteDuration, delay: FiniteDuration): Observable[T] =
+</span>38 <span style=''>    </span><span style='background: #AEF1AE'>Observable.create { subscriber =>
+</span>39 <span style=''></span><span style='background: #AEF1AE'>      implicit val s = subscriber.scheduler
+</span>40 <span style=''></span><span style='background: #AEF1AE'>      val observer = subscriber.observer
+</span>41 <span style=''></span><span style='background: #AEF1AE'>
+</span>42 <span style=''></span><span style='background: #AEF1AE'>      source.unsafeSubscribe(new SampleObserver(
+</span>43 <span style=''></span><span style='background: #AEF1AE'>        observer,
+</span>44 <span style=''></span><span style='background: #AEF1AE'>        initialDelay,
+</span>45 <span style=''></span><span style='background: #AEF1AE'>        delay,
+</span>46 <span style=''></span><span style='background: #AEF1AE'>        shouldRepeatOnSilence = false
+</span>47 <span style=''></span><span style='background: #AEF1AE'>      ))
+</span>48 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>49 <span style=''>
+</span>50 <span style=''>  /**
+</span>51 <span style=''>   * Implementation for `Observable.sampleRepeated(initialDelay, delay)`.
+</span>52 <span style=''>   *
+</span>53 <span style=''>   * By comparison with [[monifu.reactive.Observable.sample]], this version always
+</span>54 <span style=''>   * emits values at the requested interval, even if no fresh value in the meantime.
+</span>55 <span style=''>   */
+</span>56 <span style=''>  def repeated[T](source: Observable[T], initialDelay: FiniteDuration, delay: FiniteDuration): Observable[T] =
+</span>57 <span style=''>     </span><span style='background: #AEF1AE'>Observable.create { subscriber =>
+</span>58 <span style=''></span><span style='background: #AEF1AE'>       implicit val s = subscriber.scheduler
+</span>59 <span style=''></span><span style='background: #AEF1AE'>       val observer = subscriber.observer
+</span>60 <span style=''></span><span style='background: #AEF1AE'>
+</span>61 <span style=''></span><span style='background: #AEF1AE'>       source.unsafeSubscribe(new SampleObserver(
+</span>62 <span style=''></span><span style='background: #AEF1AE'>        observer,
+</span>63 <span style=''></span><span style='background: #AEF1AE'>        initialDelay,
+</span>64 <span style=''></span><span style='background: #AEF1AE'>        delay,
+</span>65 <span style=''></span><span style='background: #AEF1AE'>        shouldRepeatOnSilence = true
+</span>66 <span style=''></span><span style='background: #AEF1AE'>      ))
+</span>67 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>68 <span style=''>
+</span>69 <span style=''>  protected[reactive] class SampleObserver[T]
+</span>70 <span style=''>      (downstream: Observer[T], initialDelay: FiniteDuration, period: FiniteDuration, shouldRepeatOnSilence: Boolean)
+</span>71 <span style=''>      (implicit s: Scheduler)
+</span>72 <span style=''>    extends SynchronousObserver[T] {
+</span>73 <span style=''>
+</span>74 <span style=''>    @volatile private[this] var hasValue = </span><span style='background: #AEF1AE'>false</span><span style=''>
+</span>75 <span style=''>    // MUST BE written before `hasValue = true`
+</span>76 <span style=''>    private[this] var lastValue: T = _
+</span>77 <span style=''>
+</span>78 <span style=''>    // to be written in onComplete/onError, to be read from tick
+</span>79 <span style=''>    @volatile private[this] var upstreamIsDone = </span><span style='background: #AEF1AE'>false</span><span style=''>
+</span>80 <span style=''>    // MUST BE written to before `upstreamIsDone = true`
+</span>81 <span style=''>    private[this] var upstreamError: Throwable = </span><span style='background: #AEF1AE'>null</span><span style=''>
+</span>82 <span style=''>
+</span>83 <span style=''>    def onNext(elem: T): Ack = {
+</span>84 <span style=''>      lastValue = elem
+</span>85 <span style=''>      hasValue = </span><span style='background: #AEF1AE'>true</span><span style=''>
+</span>86 <span style=''>      </span><span style='background: #AEF1AE'>Continue</span><span style=''>
+</span>87 <span style=''>    }
+</span>88 <span style=''>
+</span>89 <span style=''>    def onError(ex: Throwable): Unit = {
+</span>90 <span style=''>      upstreamError = ex
+</span>91 <span style=''>      upstreamIsDone = </span><span style='background: #AEF1AE'>true</span><span style=''>
+</span>92 <span style=''>    }
+</span>93 <span style=''>
+</span>94 <span style=''>    def onComplete(): Unit = {
+</span>95 <span style=''>      upstreamIsDone = </span><span style='background: #AEF1AE'>true</span><span style=''>
+</span>96 <span style=''>    }
+</span>97 <span style=''>    
+</span>98 <span style=''>    </span><span style='background: #AEF1AE'>s.scheduleOnce(initialDelay, new Runnable { self =>
+</span>99 <span style=''></span><span style='background: #AEF1AE'>      import ObserverState.{ON_CONTINUE, ON_NEXT}
+</span>100 <span style=''></span><span style='background: #AEF1AE'>
+</span>101 <span style=''></span><span style='background: #AEF1AE'>      private[this] val periodMillis = period.toMillis
+</span>102 <span style=''></span><span style='background: #AEF1AE'>      private[this] var nextState = ON_NEXT
+</span>103 <span style=''></span><span style='background: #AEF1AE'>      private[this] var startedAt = 0L
+</span>104 <span style=''></span><span style='background: #AEF1AE'>
+</span>105 <span style=''></span><span style='background: #AEF1AE'>      def run() = nextState match {
+</span>106 <span style=''></span><span style='background: #AEF1AE'>        case ON_NEXT =>          
+</span>107 <span style=''></span><span style='background: #AEF1AE'>          startedAt = s.currentTimeMillis()
+</span>108 <span style=''></span><span style='background: #AEF1AE'>
+</span>109 <span style=''></span><span style='background: #AEF1AE'>          if (hasValue) {
+</span>110 <span style=''></span><span style='background: #AEF1AE'>            val result = downstream.onNext(lastValue)
+</span>111 <span style=''></span><span style='background: #AEF1AE'>            hasValue = shouldRepeatOnSilence
+</span>112 <span style=''></span><span style='background: #AEF1AE'>            nextState = ON_CONTINUE
+</span>113 <span style=''></span><span style='background: #AEF1AE'>            result.onContinue(self)
+</span>114 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>115 <span style=''></span><span style='background: #AEF1AE'>          else {
+</span>116 <span style=''></span><span style='background: #AEF1AE'>            scheduleNext(startedAt)
+</span>117 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>118 <span style=''></span><span style='background: #AEF1AE'>
+</span>119 <span style=''></span><span style='background: #AEF1AE'>        case ON_CONTINUE =>
+</span>120 <span style=''></span><span style='background: #AEF1AE'>          scheduleNext(startedAt)
+</span>121 <span style=''></span><span style='background: #AEF1AE'>      }
+</span>122 <span style=''></span><span style='background: #AEF1AE'>
+</span>123 <span style=''></span><span style='background: #AEF1AE'>      def scheduleNext(startedAt: Long): Unit = {
+</span>124 <span style=''></span><span style='background: #AEF1AE'>        if (upstreamIsDone) {
+</span>125 <span style=''></span><span style='background: #AEF1AE'>          if (upstreamError != null)
+</span>126 <span style=''></span><span style='background: #AEF1AE'>            downstream.onError(upstreamError)
+</span>127 <span style=''></span><span style='background: #AEF1AE'>          else
+</span>128 <span style=''></span><span style='background: #AEF1AE'>            downstream.onComplete()
+</span>129 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>130 <span style=''></span><span style='background: #AEF1AE'>        else {
+</span>131 <span style=''></span><span style='background: #AEF1AE'>          val nextDelay = {
+</span>132 <span style=''></span><span style='background: #AEF1AE'>            val duration = s.currentTimeMillis() - startedAt
+</span>133 <span style=''></span><span style='background: #AEF1AE'>            val d = periodMillis - duration
+</span>134 <span style=''></span><span style='background: #AEF1AE'>            if (d >= 0L) d else 0L
+</span>135 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>136 <span style=''></span><span style='background: #AEF1AE'>
+</span>137 <span style=''></span><span style='background: #AEF1AE'>          nextState = ON_NEXT
+</span>138 <span style=''></span><span style='background: #AEF1AE'>          s.scheduleOnce(nextDelay, TimeUnit.MILLISECONDS, self)
+</span>139 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>140 <span style=''></span><span style='background: #AEF1AE'>      }
+</span>141 <span style=''></span><span style='background: #AEF1AE'>    })</span><span style=''>
+</span>142 <span style=''>  }
+</span>143 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          38
+        </td>
+        <td>
+          4246
+        </td>
+        <td>
+          1317
+          -
+          1593
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observable.create
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Observable.create[T](((subscriber: monifu.reactive.Subscriber[T]) =&gt; {
+  implicit val s: monifu.concurrent.Scheduler = subscriber.scheduler;
+  val observer: monifu.reactive.Observer[T] = subscriber.observer;
+  source.unsafeSubscribe(new monifu.reactive.operators.sample.SampleObserver[T](observer, initialDelay, delay, false)(s))(s)
+}))
+        </td>
+      </tr><tr>
+        <td>
+          39
+        </td>
+        <td>
+          4243
+        </td>
+        <td>
+          1374
+          -
+          1394
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          40
+        </td>
+        <td>
+          4244
+        </td>
+        <td>
+          1416
+          -
+          1435
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.observer
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.observer
+        </td>
+      </tr><tr>
+        <td>
+          42
+        </td>
+        <td>
+          4245
+        </td>
+        <td>
+          1443
+          -
+          1587
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.Observable.unsafeSubscribe
+        </td>
+        <td style="background: #AEF1AE">
+          source.unsafeSubscribe(new monifu.reactive.operators.sample.SampleObserver[T](observer, initialDelay, delay, false)(s))(s)
+        </td>
+      </tr><tr>
+        <td>
+          57
+        </td>
+        <td>
+          4250
+        </td>
+        <td>
+          1970
+          -
+          2248
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observable.create
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Observable.create[T](((subscriber: monifu.reactive.Subscriber[T]) =&gt; {
+  implicit val s: monifu.concurrent.Scheduler = subscriber.scheduler;
+  val observer: monifu.reactive.Observer[T] = subscriber.observer;
+  source.unsafeSubscribe(new monifu.reactive.operators.sample.SampleObserver[T](observer, initialDelay, delay, true)(s))(s)
+}))
+        </td>
+      </tr><tr>
+        <td>
+          58
+        </td>
+        <td>
+          4247
+        </td>
+        <td>
+          2028
+          -
+          2048
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          59
+        </td>
+        <td>
+          4248
+        </td>
+        <td>
+          2071
+          -
+          2090
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.observer
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.observer
+        </td>
+      </tr><tr>
+        <td>
+          61
+        </td>
+        <td>
+          4249
+        </td>
+        <td>
+          2099
+          -
+          2242
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.Observable.unsafeSubscribe
+        </td>
+        <td style="background: #AEF1AE">
+          source.unsafeSubscribe(new monifu.reactive.operators.sample.SampleObserver[T](observer, initialDelay, delay, true)(s))(s)
+        </td>
+      </tr><tr>
+        <td>
+          74
+        </td>
+        <td>
+          4251
+        </td>
+        <td>
+          2525
+          -
+          2530
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          false
+        </td>
+      </tr><tr>
+        <td>
+          79
+        </td>
+        <td>
+          4252
+        </td>
+        <td>
+          2733
+          -
+          2738
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          false
+        </td>
+      </tr><tr>
+        <td>
+          81
+        </td>
+        <td>
+          4253
+        </td>
+        <td>
+          2845
+          -
+          2849
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          null
+        </td>
+      </tr><tr>
+        <td>
+          85
+        </td>
+        <td>
+          4254
+        </td>
+        <td>
+          2924
+          -
+          2928
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          86
+        </td>
+        <td>
+          4255
+        </td>
+        <td>
+          2935
+          -
+          2943
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Continue
+        </td>
+      </tr><tr>
+        <td>
+          91
+        </td>
+        <td>
+          4256
+        </td>
+        <td>
+          3040
+          -
+          3044
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          95
+        </td>
+        <td>
+          4257
+        </td>
+        <td>
+          3106
+          -
+          3110
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          98
+        </td>
+        <td>
+          4258
+        </td>
+        <td>
+          3141
+          -
+          3153
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.operators.sample.SampleObserver.initialDelay
+        </td>
+        <td style="background: #AEF1AE">
+          SampleObserver.this.initialDelay
+        </td>
+      </tr><tr>
+        <td>
+          98
+        </td>
+        <td>
+          4296
+        </td>
+        <td>
+          3155
+          -
+          3158
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.operators.sample.SampleObserver.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          98
+        </td>
+        <td>
+          4297
+        </td>
+        <td>
+          3126
+          -
+          4368
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.scheduleOnce
+        </td>
+        <td style="background: #AEF1AE">
+          SampleObserver.this.s.scheduleOnce(SampleObserver.this.initialDelay, {
+  final class $anon extends Object with Runnable { self: &lt;$anon: Runnable&gt; =&gt; 
+    def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    import monifu.reactive.internals.ObserverState.{ON_CONTINUE, ON_NEXT};
+    private[this] val periodMillis: Long = SampleObserver.this.period.toMillis;
+    private[this] var nextState: monifu.reactive.internals.ObserverState.Value = monifu.reactive.internals.ObserverState.ON_NEXT;
+    private[this] var startedAt: Long = 0L;
+    def run(): Unit = $anon.this.nextState match {
+      case monifu.reactive.internals.ObserverState.ON_NEXT =&gt; {
+        $anon.this.startedAt = SampleObserver.this.s.currentTimeMillis();
+        if (SampleObserver.this.hasValue)
+          {
+            val result: scala.concurrent.Future[monifu.reactive.Ack] = SampleObserver.this.downstream.onNext(SampleObserver.this.lastValue);
+            SampleObserver.this.hasValue = SampleObserver.this.shouldRepeatOnSilence;
+            $anon.this.nextState = monifu.reactive.internals.ObserverState.ON_CONTINUE;
+            monifu.reactive.internals.`package`.FutureAckExtensions(result).onContinue($anon.this)(SampleObserver.this.s)
+          }
+        else
+          $anon.this.scheduleNext($anon.this.startedAt)
+      }
+      case monifu.reactive.internals.ObserverState.ON_CONTINUE =&gt; $anon.this.scheduleNext($anon.this.startedAt)
+    };
+    def scheduleNext(startedAt: Long): Unit = if (SampleObserver.this.upstreamIsDone)
+      if (SampleObserver.this.upstreamError.!=(null))
+        SampleObserver.this.downstream.onError(SampleObserver.this.upstreamError)
+      else
+        SampleObserver.this.downstream.onComplete()
+    else
+      {
+        val nextDelay: Long = {
+          val duration: Long = SampleObserver.this.s.currentTimeMillis().-(startedAt);
+          val d: Long = $anon.this.periodMillis.-(duration);
+          if (d.&gt;=(0L))
+            d
+          else
+            0L
+        };
+        $anon.this.nextState = monifu.reactive.internals.ObserverState.ON_NEXT;
+        {
+          SampleObserver.this.s.scheduleOnce(nextDelay, MILLISECONDS, $anon.this);
+          ()
+        }
+      }
+  };
+  new $anon()
+})
+        </td>
+      </tr><tr>
+        <td>
+          101
+        </td>
+        <td>
+          4259
+        </td>
+        <td>
+          3268
+          -
+          3283
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.duration.FiniteDuration.toMillis
+        </td>
+        <td style="background: #AEF1AE">
+          SampleObserver.this.period.toMillis
+        </td>
+      </tr><tr>
+        <td>
+          102
+        </td>
+        <td>
+          4260
+        </td>
+        <td>
+          3320
+          -
+          3327
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.ObserverState.ON_NEXT
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.internals.ObserverState.ON_NEXT
+        </td>
+      </tr><tr>
+        <td>
+          103
+        </td>
+        <td>
+          4261
+        </td>
+        <td>
+          3364
+          -
+          3366
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          0L
+        </td>
+      </tr><tr>
+        <td>
+          105
+        </td>
+        <td>
+          4262
+        </td>
+        <td>
+          3386
+          -
+          3395
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.operators.sample.SampleObserver.$anon.nextState
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this.nextState
+        </td>
+      </tr><tr>
+        <td>
+          107
+        </td>
+        <td>
+          4263
+        </td>
+        <td>
+          3460
+          -
+          3481
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.currentTimeMillis
+        </td>
+        <td style="background: #AEF1AE">
+          SampleObserver.this.s.currentTimeMillis()
+        </td>
+      </tr><tr>
+        <td>
+          109
+        </td>
+        <td>
+          4264
+        </td>
+        <td>
+          3497
+          -
+          3505
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.operators.sample.SampleObserver.hasValue
+        </td>
+        <td style="background: #AEF1AE">
+          SampleObserver.this.hasValue
+        </td>
+      </tr><tr>
+        <td>
+          109
+        </td>
+        <td>
+          4271
+        </td>
+        <td>
+          3507
+          -
+          3691
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  val result: scala.concurrent.Future[monifu.reactive.Ack] = SampleObserver.this.downstream.onNext(SampleObserver.this.lastValue);
+  SampleObserver.this.hasValue = SampleObserver.this.shouldRepeatOnSilence;
+  $anon.this.nextState = monifu.reactive.internals.ObserverState.ON_CONTINUE;
+  monifu.reactive.internals.`package`.FutureAckExtensions(result).onContinue($anon.this)(SampleObserver.this.s)
+}
+        </td>
+      </tr><tr>
+        <td>
+          110
+        </td>
+        <td>
+          4266
+        </td>
+        <td>
+          3534
+          -
+          3562
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onNext
+        </td>
+        <td style="background: #AEF1AE">
+          SampleObserver.this.downstream.onNext(SampleObserver.this.lastValue)
+        </td>
+      </tr><tr>
+        <td>
+          110
+        </td>
+        <td>
+          4265
+        </td>
+        <td>
+          3552
+          -
+          3561
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.operators.sample.SampleObserver.lastValue
+        </td>
+        <td style="background: #AEF1AE">
+          SampleObserver.this.lastValue
+        </td>
+      </tr><tr>
+        <td>
+          111
+        </td>
+        <td>
+          4267
+        </td>
+        <td>
+          3586
+          -
+          3607
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.operators.sample.SampleObserver.shouldRepeatOnSilence
+        </td>
+        <td style="background: #AEF1AE">
+          SampleObserver.this.shouldRepeatOnSilence
+        </td>
+      </tr><tr>
+        <td>
+          112
+        </td>
+        <td>
+          4268
+        </td>
+        <td>
+          3632
+          -
+          3643
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.ObserverState.ON_CONTINUE
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.internals.ObserverState.ON_CONTINUE
+        </td>
+      </tr><tr>
+        <td>
+          113
+        </td>
+        <td>
+          4270
+        </td>
+        <td>
+          3656
+          -
+          3679
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.internals.FutureAckExtensions.onContinue
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.internals.`package`.FutureAckExtensions(result).onContinue($anon.this)(SampleObserver.this.s)
+        </td>
+      </tr><tr>
+        <td>
+          113
+        </td>
+        <td>
+          4269
+        </td>
+        <td>
+          3673
+          -
+          3673
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.operators.sample.SampleObserver.s
+        </td>
+        <td style="background: #AEF1AE">
+          SampleObserver.this.s
+        </td>
+      </tr><tr>
+        <td>
+          116
+        </td>
+        <td>
+          4273
+        </td>
+        <td>
+          3721
+          -
+          3744
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.operators.sample.SampleObserver.$anon.scheduleNext
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this.scheduleNext($anon.this.startedAt)
+        </td>
+      </tr><tr>
+        <td>
+          116
+        </td>
+        <td>
+          4272
+        </td>
+        <td>
+          3734
+          -
+          3743
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.operators.sample.SampleObserver.$anon.startedAt
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this.startedAt
+        </td>
+      </tr><tr>
+        <td>
+          116
+        </td>
+        <td>
+          4274
+        </td>
+        <td>
+          3721
+          -
+          3744
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.operators.sample.SampleObserver.$anon.scheduleNext
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this.scheduleNext($anon.this.startedAt)
+        </td>
+      </tr><tr>
+        <td>
+          120
+        </td>
+        <td>
+          4276
+        </td>
+        <td>
+          3796
+          -
+          3819
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.operators.sample.SampleObserver.$anon.scheduleNext
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this.scheduleNext($anon.this.startedAt)
+        </td>
+      </tr><tr>
+        <td>
+          120
+        </td>
+        <td>
+          4275
+        </td>
+        <td>
+          3809
+          -
+          3818
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.operators.sample.SampleObserver.$anon.startedAt
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this.startedAt
+        </td>
+      </tr><tr>
+        <td>
+          124
+        </td>
+        <td>
+          4277
+        </td>
+        <td>
+          3891
+          -
+          3905
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.operators.sample.SampleObserver.upstreamIsDone
+        </td>
+        <td style="background: #AEF1AE">
+          SampleObserver.this.upstreamIsDone
+        </td>
+      </tr><tr>
+        <td>
+          125
+        </td>
+        <td>
+          4278
+        </td>
+        <td>
+          3923
+          -
+          3944
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.!=
+        </td>
+        <td style="background: #AEF1AE">
+          SampleObserver.this.upstreamError.!=(null)
+        </td>
+      </tr><tr>
+        <td>
+          125
+        </td>
+        <td>
+          4284
+        </td>
+        <td>
+          3919
+          -
+          4042
+        </td>
+        <td>
+          If
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          if (SampleObserver.this.upstreamError.!=(null))
+  SampleObserver.this.downstream.onError(SampleObserver.this.upstreamError)
+else
+  SampleObserver.this.downstream.onComplete()
+        </td>
+      </tr><tr>
+        <td>
+          126
+        </td>
+        <td>
+          4279
+        </td>
+        <td>
+          3977
+          -
+          3990
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.operators.sample.SampleObserver.upstreamError
+        </td>
+        <td style="background: #AEF1AE">
+          SampleObserver.this.upstreamError
+        </td>
+      </tr><tr>
+        <td>
+          126
+        </td>
+        <td>
+          4281
+        </td>
+        <td>
+          3958
+          -
+          3991
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #AEF1AE">
+          SampleObserver.this.downstream.onError(SampleObserver.this.upstreamError)
+        </td>
+      </tr><tr>
+        <td>
+          126
+        </td>
+        <td>
+          4280
+        </td>
+        <td>
+          3958
+          -
+          3991
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #AEF1AE">
+          SampleObserver.this.downstream.onError(SampleObserver.this.upstreamError)
+        </td>
+      </tr><tr>
+        <td>
+          128
+        </td>
+        <td>
+          4282
+        </td>
+        <td>
+          4019
+          -
+          4042
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          SampleObserver.this.downstream.onComplete()
+        </td>
+      </tr><tr>
+        <td>
+          128
+        </td>
+        <td>
+          4283
+        </td>
+        <td>
+          4019
+          -
+          4042
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Observer.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          SampleObserver.this.downstream.onComplete()
+        </td>
+      </tr><tr>
+        <td>
+          130
+        </td>
+        <td>
+          4295
+        </td>
+        <td>
+          4066
+          -
+          4353
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  val nextDelay: Long = {
+    val duration: Long = SampleObserver.this.s.currentTimeMillis().-(startedAt);
+    val d: Long = $anon.this.periodMillis.-(duration);
+    if (d.&gt;=(0L))
+      d
+    else
+      0L
+  };
+  $anon.this.nextState = monifu.reactive.internals.ObserverState.ON_NEXT;
+  {
+    SampleObserver.this.s.scheduleOnce(nextDelay, MILLISECONDS, $anon.this);
+    ()
+  }
+}
+        </td>
+      </tr><tr>
+        <td>
+          132
+        </td>
+        <td>
+          4285
+        </td>
+        <td>
+          4123
+          -
+          4156
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.-
+        </td>
+        <td style="background: #AEF1AE">
+          SampleObserver.this.s.currentTimeMillis().-(startedAt)
+        </td>
+      </tr><tr>
+        <td>
+          133
+        </td>
+        <td>
+          4286
+        </td>
+        <td>
+          4177
+          -
+          4200
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.-
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this.periodMillis.-(duration)
+        </td>
+      </tr><tr>
+        <td>
+          134
+        </td>
+        <td>
+          4287
+        </td>
+        <td>
+          4217
+          -
+          4224
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.&gt;=
+        </td>
+        <td style="background: #AEF1AE">
+          d.&gt;=(0L)
+        </td>
+      </tr><tr>
+        <td>
+          134
+        </td>
+        <td>
+          4290
+        </td>
+        <td>
+          4233
+          -
+          4235
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          0L
+        </td>
+      </tr><tr>
+        <td>
+          134
+        </td>
+        <td>
+          4289
+        </td>
+        <td>
+          4233
+          -
+          4235
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          0L
+        </td>
+      </tr><tr>
+        <td>
+          134
+        </td>
+        <td>
+          4288
+        </td>
+        <td>
+          4226
+          -
+          4227
+        </td>
+        <td>
+          Ident
+        </td>
+        <td>
+          monifu.reactive.operators.sample.SampleObserver.$anon.d
+        </td>
+        <td style="background: #AEF1AE">
+          d
+        </td>
+      </tr><tr>
+        <td>
+          137
+        </td>
+        <td>
+          4291
+        </td>
+        <td>
+          4271
+          -
+          4278
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.ObserverState.ON_NEXT
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.internals.ObserverState.ON_NEXT
+        </td>
+      </tr><tr>
+        <td>
+          138
+        </td>
+        <td>
+          4294
+        </td>
+        <td>
+          4303
+          -
+          4303
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          138
+        </td>
+        <td>
+          4293
+        </td>
+        <td>
+          4289
+          -
+          4343
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.scheduleOnce
+        </td>
+        <td style="background: #AEF1AE">
+          SampleObserver.this.s.scheduleOnce(nextDelay, MILLISECONDS, $anon.this)
+        </td>
+      </tr><tr>
+        <td>
+          138
+        </td>
+        <td>
+          4292
+        </td>
+        <td>
+          4315
+          -
+          4336
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          MILLISECONDS
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

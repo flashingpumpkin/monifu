@@ -1,0 +1,877 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          /Users/alex/Projects/org.monifu/monifu/shared/src/main/scala/monifu/reactive/operators/buffer.scala.html
+        </title>
+        <link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css"/>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+        <script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script>
+        <script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.18.3/addons/pager/jquery.tablesorter.pager.min.js"></script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''>
+</span>17 <span style=''>package monifu.reactive.operators
+</span>18 <span style=''>
+</span>19 <span style=''>import monifu.reactive.Ack.Continue
+</span>20 <span style=''>import monifu.reactive.internals._
+</span>21 <span style=''>import monifu.reactive.{Ack, Observable, Observer}
+</span>22 <span style=''>
+</span>23 <span style=''>import scala.collection.mutable.ArrayBuffer
+</span>24 <span style=''>import scala.concurrent.Future
+</span>25 <span style=''>import scala.concurrent.duration.{Duration, FiniteDuration}
+</span>26 <span style=''>
+</span>27 <span style=''>
+</span>28 <span style=''>object buffer {
+</span>29 <span style=''>  /**
+</span>30 <span style=''>   * Implementation for [[Observable.buffer]].
+</span>31 <span style=''>   */
+</span>32 <span style=''>  def sized[T](source: Observable[T], count: Int): Observable[Seq[T]] =
+</span>33 <span style=''>    </span><span style='background: #AEF1AE'>Observable.create { subscriber =>
+</span>34 <span style=''></span><span style='background: #AEF1AE'>      implicit val s = subscriber.scheduler
+</span>35 <span style=''></span><span style='background: #AEF1AE'>      val observer = subscriber.observer
+</span>36 <span style=''></span><span style='background: #AEF1AE'>
+</span>37 <span style=''></span><span style='background: #AEF1AE'>      source.unsafeSubscribe(new Observer[T] {
+</span>38 <span style=''></span><span style='background: #AEF1AE'>        private[this] var buffer = ArrayBuffer.empty[T]
+</span>39 <span style=''></span><span style='background: #AEF1AE'>        private[this] var size = 0
+</span>40 <span style=''></span><span style='background: #AEF1AE'>
+</span>41 <span style=''></span><span style='background: #AEF1AE'>        def onNext(elem: T): Future[Ack] = {
+</span>42 <span style=''></span><span style='background: #AEF1AE'>          size += 1
+</span>43 <span style=''></span><span style='background: #AEF1AE'>          buffer.append(elem)
+</span>44 <span style=''></span><span style='background: #AEF1AE'>          if (size >= count) {
+</span>45 <span style=''></span><span style='background: #AEF1AE'>            val oldBuffer = buffer
+</span>46 <span style=''></span><span style='background: #AEF1AE'>            buffer = ArrayBuffer.empty[T]
+</span>47 <span style=''></span><span style='background: #AEF1AE'>            size = 0
+</span>48 <span style=''></span><span style='background: #AEF1AE'>
+</span>49 <span style=''></span><span style='background: #AEF1AE'>            observer.onNext(oldBuffer)
+</span>50 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>51 <span style=''></span><span style='background: #AEF1AE'>          else
+</span>52 <span style=''></span><span style='background: #AEF1AE'>            Continue
+</span>53 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>54 <span style=''></span><span style='background: #AEF1AE'>
+</span>55 <span style=''></span><span style='background: #AEF1AE'>        def onError(ex: Throwable): Unit = {
+</span>56 <span style=''></span><span style='background: #AEF1AE'>          if (size > 0) {
+</span>57 <span style=''></span><span style='background: #AEF1AE'>            observer.onNext(buffer).onContinueSignalError(observer, ex)
+</span>58 <span style=''></span><span style='background: #AEF1AE'>            buffer = null
+</span>59 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>60 <span style=''></span><span style='background: #AEF1AE'>          else
+</span>61 <span style=''></span><span style='background: #AEF1AE'>            observer.onError(ex)
+</span>62 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>63 <span style=''></span><span style='background: #AEF1AE'>
+</span>64 <span style=''></span><span style='background: #AEF1AE'>        def onComplete(): Unit = {
+</span>65 <span style=''></span><span style='background: #AEF1AE'>          if (size > 0) {
+</span>66 <span style=''></span><span style='background: #AEF1AE'>            observer.onNext(buffer).onContinueSignalComplete(observer)
+</span>67 <span style=''></span><span style='background: #AEF1AE'>            buffer = null
+</span>68 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>69 <span style=''></span><span style='background: #AEF1AE'>          else
+</span>70 <span style=''></span><span style='background: #AEF1AE'>            observer.onComplete()
+</span>71 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>72 <span style=''></span><span style='background: #AEF1AE'>      })
+</span>73 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>74 <span style=''>
+</span>75 <span style=''>  /**
+</span>76 <span style=''>   * Implementation for [[Observable.bufferTimed]].
+</span>77 <span style=''>   */
+</span>78 <span style=''>  def timed[T](source: Observable[T], timespan: FiniteDuration): Observable[Seq[T]] = {
+</span>79 <span style=''>    </span><span style='background: #AEF1AE'>require(timespan >= Duration.Zero, "timespan must be positive")</span><span style=''>
+</span>80 <span style=''>
+</span>81 <span style=''>    </span><span style='background: #AEF1AE'>Observable.create[Seq[T]] { subscriber =>
+</span>82 <span style=''></span><span style='background: #AEF1AE'>      implicit val s = subscriber.scheduler
+</span>83 <span style=''></span><span style='background: #AEF1AE'>      val observer = subscriber.observer
+</span>84 <span style=''></span><span style='background: #AEF1AE'>
+</span>85 <span style=''></span><span style='background: #AEF1AE'>      source.unsafeSubscribe(new Observer[T] {
+</span>86 <span style=''></span><span style='background: #AEF1AE'>        private[this] val timespanMillis = timespan.toMillis
+</span>87 <span style=''></span><span style='background: #AEF1AE'>        private[this] var buffer = ArrayBuffer.empty[T]
+</span>88 <span style=''></span><span style='background: #AEF1AE'>        private[this] var expiresAt = s.currentTimeMillis() + timespanMillis
+</span>89 <span style=''></span><span style='background: #AEF1AE'>
+</span>90 <span style=''></span><span style='background: #AEF1AE'>        def onNext(elem: T) = {
+</span>91 <span style=''></span><span style='background: #AEF1AE'>          val rightNow = s.currentTimeMillis()
+</span>92 <span style=''></span><span style='background: #AEF1AE'>          buffer.append(elem)
+</span>93 <span style=''></span><span style='background: #AEF1AE'>
+</span>94 <span style=''></span><span style='background: #AEF1AE'>          if (expiresAt <= rightNow) {
+</span>95 <span style=''></span><span style='background: #AEF1AE'>            val oldBuffer = buffer
+</span>96 <span style=''></span><span style='background: #AEF1AE'>            buffer = ArrayBuffer.empty[T]
+</span>97 <span style=''></span><span style='background: #AEF1AE'>            expiresAt = rightNow + timespanMillis
+</span>98 <span style=''></span><span style='background: #AEF1AE'>            observer.onNext(oldBuffer)
+</span>99 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>100 <span style=''></span><span style='background: #AEF1AE'>          else
+</span>101 <span style=''></span><span style='background: #AEF1AE'>            Continue
+</span>102 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>103 <span style=''></span><span style='background: #AEF1AE'>
+</span>104 <span style=''></span><span style='background: #AEF1AE'>        def onError(ex: Throwable): Unit = {
+</span>105 <span style=''></span><span style='background: #AEF1AE'>          if (buffer.nonEmpty) {
+</span>106 <span style=''></span><span style='background: #AEF1AE'>            observer.onNext(buffer)
+</span>107 <span style=''></span><span style='background: #AEF1AE'>              .onContinueSignalError(observer, ex)
+</span>108 <span style=''></span><span style='background: #AEF1AE'>            buffer = null
+</span>109 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>110 <span style=''></span><span style='background: #AEF1AE'>          else
+</span>111 <span style=''></span><span style='background: #AEF1AE'>            observer.onError(ex)
+</span>112 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>113 <span style=''></span><span style='background: #AEF1AE'>
+</span>114 <span style=''></span><span style='background: #AEF1AE'>        def onComplete(): Unit = {
+</span>115 <span style=''></span><span style='background: #AEF1AE'>          if (buffer.nonEmpty) {
+</span>116 <span style=''></span><span style='background: #AEF1AE'>            observer.onNext(buffer)
+</span>117 <span style=''></span><span style='background: #AEF1AE'>              .onContinueSignalComplete(observer)
+</span>118 <span style=''></span><span style='background: #AEF1AE'>            buffer = null
+</span>119 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>120 <span style=''></span><span style='background: #AEF1AE'>          else
+</span>121 <span style=''></span><span style='background: #AEF1AE'>            observer.onComplete()
+</span>122 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>123 <span style=''></span><span style='background: #AEF1AE'>      })
+</span>124 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>125 <span style=''>  }
+</span>126 <span style=''>
+</span>127 <span style=''>  /**
+</span>128 <span style=''>   * Implementation for [[Observable.bufferSizedAndTimed]].
+</span>129 <span style=''>   */
+</span>130 <span style=''>  def sizedAndTimed[T](source: Observable[T], count: Int, timespan: FiniteDuration): Observable[Seq[T]] = {
+</span>131 <span style=''>    </span><span style='background: #AEF1AE'>require(timespan >= Duration.Zero, "timespan must be positive")</span><span style=''>
+</span>132 <span style=''>
+</span>133 <span style=''>    </span><span style='background: #AEF1AE'>Observable.create[Seq[T]] { subscriber =>
+</span>134 <span style=''></span><span style='background: #AEF1AE'>      implicit val s = subscriber.scheduler
+</span>135 <span style=''></span><span style='background: #AEF1AE'>      val observer = subscriber.observer
+</span>136 <span style=''></span><span style='background: #AEF1AE'>
+</span>137 <span style=''></span><span style='background: #AEF1AE'>      source.unsafeSubscribe(new Observer[T] {
+</span>138 <span style=''></span><span style='background: #AEF1AE'>        private[this] val timespanMillis = timespan.toMillis
+</span>139 <span style=''></span><span style='background: #AEF1AE'>        private[this] var buffer = ArrayBuffer.empty[T]
+</span>140 <span style=''></span><span style='background: #AEF1AE'>        private[this] var expiresAt = s.currentTimeMillis() + timespanMillis
+</span>141 <span style=''></span><span style='background: #AEF1AE'>
+</span>142 <span style=''></span><span style='background: #AEF1AE'>        def onNext(elem: T) = {
+</span>143 <span style=''></span><span style='background: #AEF1AE'>          val rightNow = s.currentTimeMillis()
+</span>144 <span style=''></span><span style='background: #AEF1AE'>          buffer.append(elem)
+</span>145 <span style=''></span><span style='background: #AEF1AE'>
+</span>146 <span style=''></span><span style='background: #AEF1AE'>          if (expiresAt <= rightNow || buffer.length >= count) {
+</span>147 <span style=''></span><span style='background: #AEF1AE'>            val oldBuffer = buffer
+</span>148 <span style=''></span><span style='background: #AEF1AE'>            buffer = ArrayBuffer.empty[T]
+</span>149 <span style=''></span><span style='background: #AEF1AE'>            expiresAt = rightNow + timespanMillis
+</span>150 <span style=''></span><span style='background: #AEF1AE'>            observer.onNext(oldBuffer)
+</span>151 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>152 <span style=''></span><span style='background: #AEF1AE'>          else
+</span>153 <span style=''></span><span style='background: #AEF1AE'>            Continue
+</span>154 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>155 <span style=''></span><span style='background: #AEF1AE'>
+</span>156 <span style=''></span><span style='background: #AEF1AE'>        def onError(ex: Throwable): Unit = {
+</span>157 <span style=''></span><span style='background: #AEF1AE'>          if (buffer.nonEmpty) {
+</span>158 <span style=''></span><span style='background: #AEF1AE'>            observer.onNext(buffer).onContinueSignalError(observer, ex)
+</span>159 <span style=''></span><span style='background: #AEF1AE'>            buffer = null
+</span>160 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>161 <span style=''></span><span style='background: #AEF1AE'>          else
+</span>162 <span style=''></span><span style='background: #AEF1AE'>            observer.onError(ex)
+</span>163 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>164 <span style=''></span><span style='background: #AEF1AE'>
+</span>165 <span style=''></span><span style='background: #AEF1AE'>        def onComplete(): Unit = {
+</span>166 <span style=''></span><span style='background: #AEF1AE'>          if (buffer.nonEmpty) {
+</span>167 <span style=''></span><span style='background: #AEF1AE'>            observer.onNext(buffer).onContinueSignalComplete(observer)
+</span>168 <span style=''></span><span style='background: #AEF1AE'>            buffer = null
+</span>169 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>170 <span style=''></span><span style='background: #AEF1AE'>          else
+</span>171 <span style=''></span><span style='background: #AEF1AE'>            observer.onComplete()
+</span>172 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>173 <span style=''></span><span style='background: #AEF1AE'>      })
+</span>174 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>175 <span style=''>  }
+</span>176 <span style=''>
+</span>177 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          33
+        </td>
+        <td>
+          3987
+        </td>
+        <td>
+          1057
+          -
+          2122
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observable.create
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Observable.create[Seq[T]](((subscriber: monifu.reactive.Subscriber[Seq[T]]) =&gt; {
+  implicit val s: monifu.concurrent.Scheduler = subscriber.scheduler;
+  val observer: monifu.reactive.Observer[Seq[T]] = subscriber.observer;
+  source.unsafeSubscribe({
+    final class $anon extends AnyRef with monifu.reactive.Observer[T] {
+      def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[T]&gt; = {
+        $anon.super.&lt;init&gt;();
+        ()
+      };
+      private[this] var buffer: scala.collection.mutable.ArrayBuffer[T] = scala.collection.mutable.ArrayBuffer.empty[T];
+      private[this] var size: Int = 0;
+      def onNext(elem: T): scala.concurrent.Future[monifu.reactive.Ack] = {
+        $anon.this.size = $anon.this.size.+(1);
+        $anon.this.buffer.append(elem);
+        if ($anon.this.size.&gt;=(count))
+          {
+            val oldBuffer: scala.collection.mutable.ArrayBuffer[T] = $anon.this.buffer;
+            $anon.this.buffer = scala.collection.mutable.ArrayBuffer.empty[T];
+            $anon.this.size = 0;
+            observer.onNext(oldBuffer)
+          }
+        else
+          monifu.reactive.Ack.Continue
+      };
+      def onError(ex: Throwable): Unit = if ($anon.this.size.&gt;(0))
+        {
+          monifu.reactive.internals.`package`.FutureAckExtensions(observer.onNext($anon.this.buffer)).onContinueSignalError[Seq[T]](observer, ex)(s);
+          $anon.this.buffer = null
+        }
+      else
+        observer.onError(ex);
+      def onComplete(): Unit = if ($anon.this.size.&gt;(0))
+        {
+          monifu.reactive.internals.`package`.FutureAckExtensions(observer.onNext($anon.this.buffer)).onContinueSignalComplete[Seq[T]](observer)(s);
+          $anon.this.buffer = null
+        }
+      else
+        observer.onComplete()
+    };
+    new $anon()
+  })(s)
+}))
+        </td>
+      </tr><tr>
+        <td>
+          34
+        </td>
+        <td>
+          3984
+        </td>
+        <td>
+          1114
+          -
+          1134
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          35
+        </td>
+        <td>
+          3985
+        </td>
+        <td>
+          1156
+          -
+          1175
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.observer
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.observer
+        </td>
+      </tr><tr>
+        <td>
+          37
+        </td>
+        <td>
+          3986
+        </td>
+        <td>
+          1183
+          -
+          2116
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.Observable.unsafeSubscribe
+        </td>
+        <td style="background: #AEF1AE">
+          source.unsafeSubscribe({
+  final class $anon extends AnyRef with monifu.reactive.Observer[T] {
+    def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[T]&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    private[this] var buffer: scala.collection.mutable.ArrayBuffer[T] = scala.collection.mutable.ArrayBuffer.empty[T];
+    private[this] var size: Int = 0;
+    def onNext(elem: T): scala.concurrent.Future[monifu.reactive.Ack] = {
+      $anon.this.size = $anon.this.size.+(1);
+      $anon.this.buffer.append(elem);
+      if ($anon.this.size.&gt;=(count))
+        {
+          val oldBuffer: scala.collection.mutable.ArrayBuffer[T] = $anon.this.buffer;
+          $anon.this.buffer = scala.collection.mutable.ArrayBuffer.empty[T];
+          $anon.this.size = 0;
+          observer.onNext(oldBuffer)
+        }
+      else
+        monifu.reactive.Ack.Continue
+    };
+    def onError(ex: Throwable): Unit = if ($anon.this.size.&gt;(0))
+      {
+        monifu.reactive.internals.`package`.FutureAckExtensions(observer.onNext($anon.this.buffer)).onContinueSignalError[Seq[T]](observer, ex)(s);
+        $anon.this.buffer = null
+      }
+    else
+      observer.onError(ex);
+    def onComplete(): Unit = if ($anon.this.size.&gt;(0))
+      {
+        monifu.reactive.internals.`package`.FutureAckExtensions(observer.onNext($anon.this.buffer)).onContinueSignalComplete[Seq[T]](observer)(s);
+        $anon.this.buffer = null
+      }
+    else
+      observer.onComplete()
+  };
+  new $anon()
+})(s)
+        </td>
+      </tr><tr>
+        <td>
+          79
+        </td>
+        <td>
+          3989
+        </td>
+        <td>
+          2288
+          -
+          2313
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.math.Ordered.&gt;=
+        </td>
+        <td style="background: #AEF1AE">
+          timespan.&gt;=(scala.concurrent.duration.Duration.Zero)
+        </td>
+      </tr><tr>
+        <td>
+          79
+        </td>
+        <td>
+          3988
+        </td>
+        <td>
+          2300
+          -
+          2313
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.duration.Duration.Zero
+        </td>
+        <td style="background: #AEF1AE">
+          scala.concurrent.duration.Duration.Zero
+        </td>
+      </tr><tr>
+        <td>
+          79
+        </td>
+        <td>
+          3991
+        </td>
+        <td>
+          2280
+          -
+          2343
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Predef.require
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.require(timespan.&gt;=(scala.concurrent.duration.Duration.Zero), &quot;timespan must be positive&quot;)
+        </td>
+      </tr><tr>
+        <td>
+          79
+        </td>
+        <td>
+          3990
+        </td>
+        <td>
+          2315
+          -
+          2342
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          &quot;timespan must be positive&quot;
+        </td>
+      </tr><tr>
+        <td>
+          81
+        </td>
+        <td>
+          3995
+        </td>
+        <td>
+          2349
+          -
+          3620
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observable.create
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Observable.create[Seq[T]](((subscriber: monifu.reactive.Subscriber[Seq[T]]) =&gt; {
+  implicit val s: monifu.concurrent.Scheduler = subscriber.scheduler;
+  val observer: monifu.reactive.Observer[Seq[T]] = subscriber.observer;
+  source.unsafeSubscribe({
+    final class $anon extends AnyRef with monifu.reactive.Observer[T] {
+      def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[T]&gt; = {
+        $anon.super.&lt;init&gt;();
+        ()
+      };
+      private[this] val timespanMillis: Long = timespan.toMillis;
+      private[this] var buffer: scala.collection.mutable.ArrayBuffer[T] = scala.collection.mutable.ArrayBuffer.empty[T];
+      private[this] var expiresAt: Long = s.currentTimeMillis().+($anon.this.timespanMillis);
+      def onNext(elem: T): scala.concurrent.Future[monifu.reactive.Ack] = {
+        val rightNow: Long = s.currentTimeMillis();
+        $anon.this.buffer.append(elem);
+        if ($anon.this.expiresAt.&lt;=(rightNow))
+          {
+            val oldBuffer: scala.collection.mutable.ArrayBuffer[T] = $anon.this.buffer;
+            $anon.this.buffer = scala.collection.mutable.ArrayBuffer.empty[T];
+            $anon.this.expiresAt = rightNow.+($anon.this.timespanMillis);
+            observer.onNext(oldBuffer)
+          }
+        else
+          monifu.reactive.Ack.Continue
+      };
+      def onError(ex: Throwable): Unit = if ($anon.this.buffer.nonEmpty)
+        {
+          monifu.reactive.internals.`package`.FutureAckExtensions(observer.onNext($anon.this.buffer)).onContinueSignalError[Seq[T]](observer, ex)(s);
+          $anon.this.buffer = null
+        }
+      else
+        observer.onError(ex);
+      def onComplete(): Unit = if ($anon.this.buffer.nonEmpty)
+        {
+          monifu.reactive.internals.`package`.FutureAckExtensions(observer.onNext($anon.this.buffer)).onContinueSignalComplete[Seq[T]](observer)(s);
+          $anon.this.buffer = null
+        }
+      else
+        observer.onComplete()
+    };
+    new $anon()
+  })(s)
+}))
+        </td>
+      </tr><tr>
+        <td>
+          82
+        </td>
+        <td>
+          3992
+        </td>
+        <td>
+          2414
+          -
+          2434
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          83
+        </td>
+        <td>
+          3993
+        </td>
+        <td>
+          2456
+          -
+          2475
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.observer
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.observer
+        </td>
+      </tr><tr>
+        <td>
+          85
+        </td>
+        <td>
+          3994
+        </td>
+        <td>
+          2483
+          -
+          3614
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.Observable.unsafeSubscribe
+        </td>
+        <td style="background: #AEF1AE">
+          source.unsafeSubscribe({
+  final class $anon extends AnyRef with monifu.reactive.Observer[T] {
+    def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[T]&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    private[this] val timespanMillis: Long = timespan.toMillis;
+    private[this] var buffer: scala.collection.mutable.ArrayBuffer[T] = scala.collection.mutable.ArrayBuffer.empty[T];
+    private[this] var expiresAt: Long = s.currentTimeMillis().+($anon.this.timespanMillis);
+    def onNext(elem: T): scala.concurrent.Future[monifu.reactive.Ack] = {
+      val rightNow: Long = s.currentTimeMillis();
+      $anon.this.buffer.append(elem);
+      if ($anon.this.expiresAt.&lt;=(rightNow))
+        {
+          val oldBuffer: scala.collection.mutable.ArrayBuffer[T] = $anon.this.buffer;
+          $anon.this.buffer = scala.collection.mutable.ArrayBuffer.empty[T];
+          $anon.this.expiresAt = rightNow.+($anon.this.timespanMillis);
+          observer.onNext(oldBuffer)
+        }
+      else
+        monifu.reactive.Ack.Continue
+    };
+    def onError(ex: Throwable): Unit = if ($anon.this.buffer.nonEmpty)
+      {
+        monifu.reactive.internals.`package`.FutureAckExtensions(observer.onNext($anon.this.buffer)).onContinueSignalError[Seq[T]](observer, ex)(s);
+        $anon.this.buffer = null
+      }
+    else
+      observer.onError(ex);
+    def onComplete(): Unit = if ($anon.this.buffer.nonEmpty)
+      {
+        monifu.reactive.internals.`package`.FutureAckExtensions(observer.onNext($anon.this.buffer)).onContinueSignalComplete[Seq[T]](observer)(s);
+        $anon.this.buffer = null
+      }
+    else
+      observer.onComplete()
+  };
+  new $anon()
+})(s)
+        </td>
+      </tr><tr>
+        <td>
+          131
+        </td>
+        <td>
+          3998
+        </td>
+        <td>
+          3845
+          -
+          3872
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          &quot;timespan must be positive&quot;
+        </td>
+      </tr><tr>
+        <td>
+          131
+        </td>
+        <td>
+          3997
+        </td>
+        <td>
+          3818
+          -
+          3843
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.math.Ordered.&gt;=
+        </td>
+        <td style="background: #AEF1AE">
+          timespan.&gt;=(scala.concurrent.duration.Duration.Zero)
+        </td>
+      </tr><tr>
+        <td>
+          131
+        </td>
+        <td>
+          3996
+        </td>
+        <td>
+          3830
+          -
+          3843
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.duration.Duration.Zero
+        </td>
+        <td style="background: #AEF1AE">
+          scala.concurrent.duration.Duration.Zero
+        </td>
+      </tr><tr>
+        <td>
+          131
+        </td>
+        <td>
+          3999
+        </td>
+        <td>
+          3810
+          -
+          3873
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Predef.require
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.require(timespan.&gt;=(scala.concurrent.duration.Duration.Zero), &quot;timespan must be positive&quot;)
+        </td>
+      </tr><tr>
+        <td>
+          133
+        </td>
+        <td>
+          4003
+        </td>
+        <td>
+          3879
+          -
+          5146
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observable.create
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Observable.create[Seq[T]](((subscriber: monifu.reactive.Subscriber[Seq[T]]) =&gt; {
+  implicit val s: monifu.concurrent.Scheduler = subscriber.scheduler;
+  val observer: monifu.reactive.Observer[Seq[T]] = subscriber.observer;
+  source.unsafeSubscribe({
+    final class $anon extends AnyRef with monifu.reactive.Observer[T] {
+      def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[T]&gt; = {
+        $anon.super.&lt;init&gt;();
+        ()
+      };
+      private[this] val timespanMillis: Long = timespan.toMillis;
+      private[this] var buffer: scala.collection.mutable.ArrayBuffer[T] = scala.collection.mutable.ArrayBuffer.empty[T];
+      private[this] var expiresAt: Long = s.currentTimeMillis().+($anon.this.timespanMillis);
+      def onNext(elem: T): scala.concurrent.Future[monifu.reactive.Ack] = {
+        val rightNow: Long = s.currentTimeMillis();
+        $anon.this.buffer.append(elem);
+        if ($anon.this.expiresAt.&lt;=(rightNow).||($anon.this.buffer.length.&gt;=(count)))
+          {
+            val oldBuffer: scala.collection.mutable.ArrayBuffer[T] = $anon.this.buffer;
+            $anon.this.buffer = scala.collection.mutable.ArrayBuffer.empty[T];
+            $anon.this.expiresAt = rightNow.+($anon.this.timespanMillis);
+            observer.onNext(oldBuffer)
+          }
+        else
+          monifu.reactive.Ack.Continue
+      };
+      def onError(ex: Throwable): Unit = if ($anon.this.buffer.nonEmpty)
+        {
+          monifu.reactive.internals.`package`.FutureAckExtensions(observer.onNext($anon.this.buffer)).onContinueSignalError[Seq[T]](observer, ex)(s);
+          $anon.this.buffer = null
+        }
+      else
+        observer.onError(ex);
+      def onComplete(): Unit = if ($anon.this.buffer.nonEmpty)
+        {
+          monifu.reactive.internals.`package`.FutureAckExtensions(observer.onNext($anon.this.buffer)).onContinueSignalComplete[Seq[T]](observer)(s);
+          $anon.this.buffer = null
+        }
+      else
+        observer.onComplete()
+    };
+    new $anon()
+  })(s)
+}))
+        </td>
+      </tr><tr>
+        <td>
+          134
+        </td>
+        <td>
+          4000
+        </td>
+        <td>
+          3944
+          -
+          3964
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          135
+        </td>
+        <td>
+          4001
+        </td>
+        <td>
+          3986
+          -
+          4005
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.observer
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.observer
+        </td>
+      </tr><tr>
+        <td>
+          137
+        </td>
+        <td>
+          4002
+        </td>
+        <td>
+          4013
+          -
+          5140
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.Observable.unsafeSubscribe
+        </td>
+        <td style="background: #AEF1AE">
+          source.unsafeSubscribe({
+  final class $anon extends AnyRef with monifu.reactive.Observer[T] {
+    def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[T]&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    private[this] val timespanMillis: Long = timespan.toMillis;
+    private[this] var buffer: scala.collection.mutable.ArrayBuffer[T] = scala.collection.mutable.ArrayBuffer.empty[T];
+    private[this] var expiresAt: Long = s.currentTimeMillis().+($anon.this.timespanMillis);
+    def onNext(elem: T): scala.concurrent.Future[monifu.reactive.Ack] = {
+      val rightNow: Long = s.currentTimeMillis();
+      $anon.this.buffer.append(elem);
+      if ($anon.this.expiresAt.&lt;=(rightNow).||($anon.this.buffer.length.&gt;=(count)))
+        {
+          val oldBuffer: scala.collection.mutable.ArrayBuffer[T] = $anon.this.buffer;
+          $anon.this.buffer = scala.collection.mutable.ArrayBuffer.empty[T];
+          $anon.this.expiresAt = rightNow.+($anon.this.timespanMillis);
+          observer.onNext(oldBuffer)
+        }
+      else
+        monifu.reactive.Ack.Continue
+    };
+    def onError(ex: Throwable): Unit = if ($anon.this.buffer.nonEmpty)
+      {
+        monifu.reactive.internals.`package`.FutureAckExtensions(observer.onNext($anon.this.buffer)).onContinueSignalError[Seq[T]](observer, ex)(s);
+        $anon.this.buffer = null
+      }
+    else
+      observer.onError(ex);
+    def onComplete(): Unit = if ($anon.this.buffer.nonEmpty)
+      {
+        monifu.reactive.internals.`package`.FutureAckExtensions(observer.onNext($anon.this.buffer)).onContinueSignalComplete[Seq[T]](observer)(s);
+        $anon.this.buffer = null
+      }
+    else
+      observer.onComplete()
+  };
+  new $anon()
+})(s)
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

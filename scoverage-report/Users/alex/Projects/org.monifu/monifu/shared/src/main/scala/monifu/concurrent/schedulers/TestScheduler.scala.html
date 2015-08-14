@@ -1,0 +1,3193 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          /Users/alex/Projects/org.monifu/monifu/shared/src/main/scala/monifu/concurrent/schedulers/TestScheduler.scala.html
+        </title>
+        <link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css"/>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+        <script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script>
+        <script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.18.3/addons/pager/jquery.tablesorter.pager.min.js"></script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''>
+</span>17 <span style=''>package monifu.concurrent.schedulers
+</span>18 <span style=''>
+</span>19 <span style=''>import monifu.concurrent.Cancelable
+</span>20 <span style=''>import monifu.concurrent.atomic.Atomic
+</span>21 <span style=''>import monifu.concurrent.cancelables.SingleAssignmentCancelable
+</span>22 <span style=''>import monifu.concurrent.schedulers.TestScheduler._
+</span>23 <span style=''>
+</span>24 <span style=''>import scala.annotation.tailrec
+</span>25 <span style=''>import scala.collection.immutable.SortedSet
+</span>26 <span style=''>import scala.concurrent.duration.{TimeUnit, Duration, FiniteDuration}
+</span>27 <span style=''>import scala.util.Random
+</span>28 <span style=''>import scala.util.control.NonFatal
+</span>29 <span style=''>
+</span>30 <span style=''>/**
+</span>31 <span style=''> * A scheduler meant for testing purposes.
+</span>32 <span style=''> */
+</span>33 <span style=''>final class TestScheduler private () extends ReferenceScheduler {
+</span>34 <span style=''>  /*
+</span>35 <span style=''>   * The `internalClock` is used for executing tasks. Upon calling [[tick]], the
+</span>36 <span style=''>   * internal clock is advanced and pending `tasks` are executed.
+</span>37 <span style=''>   */
+</span>38 <span style=''>  val state = </span><span style='background: #AEF1AE'>Atomic(State(
+</span>39 <span style=''></span><span style='background: #AEF1AE'>    lastID = 0,
+</span>40 <span style=''></span><span style='background: #AEF1AE'>    clock = Duration.Zero,
+</span>41 <span style=''></span><span style='background: #AEF1AE'>    tasks = SortedSet.empty[Task],
+</span>42 <span style=''></span><span style='background: #AEF1AE'>    cancelTask = cancelTask,
+</span>43 <span style=''></span><span style='background: #AEF1AE'>    lastReportedError = null
+</span>44 <span style=''></span><span style='background: #AEF1AE'>  ))</span><span style=''>
+</span>45 <span style=''>
+</span>46 <span style=''>  override def currentTimeMillis(): Long =
+</span>47 <span style=''>    </span><span style='background: #AEF1AE'>state.get.clock.toMillis</span><span style=''>
+</span>48 <span style=''>
+</span>49 <span style=''>  def scheduleOnce(initialDelay: FiniteDuration, r: Runnable): Cancelable =
+</span>50 <span style=''>    </span><span style='background: #AEF1AE'>state.transformAndExtract(_.scheduleOnce(initialDelay, r))</span><span style=''>
+</span>51 <span style=''>
+</span>52 <span style=''>  def scheduleOnce(initialDelay: Long, unit: TimeUnit, r: Runnable): Cancelable =
+</span>53 <span style=''>    </span><span style='background: #AEF1AE'>state.transformAndExtract(_.scheduleOnce(FiniteDuration(initialDelay, unit), r))</span><span style=''>
+</span>54 <span style=''>
+</span>55 <span style=''>  private[this] def cancelTask(t: Task): Unit =
+</span>56 <span style=''>    </span><span style='background: #AEF1AE'>state.transform(s => s.copy(tasks = s.tasks - t))</span><span style=''>
+</span>57 <span style=''>
+</span>58 <span style=''>  def execute(runnable: Runnable): Unit = {
+</span>59 <span style=''>    </span><span style='background: #AEF1AE'>state.transform(_.execute(runnable))</span><span style=''>
+</span>60 <span style=''>  }
+</span>61 <span style=''>
+</span>62 <span style=''>  def reportFailure(t: Throwable): Unit = {
+</span>63 <span style=''>    </span><span style='background: #AEF1AE'>state.transform(_.copy(lastReportedError = t))</span><span style=''>
+</span>64 <span style=''>  }
+</span>65 <span style=''>
+</span>66 <span style=''>  private[this] def extractOneTask(current: State, clock: FiniteDuration) = {
+</span>67 <span style=''>    </span><span style='background: #AEF1AE'>current.tasks.headOption.filter(_.runsAt <= clock)</span><span style=''> match {
+</span>68 <span style=''>      case Some(value) =>
+</span>69 <span style=''>        val firstTick = </span><span style='background: #AEF1AE'>value.runsAt</span><span style=''>
+</span>70 <span style=''>        val immediateT = </span><span style='background: #AEF1AE'>current.tasks.takeWhile(_.runsAt == firstTick)</span><span style=''>
+</span>71 <span style=''>        val shuffled = </span><span style='background: #AEF1AE'>Random.shuffle(immediateT.toVector)</span><span style=''>
+</span>72 <span style=''>
+</span>73 <span style=''>        val forExecution = </span><span style='background: #AEF1AE'>shuffled.head</span><span style=''>
+</span>74 <span style=''>        val remaining = </span><span style='background: #AEF1AE'>(current.tasks -- immediateT) ++ shuffled.drop(1)</span><span style=''>
+</span>75 <span style=''>
+</span>76 <span style=''>        </span><span style='background: #AEF1AE'>assert(!remaining.contains(forExecution), </span><span style='background: #F0ADAD'>"contract breach"</span><span style='background: #AEF1AE'>)</span><span style=''>
+</span>77 <span style=''>        </span><span style='background: #AEF1AE'>assert(remaining.size == current.tasks.size - 1, </span><span style='background: #F0ADAD'>"contract breach"</span><span style='background: #AEF1AE'>)</span><span style=''>
+</span>78 <span style=''>
+</span>79 <span style=''>        </span><span style='background: #AEF1AE'>Some((forExecution, remaining))</span><span style=''>
+</span>80 <span style=''>
+</span>81 <span style=''>      case None =>
+</span>82 <span style=''>        </span><span style='background: #AEF1AE'>None</span><span style=''>
+</span>83 <span style=''>    }
+</span>84 <span style=''>  }
+</span>85 <span style=''>
+</span>86 <span style=''>  @tailrec
+</span>87 <span style=''>  def tickOne(): Boolean = {
+</span>88 <span style=''>    val current = </span><span style='background: #AEF1AE'>state.get</span><span style=''>
+</span>89 <span style=''>
+</span>90 <span style=''>    // extracting one task by taking the immediate tasks
+</span>91 <span style=''>    </span><span style='background: #AEF1AE'>extractOneTask(current, current.clock)</span><span style=''> match {
+</span>92 <span style=''>      case Some((head, rest)) =>
+</span>93 <span style=''>        if (</span><span style='background: #AEF1AE'>!state.compareAndSet(current, current.copy(tasks = rest))</span><span style=''>)
+</span>94 <span style=''>          </span><span style='background: #F0ADAD'>tickOne()</span><span style=''>
+</span>95 <span style=''>        else </span><span style='background: #AEF1AE'>{
+</span>96 <span style=''></span><span style='background: #AEF1AE'>          // execute task
+</span>97 <span style=''></span><span style='background: #AEF1AE'>          try head.task.run() catch {
+</span>98 <span style=''></span><span style='background: #AEF1AE'>            case NonFatal(ex) =>
+</span>99 <span style=''></span><span style='background: #AEF1AE'>              </span><span style='background: #F0ADAD'>reportFailure(ex)</span><span style='background: #AEF1AE'>
+</span>100 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>101 <span style=''></span><span style='background: #AEF1AE'>
+</span>102 <span style=''></span><span style='background: #AEF1AE'>          true
+</span>103 <span style=''></span><span style='background: #AEF1AE'>        }</span><span style=''>
+</span>104 <span style=''>
+</span>105 <span style=''>      case None =>
+</span>106 <span style=''>        </span><span style='background: #AEF1AE'>false</span><span style=''>
+</span>107 <span style=''>    }
+</span>108 <span style=''>  }
+</span>109 <span style=''>
+</span>110 <span style=''>  def tick(time: FiniteDuration = Duration.Zero): Boolean = {
+</span>111 <span style=''>    @tailrec
+</span>112 <span style=''>    def loop(time: FiniteDuration, result: Boolean): Boolean = {
+</span>113 <span style=''>      val current = </span><span style='background: #AEF1AE'>state.get</span><span style=''>
+</span>114 <span style=''>      val currentClock = </span><span style='background: #AEF1AE'>current.clock + time</span><span style=''>
+</span>115 <span style=''>
+</span>116 <span style=''>      </span><span style='background: #AEF1AE'>extractOneTask(current, currentClock)</span><span style=''> match {
+</span>117 <span style=''>        case Some((head, rest)) =>
+</span>118 <span style=''>          if (</span><span style='background: #AEF1AE'>!state.compareAndSet(current, current.copy(clock = head.runsAt, tasks = rest))</span><span style=''>)
+</span>119 <span style=''>            </span><span style='background: #F0ADAD'>loop(time, result)</span><span style=''>
+</span>120 <span style=''>          else </span><span style='background: #AEF1AE'>{
+</span>121 <span style=''></span><span style='background: #AEF1AE'>            // execute task
+</span>122 <span style=''></span><span style='background: #AEF1AE'>            try head.task.run() catch {
+</span>123 <span style=''></span><span style='background: #AEF1AE'>              case NonFatal(ex) =>
+</span>124 <span style=''></span><span style='background: #AEF1AE'>                </span><span style='background: #F0ADAD'>reportFailure(ex)</span><span style='background: #AEF1AE'>
+</span>125 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>126 <span style=''></span><span style='background: #AEF1AE'>
+</span>127 <span style=''></span><span style='background: #AEF1AE'>            // have to retry execution, as those pending tasks
+</span>128 <span style=''></span><span style='background: #AEF1AE'>            // may have registered new tasks for immediate execution
+</span>129 <span style=''></span><span style='background: #AEF1AE'>            loop(currentClock - head.runsAt, result = true)
+</span>130 <span style=''></span><span style='background: #AEF1AE'>          }</span><span style=''>
+</span>131 <span style=''>
+</span>132 <span style=''>        case None =>
+</span>133 <span style=''>          if (</span><span style='background: #AEF1AE'>!state.compareAndSet(current, current.copy(clock = currentClock))</span><span style=''>)
+</span>134 <span style=''>            </span><span style='background: #F0ADAD'>loop(time, result)</span><span style=''>
+</span>135 <span style=''>          else
+</span>136 <span style=''>            </span><span style='background: #AEF1AE'>result</span><span style=''>
+</span>137 <span style=''>      }
+</span>138 <span style=''>    }
+</span>139 <span style=''>
+</span>140 <span style=''>    </span><span style='background: #AEF1AE'>loop(time, result = false)</span><span style=''>
+</span>141 <span style=''>  }
+</span>142 <span style=''>}
+</span>143 <span style=''>
+</span>144 <span style=''>object TestScheduler {
+</span>145 <span style=''>  /**
+</span>146 <span style=''>   * Builder for [[TestScheduler]].
+</span>147 <span style=''>   */
+</span>148 <span style=''>  def apply(): TestScheduler = {
+</span>149 <span style=''>    </span><span style='background: #AEF1AE'>new TestScheduler()</span><span style=''>
+</span>150 <span style=''>  }
+</span>151 <span style=''>
+</span>152 <span style=''>  /**
+</span>153 <span style=''>   * Used internally by [[TestScheduler]], represents a
+</span>154 <span style=''>   * unit of work pending execution.
+</span>155 <span style=''>   */
+</span>156 <span style=''>  case class Task(id: Long, task: Runnable, runsAt: FiniteDuration)
+</span>157 <span style=''>
+</span>158 <span style=''>  object Task {
+</span>159 <span style=''>    implicit val ordering: Ordering[Task] =
+</span>160 <span style=''>      </span><span style='background: #AEF1AE'>new</span><span style=''> Ordering[Task] {
+</span>161 <span style=''>        val longOrd = </span><span style='background: #AEF1AE'>implicitly[Ordering[Long]]</span><span style=''>
+</span>162 <span style=''>
+</span>163 <span style=''>        def compare(x: Task, y: Task): Int =
+</span>164 <span style=''>          </span><span style='background: #AEF1AE'>x.runsAt.compare(y.runsAt)</span><span style=''> match {
+</span>165 <span style=''>            case nonZero if </span><span style='background: #AEF1AE'>nonZero != 0</span><span style=''> =>
+</span>166 <span style=''>              nonZero
+</span>167 <span style=''>            case _ =>
+</span>168 <span style=''>              </span><span style='background: #AEF1AE'>longOrd.compare(x.id, y.id)</span><span style=''>
+</span>169 <span style=''>          }
+</span>170 <span style=''>      }
+</span>171 <span style=''>  }
+</span>172 <span style=''>
+</span>173 <span style=''>  /**
+</span>174 <span style=''>   * Used internally by [[TestScheduler]], represents the internal
+</span>175 <span style=''>   * state used for task scheduling and execution.
+</span>176 <span style=''>   */
+</span>177 <span style=''>  case class State(
+</span>178 <span style=''>    lastID: Long,
+</span>179 <span style=''>    clock: FiniteDuration,
+</span>180 <span style=''>    tasks: SortedSet[Task],
+</span>181 <span style=''>    cancelTask: Task => Unit,
+</span>182 <span style=''>    lastReportedError: Throwable) {
+</span>183 <span style=''>
+</span>184 <span style=''>    </span><span style='background: #AEF1AE'>assert(!tasks.headOption.exists(_.runsAt < clock),
+</span>185 <span style=''></span><span style='background: #AEF1AE'>      </span><span style='background: #F0ADAD'>"The runsAt for any task must never be in the past"</span><span style='background: #AEF1AE'>)</span><span style=''>
+</span>186 <span style=''>
+</span>187 <span style=''>    /**
+</span>188 <span style=''>     * Returns a new state with the runnable scheduled for execution.
+</span>189 <span style=''>     */
+</span>190 <span style=''>    def execute(runnable: Runnable): State = {
+</span>191 <span style=''>      val newID = </span><span style='background: #AEF1AE'>lastID + 1</span><span style=''>
+</span>192 <span style=''>      val task = </span><span style='background: #AEF1AE'>Task(newID, runnable, clock)</span><span style=''>
+</span>193 <span style=''>      </span><span style='background: #AEF1AE'>copy(lastID = newID, tasks = tasks + task)</span><span style=''>
+</span>194 <span style=''>    }
+</span>195 <span style=''>
+</span>196 <span style=''>    /**
+</span>197 <span style=''>     * Returns a new state with a scheduled task included.
+</span>198 <span style=''>     */
+</span>199 <span style=''>    def scheduleOnce(delay: FiniteDuration, r: Runnable): (Cancelable, State) = {
+</span>200 <span style=''>      </span><span style='background: #AEF1AE'>require(delay >= Duration.Zero, </span><span style='background: #F0ADAD'>"The given delay must be positive"</span><span style='background: #AEF1AE'>)</span><span style=''>
+</span>201 <span style=''>
+</span>202 <span style=''>      val newID = </span><span style='background: #AEF1AE'>lastID + 1</span><span style=''>
+</span>203 <span style=''>      val cancelable = </span><span style='background: #AEF1AE'>SingleAssignmentCancelable()</span><span style=''>
+</span>204 <span style=''>
+</span>205 <span style=''>      val task = </span><span style='background: #AEF1AE'>Task(newID, r, this.clock + delay)</span><span style=''>
+</span>206 <span style=''>      </span><span style='background: #AEF1AE'>cancelable := Cancelable { cancelTask(task) }</span><span style=''>
+</span>207 <span style=''>
+</span>208 <span style=''>      </span><span style='background: #AEF1AE'>(cancelable, copy(
+</span>209 <span style=''></span><span style='background: #AEF1AE'>        lastID = newID,
+</span>210 <span style=''></span><span style='background: #AEF1AE'>        tasks = tasks + task
+</span>211 <span style=''></span><span style='background: #AEF1AE'>      ))</span><span style=''>
+</span>212 <span style=''>    }
+</span>213 <span style=''>  }
+</span>214 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          38
+        </td>
+        <td>
+          2344
+        </td>
+        <td>
+          1337
+          -
+          1491
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.concurrent.atomic.Atomic.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.atomic.Atomic.apply[monifu.concurrent.schedulers.TestScheduler.State, monifu.concurrent.atomic.AtomicAny[monifu.concurrent.schedulers.TestScheduler.State]](monifu.concurrent.schedulers.TestScheduler.State.apply(0L, scala.concurrent.duration.Duration.Zero, scala.collection.immutable.SortedSet.empty[monifu.concurrent.schedulers.TestScheduler.Task](TestScheduler.this.Task.ordering), {
+  ((t: monifu.concurrent.schedulers.TestScheduler.Task) =&gt; TestScheduler.this.cancelTask(t))
+}, null))(atomic.this.AtomicBuilder.AtomicRefBuilder[monifu.concurrent.schedulers.TestScheduler.State])
+        </td>
+      </tr><tr>
+        <td>
+          38
+        </td>
+        <td>
+          2343
+        </td>
+        <td>
+          1343
+          -
+          1343
+        </td>
+        <td>
+          TypeApply
+        </td>
+        <td>
+          monifu.concurrent.atomic.Implicits.Level1.AtomicRefBuilder
+        </td>
+        <td style="background: #AEF1AE">
+          atomic.this.AtomicBuilder.AtomicRefBuilder[monifu.concurrent.schedulers.TestScheduler.State]
+        </td>
+      </tr><tr>
+        <td>
+          38
+        </td>
+        <td>
+          2342
+        </td>
+        <td>
+          1344
+          -
+          1490
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.schedulers.TestScheduler.State.apply(0L, scala.concurrent.duration.Duration.Zero, scala.collection.immutable.SortedSet.empty[monifu.concurrent.schedulers.TestScheduler.Task](TestScheduler.this.Task.ordering), {
+  ((t: monifu.concurrent.schedulers.TestScheduler.Task) =&gt; TestScheduler.this.cancelTask(t))
+}, null)
+        </td>
+      </tr><tr>
+        <td>
+          39
+        </td>
+        <td>
+          2336
+        </td>
+        <td>
+          1364
+          -
+          1365
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          0L
+        </td>
+      </tr><tr>
+        <td>
+          40
+        </td>
+        <td>
+          2337
+        </td>
+        <td>
+          1379
+          -
+          1392
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.duration.Duration.Zero
+        </td>
+        <td style="background: #AEF1AE">
+          scala.concurrent.duration.Duration.Zero
+        </td>
+      </tr><tr>
+        <td>
+          41
+        </td>
+        <td>
+          2338
+        </td>
+        <td>
+          1421
+          -
+          1421
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.Task.ordering
+        </td>
+        <td style="background: #AEF1AE">
+          TestScheduler.this.Task.ordering
+        </td>
+      </tr><tr>
+        <td>
+          41
+        </td>
+        <td>
+          2339
+        </td>
+        <td>
+          1406
+          -
+          1427
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.collection.immutable.SortedSet.empty
+        </td>
+        <td style="background: #AEF1AE">
+          scala.collection.immutable.SortedSet.empty[monifu.concurrent.schedulers.TestScheduler.Task](TestScheduler.this.Task.ordering)
+        </td>
+      </tr><tr>
+        <td>
+          42
+        </td>
+        <td>
+          2340
+        </td>
+        <td>
+          1446
+          -
+          1456
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.cancelTask
+        </td>
+        <td style="background: #AEF1AE">
+          TestScheduler.this.cancelTask(t)
+        </td>
+      </tr><tr>
+        <td>
+          43
+        </td>
+        <td>
+          2341
+        </td>
+        <td>
+          1482
+          -
+          1486
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          null
+        </td>
+      </tr><tr>
+        <td>
+          47
+        </td>
+        <td>
+          2345
+        </td>
+        <td>
+          1540
+          -
+          1564
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.duration.FiniteDuration.toMillis
+        </td>
+        <td style="background: #AEF1AE">
+          TestScheduler.this.state.get.clock.toMillis
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          2347
+        </td>
+        <td>
+          1646
+          -
+          1704
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicAny.transformAndExtract
+        </td>
+        <td style="background: #AEF1AE">
+          TestScheduler.this.state.transformAndExtract[monifu.concurrent.Cancelable](((x$1: monifu.concurrent.schedulers.TestScheduler.State) =&gt; x$1.scheduleOnce(initialDelay, r)))
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          2346
+        </td>
+        <td>
+          1672
+          -
+          1703
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.scheduleOnce
+        </td>
+        <td style="background: #AEF1AE">
+          x$1.scheduleOnce(initialDelay, r)
+        </td>
+      </tr><tr>
+        <td>
+          53
+        </td>
+        <td>
+          2350
+        </td>
+        <td>
+          1792
+          -
+          1872
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicAny.transformAndExtract
+        </td>
+        <td style="background: #AEF1AE">
+          TestScheduler.this.state.transformAndExtract[monifu.concurrent.Cancelable](((x$2: monifu.concurrent.schedulers.TestScheduler.State) =&gt; x$2.scheduleOnce(scala.concurrent.duration.FiniteDuration.apply(initialDelay, unit), r)))
+        </td>
+      </tr><tr>
+        <td>
+          53
+        </td>
+        <td>
+          2349
+        </td>
+        <td>
+          1818
+          -
+          1871
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.scheduleOnce
+        </td>
+        <td style="background: #AEF1AE">
+          x$2.scheduleOnce(scala.concurrent.duration.FiniteDuration.apply(initialDelay, unit), r)
+        </td>
+      </tr><tr>
+        <td>
+          53
+        </td>
+        <td>
+          2348
+        </td>
+        <td>
+          1833
+          -
+          1867
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.duration.FiniteDuration.apply
+        </td>
+        <td style="background: #AEF1AE">
+          scala.concurrent.duration.FiniteDuration.apply(initialDelay, unit)
+        </td>
+      </tr><tr>
+        <td>
+          56
+        </td>
+        <td>
+          2353
+        </td>
+        <td>
+          1949
+          -
+          1949
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy$default$2
+        </td>
+        <td style="background: #AEF1AE">
+          s.copy$default$2
+        </td>
+      </tr><tr>
+        <td>
+          56
+        </td>
+        <td>
+          2356
+        </td>
+        <td>
+          1947
+          -
+          1974
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy
+        </td>
+        <td style="background: #AEF1AE">
+          s.copy(x$9, x$10, x$8, x$11, x$12)
+        </td>
+      </tr><tr>
+        <td>
+          56
+        </td>
+        <td>
+          2352
+        </td>
+        <td>
+          1949
+          -
+          1949
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy$default$1
+        </td>
+        <td style="background: #AEF1AE">
+          s.copy$default$1
+        </td>
+      </tr><tr>
+        <td>
+          56
+        </td>
+        <td>
+          2355
+        </td>
+        <td>
+          1949
+          -
+          1949
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy$default$5
+        </td>
+        <td style="background: #AEF1AE">
+          s.copy$default$5
+        </td>
+      </tr><tr>
+        <td>
+          56
+        </td>
+        <td>
+          2354
+        </td>
+        <td>
+          1949
+          -
+          1949
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy$default$4
+        </td>
+        <td style="background: #AEF1AE">
+          s.copy$default$4
+        </td>
+      </tr><tr>
+        <td>
+          56
+        </td>
+        <td>
+          2357
+        </td>
+        <td>
+          1926
+          -
+          1975
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicAny.transform
+        </td>
+        <td style="background: #AEF1AE">
+          TestScheduler.this.state.transform(((s: monifu.concurrent.schedulers.TestScheduler.State) =&gt; {
+  &lt;artifact&gt; val x$8: scala.collection.immutable.SortedSet[monifu.concurrent.schedulers.TestScheduler.Task] @scala.reflect.internal.annotations.uncheckedBounds = s.tasks.-(t);
+  &lt;artifact&gt; val x$9: Long = s.copy$default$1;
+  &lt;artifact&gt; val x$10: scala.concurrent.duration.FiniteDuration = s.copy$default$2;
+  &lt;artifact&gt; val x$11: monifu.concurrent.schedulers.TestScheduler.Task =&gt; Unit @scala.reflect.internal.annotations.uncheckedBounds = s.copy$default$4;
+  &lt;artifact&gt; val x$12: Throwable = s.copy$default$5;
+  s.copy(x$9, x$10, x$8, x$11, x$12)
+}))
+        </td>
+      </tr><tr>
+        <td>
+          56
+        </td>
+        <td>
+          2351
+        </td>
+        <td>
+          1962
+          -
+          1973
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.collection.SetLike.-
+        </td>
+        <td style="background: #AEF1AE">
+          s.tasks.-(t)
+        </td>
+      </tr><tr>
+        <td>
+          59
+        </td>
+        <td>
+          2359
+        </td>
+        <td>
+          2025
+          -
+          2061
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicAny.transform
+        </td>
+        <td style="background: #AEF1AE">
+          TestScheduler.this.state.transform(((x$3: monifu.concurrent.schedulers.TestScheduler.State) =&gt; x$3.execute(runnable)))
+        </td>
+      </tr><tr>
+        <td>
+          59
+        </td>
+        <td>
+          2358
+        </td>
+        <td>
+          2041
+          -
+          2060
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.execute
+        </td>
+        <td style="background: #AEF1AE">
+          x$3.execute(runnable)
+        </td>
+      </tr><tr>
+        <td>
+          63
+        </td>
+        <td>
+          2362
+        </td>
+        <td>
+          2133
+          -
+          2133
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy$default$3
+        </td>
+        <td style="background: #AEF1AE">
+          x$4.copy$default$3
+        </td>
+      </tr><tr>
+        <td>
+          63
+        </td>
+        <td>
+          2365
+        </td>
+        <td>
+          2115
+          -
+          2161
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicAny.transform
+        </td>
+        <td style="background: #AEF1AE">
+          TestScheduler.this.state.transform(((x$4: monifu.concurrent.schedulers.TestScheduler.State) =&gt; {
+  &lt;artifact&gt; val x$13: Throwable = t;
+  &lt;artifact&gt; val x$14: Long = x$4.copy$default$1;
+  &lt;artifact&gt; val x$15: scala.concurrent.duration.FiniteDuration = x$4.copy$default$2;
+  &lt;artifact&gt; val x$16: scala.collection.immutable.SortedSet[monifu.concurrent.schedulers.TestScheduler.Task] @scala.reflect.internal.annotations.uncheckedBounds = x$4.copy$default$3;
+  &lt;artifact&gt; val x$17: monifu.concurrent.schedulers.TestScheduler.Task =&gt; Unit @scala.reflect.internal.annotations.uncheckedBounds = x$4.copy$default$4;
+  x$4.copy(x$14, x$15, x$16, x$17, x$13)
+}))
+        </td>
+      </tr><tr>
+        <td>
+          63
+        </td>
+        <td>
+          2361
+        </td>
+        <td>
+          2133
+          -
+          2133
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy$default$2
+        </td>
+        <td style="background: #AEF1AE">
+          x$4.copy$default$2
+        </td>
+      </tr><tr>
+        <td>
+          63
+        </td>
+        <td>
+          2364
+        </td>
+        <td>
+          2131
+          -
+          2160
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy
+        </td>
+        <td style="background: #AEF1AE">
+          x$4.copy(x$14, x$15, x$16, x$17, x$13)
+        </td>
+      </tr><tr>
+        <td>
+          63
+        </td>
+        <td>
+          2363
+        </td>
+        <td>
+          2133
+          -
+          2133
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy$default$4
+        </td>
+        <td style="background: #AEF1AE">
+          x$4.copy$default$4
+        </td>
+      </tr><tr>
+        <td>
+          63
+        </td>
+        <td>
+          2360
+        </td>
+        <td>
+          2133
+          -
+          2133
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy$default$1
+        </td>
+        <td style="background: #AEF1AE">
+          x$4.copy$default$1
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          2367
+        </td>
+        <td>
+          2249
+          -
+          2299
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Option.filter
+        </td>
+        <td style="background: #AEF1AE">
+          current.tasks.headOption.filter(((x$5: monifu.concurrent.schedulers.TestScheduler.Task) =&gt; x$5.runsAt.&lt;=(clock)))
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          2366
+        </td>
+        <td>
+          2281
+          -
+          2298
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.math.Ordered.&lt;=
+        </td>
+        <td style="background: #AEF1AE">
+          x$5.runsAt.&lt;=(clock)
+        </td>
+      </tr><tr>
+        <td>
+          69
+        </td>
+        <td>
+          2368
+        </td>
+        <td>
+          2358
+          -
+          2370
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.Task.runsAt
+        </td>
+        <td style="background: #AEF1AE">
+          value.runsAt
+        </td>
+      </tr><tr>
+        <td>
+          70
+        </td>
+        <td>
+          2370
+        </td>
+        <td>
+          2396
+          -
+          2442
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.collection.IterableLike.takeWhile
+        </td>
+        <td style="background: #AEF1AE">
+          current.tasks.takeWhile(((x$6: monifu.concurrent.schedulers.TestScheduler.Task) =&gt; x$6.runsAt.==(firstTick)))
+        </td>
+      </tr><tr>
+        <td>
+          70
+        </td>
+        <td>
+          2369
+        </td>
+        <td>
+          2420
+          -
+          2441
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.==
+        </td>
+        <td style="background: #AEF1AE">
+          x$6.runsAt.==(firstTick)
+        </td>
+      </tr><tr>
+        <td>
+          71
+        </td>
+        <td>
+          2371
+        </td>
+        <td>
+          2481
+          -
+          2500
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.collection.TraversableOnce.toVector
+        </td>
+        <td style="background: #AEF1AE">
+          immediateT.toVector
+        </td>
+      </tr><tr>
+        <td>
+          71
+        </td>
+        <td>
+          2373
+        </td>
+        <td>
+          2466
+          -
+          2501
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.util.Random.shuffle
+        </td>
+        <td style="background: #AEF1AE">
+          scala.util.Random.shuffle[monifu.concurrent.schedulers.TestScheduler.Task, Vector](immediateT.toVector)(immutable.this.Vector.canBuildFrom[monifu.concurrent.schedulers.TestScheduler.Task])
+        </td>
+      </tr><tr>
+        <td>
+          71
+        </td>
+        <td>
+          2372
+        </td>
+        <td>
+          2480
+          -
+          2480
+        </td>
+        <td>
+          TypeApply
+        </td>
+        <td>
+          scala.collection.immutable.Vector.canBuildFrom
+        </td>
+        <td style="background: #AEF1AE">
+          immutable.this.Vector.canBuildFrom[monifu.concurrent.schedulers.TestScheduler.Task]
+        </td>
+      </tr><tr>
+        <td>
+          73
+        </td>
+        <td>
+          2374
+        </td>
+        <td>
+          2530
+          -
+          2543
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.collection.immutable.Vector.head
+        </td>
+        <td style="background: #AEF1AE">
+          shuffled.head
+        </td>
+      </tr><tr>
+        <td>
+          74
+        </td>
+        <td>
+          2376
+        </td>
+        <td>
+          2568
+          -
+          2617
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.collection.SetLike.++
+        </td>
+        <td style="background: #AEF1AE">
+          current.tasks.--(immediateT).++(shuffled.drop(1))
+        </td>
+      </tr><tr>
+        <td>
+          74
+        </td>
+        <td>
+          2375
+        </td>
+        <td>
+          2601
+          -
+          2617
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.collection.immutable.Vector.drop
+        </td>
+        <td style="background: #AEF1AE">
+          shuffled.drop(1)
+        </td>
+      </tr><tr>
+        <td>
+          76
+        </td>
+        <td>
+          2379
+        </td>
+        <td>
+          2627
+          -
+          2687
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Predef.assert
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.assert(remaining.contains(forExecution).unary_!, &quot;contract breach&quot;)
+        </td>
+      </tr><tr>
+        <td>
+          76
+        </td>
+        <td>
+          2378
+        </td>
+        <td>
+          2669
+          -
+          2686
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          &quot;contract breach&quot;
+        </td>
+      </tr><tr>
+        <td>
+          76
+        </td>
+        <td>
+          2377
+        </td>
+        <td>
+          2634
+          -
+          2667
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          remaining.contains(forExecution).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          77
+        </td>
+        <td>
+          2380
+        </td>
+        <td>
+          2721
+          -
+          2743
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.-
+        </td>
+        <td style="background: #AEF1AE">
+          current.tasks.size.-(1)
+        </td>
+      </tr><tr>
+        <td>
+          77
+        </td>
+        <td>
+          2383
+        </td>
+        <td>
+          2696
+          -
+          2763
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Predef.assert
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.assert(remaining.size.==(current.tasks.size.-(1)), &quot;contract breach&quot;)
+        </td>
+      </tr><tr>
+        <td>
+          77
+        </td>
+        <td>
+          2382
+        </td>
+        <td>
+          2745
+          -
+          2762
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          &quot;contract breach&quot;
+        </td>
+      </tr><tr>
+        <td>
+          77
+        </td>
+        <td>
+          2381
+        </td>
+        <td>
+          2703
+          -
+          2743
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.==
+        </td>
+        <td style="background: #AEF1AE">
+          remaining.size.==(current.tasks.size.-(1))
+        </td>
+      </tr><tr>
+        <td>
+          79
+        </td>
+        <td>
+          2385
+        </td>
+        <td>
+          2773
+          -
+          2804
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Some.apply
+        </td>
+        <td style="background: #AEF1AE">
+          scala.Some.apply[(monifu.concurrent.schedulers.TestScheduler.Task, scala.collection.immutable.SortedSet[monifu.concurrent.schedulers.TestScheduler.Task])](scala.Tuple2.apply[monifu.concurrent.schedulers.TestScheduler.Task, scala.collection.immutable.SortedSet[monifu.concurrent.schedulers.TestScheduler.Task]](forExecution, remaining))
+        </td>
+      </tr><tr>
+        <td>
+          79
+        </td>
+        <td>
+          2384
+        </td>
+        <td>
+          2778
+          -
+          2803
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Tuple2.apply
+        </td>
+        <td style="background: #AEF1AE">
+          scala.Tuple2.apply[monifu.concurrent.schedulers.TestScheduler.Task, scala.collection.immutable.SortedSet[monifu.concurrent.schedulers.TestScheduler.Task]](forExecution, remaining)
+        </td>
+      </tr><tr>
+        <td>
+          82
+        </td>
+        <td>
+          2386
+        </td>
+        <td>
+          2833
+          -
+          2837
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.None
+        </td>
+        <td style="background: #AEF1AE">
+          scala.None
+        </td>
+      </tr><tr>
+        <td>
+          88
+        </td>
+        <td>
+          2387
+        </td>
+        <td>
+          2907
+          -
+          2916
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicAny.get
+        </td>
+        <td style="background: #AEF1AE">
+          TestScheduler.this.state.get
+        </td>
+      </tr><tr>
+        <td>
+          91
+        </td>
+        <td>
+          2389
+        </td>
+        <td>
+          2979
+          -
+          3017
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.extractOneTask
+        </td>
+        <td style="background: #AEF1AE">
+          TestScheduler.this.extractOneTask(current, current.clock)
+        </td>
+      </tr><tr>
+        <td>
+          91
+        </td>
+        <td>
+          2388
+        </td>
+        <td>
+          3003
+          -
+          3016
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.clock
+        </td>
+        <td style="background: #AEF1AE">
+          current.clock
+        </td>
+      </tr><tr>
+        <td>
+          93
+        </td>
+        <td>
+          2392
+        </td>
+        <td>
+          3109
+          -
+          3109
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy$default$4
+        </td>
+        <td style="background: #AEF1AE">
+          current.copy$default$4
+        </td>
+      </tr><tr>
+        <td>
+          93
+        </td>
+        <td>
+          2391
+        </td>
+        <td>
+          3109
+          -
+          3109
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy$default$2
+        </td>
+        <td style="background: #AEF1AE">
+          current.copy$default$2
+        </td>
+      </tr><tr>
+        <td>
+          93
+        </td>
+        <td>
+          2394
+        </td>
+        <td>
+          3101
+          -
+          3127
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy
+        </td>
+        <td style="background: #AEF1AE">
+          current.copy(x$19, x$20, x$18, x$21, x$22)
+        </td>
+      </tr><tr>
+        <td>
+          93
+        </td>
+        <td>
+          2390
+        </td>
+        <td>
+          3109
+          -
+          3109
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy$default$1
+        </td>
+        <td style="background: #AEF1AE">
+          current.copy$default$1
+        </td>
+      </tr><tr>
+        <td>
+          93
+        </td>
+        <td>
+          2393
+        </td>
+        <td>
+          3109
+          -
+          3109
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy$default$5
+        </td>
+        <td style="background: #AEF1AE">
+          current.copy$default$5
+        </td>
+      </tr><tr>
+        <td>
+          93
+        </td>
+        <td>
+          2395
+        </td>
+        <td>
+          3071
+          -
+          3128
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          TestScheduler.this.state.compareAndSet(current, {
+  &lt;artifact&gt; val x$18: scala.collection.immutable.SortedSet[monifu.concurrent.schedulers.TestScheduler.Task] @scala.reflect.internal.annotations.uncheckedBounds = rest;
+  &lt;artifact&gt; val x$19: Long = current.copy$default$1;
+  &lt;artifact&gt; val x$20: scala.concurrent.duration.FiniteDuration = current.copy$default$2;
+  &lt;artifact&gt; val x$21: monifu.concurrent.schedulers.TestScheduler.Task =&gt; Unit @scala.reflect.internal.annotations.uncheckedBounds = current.copy$default$4;
+  &lt;artifact&gt; val x$22: Throwable = current.copy$default$5;
+  current.copy(x$19, x$20, x$18, x$21, x$22)
+}).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          94
+        </td>
+        <td>
+          2397
+        </td>
+        <td>
+          3140
+          -
+          3149
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.tickOne
+        </td>
+        <td style="background: #F0ADAD">
+          TestScheduler.this.tickOne()
+        </td>
+      </tr><tr>
+        <td>
+          94
+        </td>
+        <td>
+          2396
+        </td>
+        <td>
+          3140
+          -
+          3149
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.tickOne
+        </td>
+        <td style="background: #F0ADAD">
+          TestScheduler.this.tickOne()
+        </td>
+      </tr><tr>
+        <td>
+          95
+        </td>
+        <td>
+          2402
+        </td>
+        <td>
+          3163
+          -
+          3331
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  try {
+    head.task.run()
+  } catch {
+    case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((ex @ _)) =&gt; TestScheduler.this.reportFailure(ex)
+  };
+  true
+}
+        </td>
+      </tr><tr>
+        <td>
+          97
+        </td>
+        <td>
+          2398
+        </td>
+        <td>
+          3205
+          -
+          3220
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Runnable.run
+        </td>
+        <td style="background: #AEF1AE">
+          head.task.run()
+        </td>
+      </tr><tr>
+        <td>
+          97
+        </td>
+        <td>
+          2399
+        </td>
+        <td>
+          3205
+          -
+          3220
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          java.lang.Runnable.run
+        </td>
+        <td style="background: #AEF1AE">
+          head.task.run()
+        </td>
+      </tr><tr>
+        <td>
+          99
+        </td>
+        <td>
+          2400
+        </td>
+        <td>
+          3276
+          -
+          3293
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.reportFailure
+        </td>
+        <td style="background: #F0ADAD">
+          TestScheduler.this.reportFailure(ex)
+        </td>
+      </tr><tr>
+        <td>
+          102
+        </td>
+        <td>
+          2401
+        </td>
+        <td>
+          3317
+          -
+          3321
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          106
+        </td>
+        <td>
+          2403
+        </td>
+        <td>
+          3360
+          -
+          3365
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          false
+        </td>
+      </tr><tr>
+        <td>
+          113
+        </td>
+        <td>
+          2404
+        </td>
+        <td>
+          3537
+          -
+          3546
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicAny.get
+        </td>
+        <td style="background: #AEF1AE">
+          TestScheduler.this.state.get
+        </td>
+      </tr><tr>
+        <td>
+          114
+        </td>
+        <td>
+          2405
+        </td>
+        <td>
+          3572
+          -
+          3592
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.duration.FiniteDuration.+
+        </td>
+        <td style="background: #AEF1AE">
+          current.clock.+(time)
+        </td>
+      </tr><tr>
+        <td>
+          116
+        </td>
+        <td>
+          2406
+        </td>
+        <td>
+          3600
+          -
+          3637
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.extractOneTask
+        </td>
+        <td style="background: #AEF1AE">
+          TestScheduler.this.extractOneTask(current, currentClock)
+        </td>
+      </tr><tr>
+        <td>
+          118
+        </td>
+        <td>
+          2407
+        </td>
+        <td>
+          3746
+          -
+          3757
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.Task.runsAt
+        </td>
+        <td style="background: #AEF1AE">
+          head.runsAt
+        </td>
+      </tr><tr>
+        <td>
+          118
+        </td>
+        <td>
+          2410
+        </td>
+        <td>
+          3733
+          -
+          3733
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy$default$5
+        </td>
+        <td style="background: #AEF1AE">
+          current.copy$default$5
+        </td>
+      </tr><tr>
+        <td>
+          118
+        </td>
+        <td>
+          2409
+        </td>
+        <td>
+          3733
+          -
+          3733
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy$default$4
+        </td>
+        <td style="background: #AEF1AE">
+          current.copy$default$4
+        </td>
+      </tr><tr>
+        <td>
+          118
+        </td>
+        <td>
+          2412
+        </td>
+        <td>
+          3695
+          -
+          3773
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          TestScheduler.this.state.compareAndSet(current, {
+  &lt;artifact&gt; val x$23: scala.concurrent.duration.FiniteDuration = head.runsAt;
+  &lt;artifact&gt; val x$24: scala.collection.immutable.SortedSet[monifu.concurrent.schedulers.TestScheduler.Task] @scala.reflect.internal.annotations.uncheckedBounds = rest;
+  &lt;artifact&gt; val x$25: Long = current.copy$default$1;
+  &lt;artifact&gt; val x$26: monifu.concurrent.schedulers.TestScheduler.Task =&gt; Unit @scala.reflect.internal.annotations.uncheckedBounds = current.copy$default$4;
+  &lt;artifact&gt; val x$27: Throwable = current.copy$default$5;
+  current.copy(x$25, x$23, x$24, x$26, x$27)
+}).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          118
+        </td>
+        <td>
+          2408
+        </td>
+        <td>
+          3733
+          -
+          3733
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy$default$1
+        </td>
+        <td style="background: #AEF1AE">
+          current.copy$default$1
+        </td>
+      </tr><tr>
+        <td>
+          118
+        </td>
+        <td>
+          2411
+        </td>
+        <td>
+          3725
+          -
+          3772
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy
+        </td>
+        <td style="background: #AEF1AE">
+          current.copy(x$25, x$23, x$24, x$26, x$27)
+        </td>
+      </tr><tr>
+        <td>
+          119
+        </td>
+        <td>
+          2414
+        </td>
+        <td>
+          3787
+          -
+          3805
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.loop
+        </td>
+        <td style="background: #F0ADAD">
+          loop(time, result)
+        </td>
+      </tr><tr>
+        <td>
+          119
+        </td>
+        <td>
+          2413
+        </td>
+        <td>
+          3787
+          -
+          3805
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.loop
+        </td>
+        <td style="background: #F0ADAD">
+          loop(time, result)
+        </td>
+      </tr><tr>
+        <td>
+          120
+        </td>
+        <td>
+          2422
+        </td>
+        <td>
+          3821
+          -
+          4178
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  try {
+    head.task.run()
+  } catch {
+    case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((ex @ _)) =&gt; TestScheduler.this.reportFailure(ex)
+  };
+  loop(currentClock.-(head.runsAt), true)
+}
+        </td>
+      </tr><tr>
+        <td>
+          122
+        </td>
+        <td>
+          2416
+        </td>
+        <td>
+          3867
+          -
+          3882
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          java.lang.Runnable.run
+        </td>
+        <td style="background: #AEF1AE">
+          head.task.run()
+        </td>
+      </tr><tr>
+        <td>
+          122
+        </td>
+        <td>
+          2415
+        </td>
+        <td>
+          3867
+          -
+          3882
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Runnable.run
+        </td>
+        <td style="background: #AEF1AE">
+          head.task.run()
+        </td>
+      </tr><tr>
+        <td>
+          124
+        </td>
+        <td>
+          2417
+        </td>
+        <td>
+          3942
+          -
+          3959
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.reportFailure
+        </td>
+        <td style="background: #F0ADAD">
+          TestScheduler.this.reportFailure(ex)
+        </td>
+      </tr><tr>
+        <td>
+          129
+        </td>
+        <td>
+          2419
+        </td>
+        <td>
+          4124
+          -
+          4150
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.duration.FiniteDuration.-
+        </td>
+        <td style="background: #AEF1AE">
+          currentClock.-(head.runsAt)
+        </td>
+      </tr><tr>
+        <td>
+          129
+        </td>
+        <td>
+          2418
+        </td>
+        <td>
+          4139
+          -
+          4150
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.Task.runsAt
+        </td>
+        <td style="background: #AEF1AE">
+          head.runsAt
+        </td>
+      </tr><tr>
+        <td>
+          129
+        </td>
+        <td>
+          2421
+        </td>
+        <td>
+          4119
+          -
+          4166
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.loop
+        </td>
+        <td style="background: #AEF1AE">
+          loop(currentClock.-(head.runsAt), true)
+        </td>
+      </tr><tr>
+        <td>
+          129
+        </td>
+        <td>
+          2420
+        </td>
+        <td>
+          4161
+          -
+          4165
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          133
+        </td>
+        <td>
+          2425
+        </td>
+        <td>
+          4253
+          -
+          4253
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy$default$4
+        </td>
+        <td style="background: #AEF1AE">
+          current.copy$default$4
+        </td>
+      </tr><tr>
+        <td>
+          133
+        </td>
+        <td>
+          2428
+        </td>
+        <td>
+          4215
+          -
+          4280
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          TestScheduler.this.state.compareAndSet(current, {
+  &lt;artifact&gt; val x$28: scala.concurrent.duration.FiniteDuration = currentClock;
+  &lt;artifact&gt; val x$29: Long = current.copy$default$1;
+  &lt;artifact&gt; val x$30: scala.collection.immutable.SortedSet[monifu.concurrent.schedulers.TestScheduler.Task] @scala.reflect.internal.annotations.uncheckedBounds = current.copy$default$3;
+  &lt;artifact&gt; val x$31: monifu.concurrent.schedulers.TestScheduler.Task =&gt; Unit @scala.reflect.internal.annotations.uncheckedBounds = current.copy$default$4;
+  &lt;artifact&gt; val x$32: Throwable = current.copy$default$5;
+  current.copy(x$29, x$28, x$30, x$31, x$32)
+}).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          133
+        </td>
+        <td>
+          2427
+        </td>
+        <td>
+          4245
+          -
+          4279
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy
+        </td>
+        <td style="background: #AEF1AE">
+          current.copy(x$29, x$28, x$30, x$31, x$32)
+        </td>
+      </tr><tr>
+        <td>
+          133
+        </td>
+        <td>
+          2424
+        </td>
+        <td>
+          4253
+          -
+          4253
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy$default$3
+        </td>
+        <td style="background: #AEF1AE">
+          current.copy$default$3
+        </td>
+      </tr><tr>
+        <td>
+          133
+        </td>
+        <td>
+          2423
+        </td>
+        <td>
+          4253
+          -
+          4253
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy$default$1
+        </td>
+        <td style="background: #AEF1AE">
+          current.copy$default$1
+        </td>
+      </tr><tr>
+        <td>
+          133
+        </td>
+        <td>
+          2426
+        </td>
+        <td>
+          4253
+          -
+          4253
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy$default$5
+        </td>
+        <td style="background: #AEF1AE">
+          current.copy$default$5
+        </td>
+      </tr><tr>
+        <td>
+          134
+        </td>
+        <td>
+          2430
+        </td>
+        <td>
+          4294
+          -
+          4312
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.loop
+        </td>
+        <td style="background: #F0ADAD">
+          loop(time, result)
+        </td>
+      </tr><tr>
+        <td>
+          134
+        </td>
+        <td>
+          2429
+        </td>
+        <td>
+          4294
+          -
+          4312
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.loop
+        </td>
+        <td style="background: #F0ADAD">
+          loop(time, result)
+        </td>
+      </tr><tr>
+        <td>
+          136
+        </td>
+        <td>
+          2431
+        </td>
+        <td>
+          4340
+          -
+          4346
+        </td>
+        <td>
+          Ident
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.result
+        </td>
+        <td style="background: #AEF1AE">
+          result
+        </td>
+      </tr><tr>
+        <td>
+          140
+        </td>
+        <td>
+          2432
+        </td>
+        <td>
+          4366
+          -
+          4392
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.loop
+        </td>
+        <td style="background: #AEF1AE">
+          loop(time, false)
+        </td>
+      </tr><tr>
+        <td>
+          149
+        </td>
+        <td>
+          2433
+        </td>
+        <td>
+          4508
+          -
+          4527
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new TestScheduler()
+        </td>
+      </tr><tr>
+        <td>
+          160
+        </td>
+        <td>
+          2442
+        </td>
+        <td>
+          4773
+          -
+          4776
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.Task.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          161
+        </td>
+        <td>
+          2434
+        </td>
+        <td>
+          4826
+          -
+          4826
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.math.Ordering.Long
+        </td>
+        <td style="background: #AEF1AE">
+          math.this.Ordering.Long
+        </td>
+      </tr><tr>
+        <td>
+          161
+        </td>
+        <td>
+          2435
+        </td>
+        <td>
+          4816
+          -
+          4842
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.Predef.implicitly
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.implicitly[Ordering[Long]](math.this.Ordering.Long)
+        </td>
+      </tr><tr>
+        <td>
+          164
+        </td>
+        <td>
+          2436
+        </td>
+        <td>
+          4916
+          -
+          4924
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.Task.runsAt
+        </td>
+        <td style="background: #AEF1AE">
+          y.runsAt
+        </td>
+      </tr><tr>
+        <td>
+          164
+        </td>
+        <td>
+          2437
+        </td>
+        <td>
+          4899
+          -
+          4925
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.duration.FiniteDuration.compare
+        </td>
+        <td style="background: #AEF1AE">
+          x.runsAt.compare(y.runsAt)
+        </td>
+      </tr><tr>
+        <td>
+          165
+        </td>
+        <td>
+          2438
+        </td>
+        <td>
+          4962
+          -
+          4974
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.!=
+        </td>
+        <td style="background: #AEF1AE">
+          nonZero.!=(0)
+        </td>
+      </tr><tr>
+        <td>
+          168
+        </td>
+        <td>
+          2439
+        </td>
+        <td>
+          5052
+          -
+          5056
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.Task.id
+        </td>
+        <td style="background: #AEF1AE">
+          x.id
+        </td>
+      </tr><tr>
+        <td>
+          168
+        </td>
+        <td>
+          2441
+        </td>
+        <td>
+          5036
+          -
+          5063
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.math.Ordering.compare
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this.longOrd.compare(x.id, y.id)
+        </td>
+      </tr><tr>
+        <td>
+          168
+        </td>
+        <td>
+          2440
+        </td>
+        <td>
+          5058
+          -
+          5062
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.Task.id
+        </td>
+        <td style="background: #AEF1AE">
+          y.id
+        </td>
+      </tr><tr>
+        <td>
+          184
+        </td>
+        <td>
+          2443
+        </td>
+        <td>
+          5426
+          -
+          5431
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.clock
+        </td>
+        <td style="background: #AEF1AE">
+          State.this.clock
+        </td>
+      </tr><tr>
+        <td>
+          184
+        </td>
+        <td>
+          2445
+        </td>
+        <td>
+          5390
+          -
+          5432
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          State.this.tasks.headOption.exists(((x$7: monifu.concurrent.schedulers.TestScheduler.Task) =&gt; x$7.runsAt.&lt;(State.this.clock))).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          184
+        </td>
+        <td>
+          2444
+        </td>
+        <td>
+          5415
+          -
+          5431
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.math.Ordered.&lt;
+        </td>
+        <td style="background: #AEF1AE">
+          x$7.runsAt.&lt;(State.this.clock)
+        </td>
+      </tr><tr>
+        <td>
+          184
+        </td>
+        <td>
+          2447
+        </td>
+        <td>
+          5383
+          -
+          5492
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Predef.assert
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.assert(State.this.tasks.headOption.exists(((x$7: monifu.concurrent.schedulers.TestScheduler.Task) =&gt; x$7.runsAt.&lt;(State.this.clock))).unary_!, &quot;The runsAt for any task must never be in the past&quot;)
+        </td>
+      </tr><tr>
+        <td>
+          185
+        </td>
+        <td>
+          2446
+        </td>
+        <td>
+          5440
+          -
+          5491
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          &quot;The runsAt for any task must never be in the past&quot;
+        </td>
+      </tr><tr>
+        <td>
+          191
+        </td>
+        <td>
+          2448
+        </td>
+        <td>
+          5645
+          -
+          5655
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.+
+        </td>
+        <td style="background: #AEF1AE">
+          State.this.lastID.+(1)
+        </td>
+      </tr><tr>
+        <td>
+          192
+        </td>
+        <td>
+          2450
+        </td>
+        <td>
+          5673
+          -
+          5701
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.Task.apply
+        </td>
+        <td style="background: #AEF1AE">
+          TestScheduler.this.Task.apply(newID, runnable, State.this.clock)
+        </td>
+      </tr><tr>
+        <td>
+          192
+        </td>
+        <td>
+          2449
+        </td>
+        <td>
+          5695
+          -
+          5700
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.clock
+        </td>
+        <td style="background: #AEF1AE">
+          State.this.clock
+        </td>
+      </tr><tr>
+        <td>
+          193
+        </td>
+        <td>
+          2452
+        </td>
+        <td>
+          5708
+          -
+          5708
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy$default$2
+        </td>
+        <td style="background: #AEF1AE">
+          State.this.copy$default$2
+        </td>
+      </tr><tr>
+        <td>
+          193
+        </td>
+        <td>
+          2451
+        </td>
+        <td>
+          5737
+          -
+          5749
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.collection.SetLike.+
+        </td>
+        <td style="background: #AEF1AE">
+          State.this.tasks.+(task)
+        </td>
+      </tr><tr>
+        <td>
+          193
+        </td>
+        <td>
+          2454
+        </td>
+        <td>
+          5708
+          -
+          5708
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy$default$5
+        </td>
+        <td style="background: #AEF1AE">
+          State.this.copy$default$5
+        </td>
+      </tr><tr>
+        <td>
+          193
+        </td>
+        <td>
+          2453
+        </td>
+        <td>
+          5708
+          -
+          5708
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy$default$4
+        </td>
+        <td style="background: #AEF1AE">
+          State.this.copy$default$4
+        </td>
+      </tr><tr>
+        <td>
+          193
+        </td>
+        <td>
+          2455
+        </td>
+        <td>
+          5708
+          -
+          5750
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy
+        </td>
+        <td style="background: #AEF1AE">
+          State.this.copy(x$33, x$35, x$34, x$36, x$37)
+        </td>
+      </tr><tr>
+        <td>
+          200
+        </td>
+        <td>
+          2457
+        </td>
+        <td>
+          5929
+          -
+          5951
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.math.Ordered.&gt;=
+        </td>
+        <td style="background: #AEF1AE">
+          delay.&gt;=(scala.concurrent.duration.Duration.Zero)
+        </td>
+      </tr><tr>
+        <td>
+          200
+        </td>
+        <td>
+          2459
+        </td>
+        <td>
+          5921
+          -
+          5988
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Predef.require
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.require(delay.&gt;=(scala.concurrent.duration.Duration.Zero), &quot;The given delay must be positive&quot;)
+        </td>
+      </tr><tr>
+        <td>
+          200
+        </td>
+        <td>
+          2456
+        </td>
+        <td>
+          5938
+          -
+          5951
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.duration.Duration.Zero
+        </td>
+        <td style="background: #AEF1AE">
+          scala.concurrent.duration.Duration.Zero
+        </td>
+      </tr><tr>
+        <td>
+          200
+        </td>
+        <td>
+          2458
+        </td>
+        <td>
+          5953
+          -
+          5987
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          &quot;The given delay must be positive&quot;
+        </td>
+      </tr><tr>
+        <td>
+          202
+        </td>
+        <td>
+          2460
+        </td>
+        <td>
+          6008
+          -
+          6018
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.+
+        </td>
+        <td style="background: #AEF1AE">
+          State.this.lastID.+(1)
+        </td>
+      </tr><tr>
+        <td>
+          203
+        </td>
+        <td>
+          2461
+        </td>
+        <td>
+          6042
+          -
+          6070
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.SingleAssignmentCancelable.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.cancelables.SingleAssignmentCancelable.apply()
+        </td>
+      </tr><tr>
+        <td>
+          205
+        </td>
+        <td>
+          2463
+        </td>
+        <td>
+          6089
+          -
+          6123
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.Task.apply
+        </td>
+        <td style="background: #AEF1AE">
+          TestScheduler.this.Task.apply(newID, r, this.clock.+(delay))
+        </td>
+      </tr><tr>
+        <td>
+          205
+        </td>
+        <td>
+          2462
+        </td>
+        <td>
+          6104
+          -
+          6122
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.duration.FiniteDuration.+
+        </td>
+        <td style="background: #AEF1AE">
+          this.clock.+(delay)
+        </td>
+      </tr><tr>
+        <td>
+          206
+        </td>
+        <td>
+          2466
+        </td>
+        <td>
+          6130
+          -
+          6175
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.SingleAssignmentCancelable.:=
+        </td>
+        <td style="background: #AEF1AE">
+          cancelable.:=(monifu.concurrent.Cancelable.apply(State.this.cancelTask.apply(task)))
+        </td>
+      </tr><tr>
+        <td>
+          206
+        </td>
+        <td>
+          2465
+        </td>
+        <td>
+          6144
+          -
+          6175
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Cancelable.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.Cancelable.apply(State.this.cancelTask.apply(task))
+        </td>
+      </tr><tr>
+        <td>
+          206
+        </td>
+        <td>
+          2464
+        </td>
+        <td>
+          6157
+          -
+          6173
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Function1.apply
+        </td>
+        <td style="background: #AEF1AE">
+          State.this.cancelTask.apply(task)
+        </td>
+      </tr><tr>
+        <td>
+          208
+        </td>
+        <td>
+          2470
+        </td>
+        <td>
+          6196
+          -
+          6196
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy$default$5
+        </td>
+        <td style="background: #AEF1AE">
+          State.this.copy$default$5
+        </td>
+      </tr><tr>
+        <td>
+          208
+        </td>
+        <td>
+          2469
+        </td>
+        <td>
+          6196
+          -
+          6196
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy$default$4
+        </td>
+        <td style="background: #AEF1AE">
+          State.this.copy$default$4
+        </td>
+      </tr><tr>
+        <td>
+          208
+        </td>
+        <td>
+          2472
+        </td>
+        <td>
+          6183
+          -
+          6263
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Tuple2.apply
+        </td>
+        <td style="background: #AEF1AE">
+          scala.Tuple2.apply[monifu.concurrent.cancelables.SingleAssignmentCancelable, monifu.concurrent.schedulers.TestScheduler.State](cancelable, {
+  &lt;artifact&gt; val x$38: Long = newID;
+  &lt;artifact&gt; val x$39: scala.collection.immutable.SortedSet[monifu.concurrent.schedulers.TestScheduler.Task] @scala.reflect.internal.annotations.uncheckedBounds = State.this.tasks.+(task);
+  &lt;artifact&gt; val x$40: scala.concurrent.duration.FiniteDuration = State.this.copy$default$2;
+  &lt;artifact&gt; val x$41: monifu.concurrent.schedulers.TestScheduler.Task =&gt; Unit @scala.reflect.internal.annotations.uncheckedBounds = State.this.copy$default$4;
+  &lt;artifact&gt; val x$42: Throwable = State.this.copy$default$5;
+  State.this.copy(x$38, x$40, x$39, x$41, x$42)
+})
+        </td>
+      </tr><tr>
+        <td>
+          208
+        </td>
+        <td>
+          2468
+        </td>
+        <td>
+          6196
+          -
+          6196
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy$default$2
+        </td>
+        <td style="background: #AEF1AE">
+          State.this.copy$default$2
+        </td>
+      </tr><tr>
+        <td>
+          208
+        </td>
+        <td>
+          2471
+        </td>
+        <td>
+          6196
+          -
+          6262
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.TestScheduler.State.copy
+        </td>
+        <td style="background: #AEF1AE">
+          State.this.copy(x$38, x$40, x$39, x$41, x$42)
+        </td>
+      </tr><tr>
+        <td>
+          210
+        </td>
+        <td>
+          2467
+        </td>
+        <td>
+          6242
+          -
+          6254
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.collection.SetLike.+
+        </td>
+        <td style="background: #AEF1AE">
+          State.this.tasks.+(task)
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

@@ -1,0 +1,551 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          monifu/concurrent/atomic/AtomicBuilder.scala.html
+        </title>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *      http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''> 
+</span>17 <span style=''>package monifu.concurrent.atomic
+</span>18 <span style=''>
+</span>19 <span style=''>trait AtomicBuilder[T, R <: Atomic[T]] {
+</span>20 <span style=''>  def buildInstance(initialValue: T): R
+</span>21 <span style=''>}
+</span>22 <span style=''>
+</span>23 <span style=''>private[atomic] object Implicits {
+</span>24 <span style=''>  trait Level1 {
+</span>25 <span style=''>    implicit def AtomicRefBuilder[T] = </span><span style='background: #AEF1AE'>new</span><span style=''> AtomicBuilder[T, AtomicAny[T]] {
+</span>26 <span style=''>      def buildInstance(initialValue: T) =
+</span>27 <span style=''>        </span><span style='background: #AEF1AE'>AtomicAny(initialValue)</span><span style=''>
+</span>28 <span style=''>    }
+</span>29 <span style=''>  }
+</span>30 <span style=''>
+</span>31 <span style=''>  trait Level2 extends Level1 {
+</span>32 <span style=''>    implicit def AtomicNumberBuilder[T : Numeric] =
+</span>33 <span style=''>      </span><span style='background: #AEF1AE'>new</span><span style=''> AtomicBuilder[T, AtomicNumberAny[T]] {
+</span>34 <span style=''>        def buildInstance(initialValue: T) =
+</span>35 <span style=''>          </span><span style='background: #AEF1AE'>AtomicNumberAny(initialValue)</span><span style=''>
+</span>36 <span style=''>      }
+</span>37 <span style=''>  }
+</span>38 <span style=''>
+</span>39 <span style=''>  trait Level3 extends Level2 {
+</span>40 <span style=''>    implicit val AtomicIntBuilder: AtomicBuilder[Int, AtomicInt] =
+</span>41 <span style=''>      </span><span style='background: #AEF1AE'>new</span><span style=''> AtomicBuilder[Int, AtomicInt] {
+</span>42 <span style=''>        def buildInstance(initialValue: Int) =
+</span>43 <span style=''>          </span><span style='background: #AEF1AE'>AtomicInt(initialValue)</span><span style=''>
+</span>44 <span style=''>      }
+</span>45 <span style=''>
+</span>46 <span style=''>    implicit val AtomicLongBuilder: AtomicBuilder[Long, AtomicLong] =
+</span>47 <span style=''>      </span><span style='background: #AEF1AE'>new</span><span style=''> AtomicBuilder[Long, AtomicLong] {
+</span>48 <span style=''>        def buildInstance(initialValue: Long) =
+</span>49 <span style=''>          </span><span style='background: #AEF1AE'>AtomicLong(initialValue)</span><span style=''>
+</span>50 <span style=''>      }
+</span>51 <span style=''>
+</span>52 <span style=''>    implicit val AtomicBooleanBuilder: AtomicBuilder[Boolean, AtomicBoolean] =
+</span>53 <span style=''>      </span><span style='background: #AEF1AE'>new</span><span style=''> AtomicBuilder[Boolean, AtomicBoolean] {
+</span>54 <span style=''>        def buildInstance(initialValue: Boolean) =
+</span>55 <span style=''>          </span><span style='background: #AEF1AE'>AtomicBoolean(initialValue)</span><span style=''>
+</span>56 <span style=''>      }
+</span>57 <span style=''>
+</span>58 <span style=''>    implicit val AtomicByteBuilder: AtomicBuilder[Byte, AtomicByte] =
+</span>59 <span style=''>      </span><span style='background: #AEF1AE'>new</span><span style=''> AtomicBuilder[Byte, AtomicByte] {
+</span>60 <span style=''>        def buildInstance(initialValue: Byte): AtomicByte =
+</span>61 <span style=''>          </span><span style='background: #AEF1AE'>AtomicByte(initialValue)</span><span style=''>
+</span>62 <span style=''>      }
+</span>63 <span style=''>
+</span>64 <span style=''>    implicit val AtomicCharBuilder: AtomicBuilder[Char, AtomicChar] =
+</span>65 <span style=''>      </span><span style='background: #AEF1AE'>new</span><span style=''> AtomicBuilder[Char, AtomicChar] {
+</span>66 <span style=''>        def buildInstance(initialValue: Char): AtomicChar =
+</span>67 <span style=''>          </span><span style='background: #AEF1AE'>AtomicChar(initialValue)</span><span style=''>
+</span>68 <span style=''>      }
+</span>69 <span style=''>
+</span>70 <span style=''>    implicit val AtomicShortBuilder: AtomicBuilder[Short, AtomicShort] =
+</span>71 <span style=''>      </span><span style='background: #AEF1AE'>new</span><span style=''> AtomicBuilder[Short, AtomicShort] {
+</span>72 <span style=''>        def buildInstance(initialValue: Short): AtomicShort =
+</span>73 <span style=''>          </span><span style='background: #AEF1AE'>AtomicShort(initialValue)</span><span style=''>
+</span>74 <span style=''>      }
+</span>75 <span style=''>
+</span>76 <span style=''>    implicit val AtomicFloatBuilder: AtomicBuilder[Float, AtomicFloat] =
+</span>77 <span style=''>      </span><span style='background: #AEF1AE'>new</span><span style=''> AtomicBuilder[Float, AtomicFloat] {
+</span>78 <span style=''>        def buildInstance(initialValue: Float): AtomicFloat =
+</span>79 <span style=''>          </span><span style='background: #AEF1AE'>AtomicFloat(initialValue)</span><span style=''>
+</span>80 <span style=''>      }
+</span>81 <span style=''>
+</span>82 <span style=''>    implicit val AtomicDoubleBuilder: AtomicBuilder[Double, AtomicDouble] =
+</span>83 <span style=''>      </span><span style='background: #AEF1AE'>new</span><span style=''> AtomicBuilder[Double, AtomicDouble] {
+</span>84 <span style=''>        def buildInstance(initialValue: Double): AtomicDouble =
+</span>85 <span style=''>          </span><span style='background: #AEF1AE'>AtomicDouble(initialValue)</span><span style=''>
+</span>86 <span style=''>      }
+</span>87 <span style=''>  }
+</span>88 <span style=''>}
+</span>89 <span style=''>
+</span>90 <span style=''>object AtomicBuilder extends Implicits.Level3
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          25
+        </td>
+        <td>
+          230
+        </td>
+        <td>
+          817
+          -
+          820
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.Implicits.Level1.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          27
+        </td>
+        <td>
+          229
+        </td>
+        <td>
+          905
+          -
+          928
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicAny.apply
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicAny.apply[T](initialValue)
+        </td>
+      </tr><tr>
+        <td>
+          33
+        </td>
+        <td>
+          232
+        </td>
+        <td>
+          1030
+          -
+          1033
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.Implicits.Level2.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          35
+        </td>
+        <td>
+          231
+        </td>
+        <td>
+          1128
+          -
+          1157
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicNumberAny.apply
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicNumberAny.apply[T](initialValue)(evidence$1)
+        </td>
+      </tr><tr>
+        <td>
+          41
+        </td>
+        <td>
+          234
+        </td>
+        <td>
+          1276
+          -
+          1279
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.Implicits.Level3.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          43
+        </td>
+        <td>
+          233
+        </td>
+        <td>
+          1369
+          -
+          1392
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicInt.apply
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicInt.apply(initialValue)
+        </td>
+      </tr><tr>
+        <td>
+          47
+        </td>
+        <td>
+          236
+        </td>
+        <td>
+          1478
+          -
+          1481
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.Implicits.Level3.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          49
+        </td>
+        <td>
+          235
+        </td>
+        <td>
+          1574
+          -
+          1598
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicLong.apply
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicLong.apply(initialValue)
+        </td>
+      </tr><tr>
+        <td>
+          53
+        </td>
+        <td>
+          238
+        </td>
+        <td>
+          1693
+          -
+          1696
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.Implicits.Level3.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          55
+        </td>
+        <td>
+          237
+        </td>
+        <td>
+          1798
+          -
+          1825
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicBoolean.apply
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicBoolean.apply(initialValue)
+        </td>
+      </tr><tr>
+        <td>
+          59
+        </td>
+        <td>
+          240
+        </td>
+        <td>
+          1911
+          -
+          1914
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.Implicits.Level3.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          61
+        </td>
+        <td>
+          239
+        </td>
+        <td>
+          2019
+          -
+          2043
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicByte.apply
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicByte.apply(initialValue)
+        </td>
+      </tr><tr>
+        <td>
+          65
+        </td>
+        <td>
+          242
+        </td>
+        <td>
+          2129
+          -
+          2132
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.Implicits.Level3.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          241
+        </td>
+        <td>
+          2237
+          -
+          2261
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicChar.apply
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicChar.apply(initialValue)
+        </td>
+      </tr><tr>
+        <td>
+          71
+        </td>
+        <td>
+          244
+        </td>
+        <td>
+          2350
+          -
+          2353
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.Implicits.Level3.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          73
+        </td>
+        <td>
+          243
+        </td>
+        <td>
+          2462
+          -
+          2487
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicShort.apply
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicShort.apply(initialValue)
+        </td>
+      </tr><tr>
+        <td>
+          77
+        </td>
+        <td>
+          246
+        </td>
+        <td>
+          2576
+          -
+          2579
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.Implicits.Level3.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          79
+        </td>
+        <td>
+          245
+        </td>
+        <td>
+          2688
+          -
+          2713
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicFloat.apply
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicFloat.apply(initialValue)
+        </td>
+      </tr><tr>
+        <td>
+          83
+        </td>
+        <td>
+          248
+        </td>
+        <td>
+          2805
+          -
+          2808
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.Implicits.Level3.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          85
+        </td>
+        <td>
+          247
+        </td>
+        <td>
+          2921
+          -
+          2947
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.apply
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.apply(initialValue)
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

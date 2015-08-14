@@ -1,0 +1,2015 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          monifu/reactive/subjects/PublishSubject.scala.html
+        </title>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''> 
+</span>17 <span style=''>package monifu.reactive.subjects
+</span>18 <span style=''>
+</span>19 <span style=''>import monifu.reactive.Ack.{Cancel, Continue}
+</span>20 <span style=''>import monifu.reactive.internals.{FutureAckExtensions, PromiseCounter}
+</span>21 <span style=''>import monifu.reactive.{Ack, Subject, Subscriber}
+</span>22 <span style=''>import scala.concurrent.Future
+</span>23 <span style=''>
+</span>24 <span style=''>
+</span>25 <span style=''>/**
+</span>26 <span style=''> * A `PublishSubject` emits to a subscriber only those items that are
+</span>27 <span style=''> * emitted by the source subsequent to the time of the subscription
+</span>28 <span style=''> *
+</span>29 <span style=''> * <img src="https://raw.githubusercontent.com/wiki/alexandru/monifu/assets/rx-operators/S.PublishSubject.png" />
+</span>30 <span style=''> *
+</span>31 <span style=''> * If the source terminates with an error, the `PublishSubject` will not emit any
+</span>32 <span style=''> * items to subsequent subscribers, but will simply pass along the error
+</span>33 <span style=''> * notification from the source Observable.
+</span>34 <span style=''> *
+</span>35 <span style=''> * <img src="https://raw.githubusercontent.com/wiki/alexandru/monifu/assets/rx-operators/S.PublishSubject.e.png" />
+</span>36 <span style=''> */
+</span>37 <span style=''>final class PublishSubject[T] extends Subject[T,T] {
+</span>38 <span style=''>  private[this] val lock = </span><span style='background: #AEF1AE'>new AnyRef</span><span style=''>
+</span>39 <span style=''>  private[this] var isCompleted = </span><span style='background: #AEF1AE'>false</span><span style=''>
+</span>40 <span style=''>  private[this] var errorThrown: Throwable = </span><span style='background: #AEF1AE'>null</span><span style=''>
+</span>41 <span style=''>  @volatile private[this] var subscriptions = </span><span style='background: #AEF1AE'>Array.empty[Subscriber[T]]</span><span style=''>
+</span>42 <span style=''>
+</span>43 <span style=''>  def subscribeFn(subscriber: Subscriber[T]): Unit =
+</span>44 <span style=''>    </span><span style='background: #AEF1AE'>lock.synchronized {
+</span>45 <span style=''></span><span style='background: #AEF1AE'>      if (!isCompleted)
+</span>46 <span style=''></span><span style='background: #AEF1AE'>        subscriptions = createSubscription(subscriptions, subscriber)
+</span>47 <span style=''></span><span style='background: #AEF1AE'>      else if (errorThrown ne null)
+</span>48 <span style=''></span><span style='background: #AEF1AE'>        subscriber.observer.onError(errorThrown)
+</span>49 <span style=''></span><span style='background: #AEF1AE'>      else
+</span>50 <span style=''></span><span style='background: #AEF1AE'>        subscriber.observer.onComplete()
+</span>51 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>52 <span style=''>
+</span>53 <span style=''>  def onNext(elem: T): Future[Ack] = {
+</span>54 <span style=''>    if (</span><span style='background: #AEF1AE'>!isCompleted</span><span style=''>) </span><span style='background: #AEF1AE'>{
+</span>55 <span style=''></span><span style='background: #AEF1AE'>      val observers = subscriptions
+</span>56 <span style=''></span><span style='background: #AEF1AE'>      if (observers.nonEmpty)
+</span>57 <span style=''></span><span style='background: #AEF1AE'>        streamToMany(observers, elem)
+</span>58 <span style=''></span><span style='background: #AEF1AE'>      else
+</span>59 <span style=''></span><span style='background: #AEF1AE'>        Continue
+</span>60 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>61 <span style=''>    else
+</span>62 <span style=''>      </span><span style='background: #AEF1AE'>Cancel</span><span style=''>
+</span>63 <span style=''>  }
+</span>64 <span style=''>
+</span>65 <span style=''>  def onError(ex: Throwable) =
+</span>66 <span style=''>    </span><span style='background: #AEF1AE'>lock.synchronized {
+</span>67 <span style=''></span><span style='background: #AEF1AE'>      if (!isCompleted) {
+</span>68 <span style=''></span><span style='background: #AEF1AE'>        isCompleted = true
+</span>69 <span style=''></span><span style='background: #AEF1AE'>        errorThrown = ex
+</span>70 <span style=''></span><span style='background: #AEF1AE'>
+</span>71 <span style=''></span><span style='background: #AEF1AE'>        var idx = 0
+</span>72 <span style=''></span><span style='background: #AEF1AE'>        while (idx < subscriptions.length) {
+</span>73 <span style=''></span><span style='background: #AEF1AE'>          subscriptions(idx).observer.onError(ex)
+</span>74 <span style=''></span><span style='background: #AEF1AE'>          idx += 1
+</span>75 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>76 <span style=''></span><span style='background: #AEF1AE'>      }
+</span>77 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>78 <span style=''>
+</span>79 <span style=''>  def onComplete() =
+</span>80 <span style=''>    </span><span style='background: #AEF1AE'>lock.synchronized {
+</span>81 <span style=''></span><span style='background: #AEF1AE'>      if (!isCompleted) {
+</span>82 <span style=''></span><span style='background: #AEF1AE'>        isCompleted = true
+</span>83 <span style=''></span><span style='background: #AEF1AE'>
+</span>84 <span style=''></span><span style='background: #AEF1AE'>        var idx = 0
+</span>85 <span style=''></span><span style='background: #AEF1AE'>        while (idx < subscriptions.length) {
+</span>86 <span style=''></span><span style='background: #AEF1AE'>          subscriptions(idx).observer.onComplete()
+</span>87 <span style=''></span><span style='background: #AEF1AE'>          idx += 1
+</span>88 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>89 <span style=''></span><span style='background: #AEF1AE'>      }
+</span>90 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>91 <span style=''>
+</span>92 <span style=''>  private[this] def streamToMany(array: Array[Subscriber[T]], elem: T): Future[Continue] = {
+</span>93 <span style=''>    val newPromise = </span><span style='background: #AEF1AE'>PromiseCounter[Continue](Continue, array.length)</span><span style=''>
+</span>94 <span style=''>    val length = </span><span style='background: #AEF1AE'>array.length</span><span style=''>
+</span>95 <span style=''>    var idx = </span><span style='background: #AEF1AE'>0</span><span style=''>
+</span>96 <span style=''>
+</span>97 <span style=''>    while (</span><span style='background: #AEF1AE'>idx < length</span><span style=''>) </span><span style='background: #AEF1AE'>{
+</span>98 <span style=''></span><span style='background: #AEF1AE'>      val subscriber = array(idx)
+</span>99 <span style=''></span><span style='background: #AEF1AE'>      implicit val s = subscriber.scheduler
+</span>100 <span style=''></span><span style='background: #AEF1AE'>      val obs = subscriber.observer
+</span>101 <span style=''></span><span style='background: #AEF1AE'>
+</span>102 <span style=''></span><span style='background: #AEF1AE'>      obs.onNext(elem).onCompleteNow {
+</span>103 <span style=''></span><span style='background: #AEF1AE'>        case Continue.IsSuccess =>
+</span>104 <span style=''></span><span style='background: #AEF1AE'>          newPromise.countdown()
+</span>105 <span style=''></span><span style='background: #AEF1AE'>        case _ =>
+</span>106 <span style=''></span><span style='background: #AEF1AE'>          removeSubscription(subscriber)
+</span>107 <span style=''></span><span style='background: #AEF1AE'>          newPromise.countdown()
+</span>108 <span style=''></span><span style='background: #AEF1AE'>      }
+</span>109 <span style=''></span><span style='background: #AEF1AE'>
+</span>110 <span style=''></span><span style='background: #AEF1AE'>      idx += 1
+</span>111 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>112 <span style=''>
+</span>113 <span style=''>    </span><span style='background: #AEF1AE'>newPromise.future</span><span style=''>
+</span>114 <span style=''>  }
+</span>115 <span style=''>
+</span>116 <span style=''>  private[this] def removeSubscription(subscriber: Subscriber[T]): Unit =
+</span>117 <span style=''>    </span><span style='background: #AEF1AE'>lock.synchronized {
+</span>118 <span style=''></span><span style='background: #AEF1AE'>      subscriptions = subscriptions.filter(_ != subscriber)
+</span>119 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>120 <span style=''>
+</span>121 <span style=''>  private[this] def createSubscription(observers: Array[Subscriber[T]], instance: Subscriber[T]): Array[Subscriber[T]] =
+</span>122 <span style=''>    </span><span style='background: #AEF1AE'>lock.synchronized {
+</span>123 <span style=''></span><span style='background: #AEF1AE'>      if (!observers.contains(instance))
+</span>124 <span style=''></span><span style='background: #AEF1AE'>        observers :+ instance
+</span>125 <span style=''></span><span style='background: #AEF1AE'>      else
+</span>126 <span style=''></span><span style='background: #AEF1AE'>        observers
+</span>127 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>128 <span style=''>}
+</span>129 <span style=''>
+</span>130 <span style=''>object PublishSubject {
+</span>131 <span style=''>  def apply[T](): PublishSubject[T] =
+</span>132 <span style=''>    </span><span style='background: #AEF1AE'>new PublishSubject[T]()</span><span style=''>
+</span>133 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          38
+        </td>
+        <td>
+          4761
+        </td>
+        <td>
+          1510
+          -
+          1520
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new scala.AnyRef()
+        </td>
+      </tr><tr>
+        <td>
+          39
+        </td>
+        <td>
+          4762
+        </td>
+        <td>
+          1555
+          -
+          1560
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          false
+        </td>
+      </tr><tr>
+        <td>
+          40
+        </td>
+        <td>
+          4763
+        </td>
+        <td>
+          1606
+          -
+          1610
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          null
+        </td>
+      </tr><tr>
+        <td>
+          41
+        </td>
+        <td>
+          4764
+        </td>
+        <td>
+          1657
+          -
+          1683
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.Array.empty
+        </td>
+        <td style="background: #AEF1AE">
+          scala.Array.empty[monifu.reactive.Subscriber[T]]((ClassTag.apply[monifu.reactive.Subscriber[T]](classOf[monifu.reactive.Subscriber]): scala.reflect.ClassTag[monifu.reactive.Subscriber[T]]))
+        </td>
+      </tr><tr>
+        <td>
+          44
+        </td>
+        <td>
+          4776
+        </td>
+        <td>
+          1742
+          -
+          1998
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.synchronized
+        </td>
+        <td style="background: #AEF1AE">
+          PublishSubject.this.lock.synchronized[Unit](if (PublishSubject.this.isCompleted.unary_!)
+  PublishSubject.this.subscriptions = PublishSubject.this.createSubscription(PublishSubject.this.subscriptions, subscriber)
+else
+  if (PublishSubject.this.errorThrown.ne(null))
+    subscriber.observer.onError(PublishSubject.this.errorThrown)
+  else
+    subscriber.observer.onComplete())
+        </td>
+      </tr><tr>
+        <td>
+          45
+        </td>
+        <td>
+          4765
+        </td>
+        <td>
+          1772
+          -
+          1784
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          PublishSubject.this.isCompleted.unary_!
+        </td>
+      </tr><tr>
+        <td>
+          46
+        </td>
+        <td>
+          4766
+        </td>
+        <td>
+          1829
+          -
+          1842
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.subjects.PublishSubject.subscriptions
+        </td>
+        <td style="background: #AEF1AE">
+          PublishSubject.this.subscriptions
+        </td>
+      </tr><tr>
+        <td>
+          46
+        </td>
+        <td>
+          4768
+        </td>
+        <td>
+          1794
+          -
+          1855
+        </td>
+        <td>
+          Assign
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          PublishSubject.this.subscriptions = PublishSubject.this.createSubscription(PublishSubject.this.subscriptions, subscriber)
+        </td>
+      </tr><tr>
+        <td>
+          46
+        </td>
+        <td>
+          4767
+        </td>
+        <td>
+          1810
+          -
+          1855
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.PublishSubject.createSubscription
+        </td>
+        <td style="background: #AEF1AE">
+          PublishSubject.this.createSubscription(PublishSubject.this.subscriptions, subscriber)
+        </td>
+      </tr><tr>
+        <td>
+          47
+        </td>
+        <td>
+          4775
+        </td>
+        <td>
+          1867
+          -
+          1992
+        </td>
+        <td>
+          If
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          if (PublishSubject.this.errorThrown.ne(null))
+  subscriber.observer.onError(PublishSubject.this.errorThrown)
+else
+  subscriber.observer.onComplete()
+        </td>
+      </tr><tr>
+        <td>
+          47
+        </td>
+        <td>
+          4769
+        </td>
+        <td>
+          1871
+          -
+          1890
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.ne
+        </td>
+        <td style="background: #AEF1AE">
+          PublishSubject.this.errorThrown.ne(null)
+        </td>
+      </tr><tr>
+        <td>
+          48
+        </td>
+        <td>
+          4772
+        </td>
+        <td>
+          1900
+          -
+          1940
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.observer.onError(PublishSubject.this.errorThrown)
+        </td>
+      </tr><tr>
+        <td>
+          48
+        </td>
+        <td>
+          4771
+        </td>
+        <td>
+          1900
+          -
+          1940
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.observer.onError(PublishSubject.this.errorThrown)
+        </td>
+      </tr><tr>
+        <td>
+          48
+        </td>
+        <td>
+          4770
+        </td>
+        <td>
+          1928
+          -
+          1939
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.subjects.PublishSubject.errorThrown
+        </td>
+        <td style="background: #AEF1AE">
+          PublishSubject.this.errorThrown
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          4774
+        </td>
+        <td>
+          1960
+          -
+          1992
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Observer.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.observer.onComplete()
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          4773
+        </td>
+        <td>
+          1960
+          -
+          1992
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.observer.onComplete()
+        </td>
+      </tr><tr>
+        <td>
+          54
+        </td>
+        <td>
+          4784
+        </td>
+        <td>
+          2061
+          -
+          2200
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  val observers: Array[monifu.reactive.Subscriber[T]] = PublishSubject.this.subscriptions;
+  if (scala.this.Predef.refArrayOps[monifu.reactive.Subscriber[T]](observers).nonEmpty)
+    PublishSubject.this.streamToMany(observers, elem)
+  else
+    monifu.reactive.Ack.Continue
+}
+        </td>
+      </tr><tr>
+        <td>
+          54
+        </td>
+        <td>
+          4777
+        </td>
+        <td>
+          2047
+          -
+          2059
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          PublishSubject.this.isCompleted.unary_!
+        </td>
+      </tr><tr>
+        <td>
+          55
+        </td>
+        <td>
+          4778
+        </td>
+        <td>
+          2085
+          -
+          2098
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.subjects.PublishSubject.subscriptions
+        </td>
+        <td style="background: #AEF1AE">
+          PublishSubject.this.subscriptions
+        </td>
+      </tr><tr>
+        <td>
+          56
+        </td>
+        <td>
+          4779
+        </td>
+        <td>
+          2109
+          -
+          2127
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.collection.TraversableOnce.nonEmpty
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.refArrayOps[monifu.reactive.Subscriber[T]](observers).nonEmpty
+        </td>
+      </tr><tr>
+        <td>
+          57
+        </td>
+        <td>
+          4781
+        </td>
+        <td>
+          2137
+          -
+          2166
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.subjects.PublishSubject.streamToMany
+        </td>
+        <td style="background: #AEF1AE">
+          PublishSubject.this.streamToMany(observers, elem)
+        </td>
+      </tr><tr>
+        <td>
+          57
+        </td>
+        <td>
+          4780
+        </td>
+        <td>
+          2137
+          -
+          2166
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.PublishSubject.streamToMany
+        </td>
+        <td style="background: #AEF1AE">
+          PublishSubject.this.streamToMany(observers, elem)
+        </td>
+      </tr><tr>
+        <td>
+          59
+        </td>
+        <td>
+          4783
+        </td>
+        <td>
+          2186
+          -
+          2194
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Continue
+        </td>
+      </tr><tr>
+        <td>
+          59
+        </td>
+        <td>
+          4782
+        </td>
+        <td>
+          2186
+          -
+          2194
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Continue
+        </td>
+      </tr><tr>
+        <td>
+          62
+        </td>
+        <td>
+          4786
+        </td>
+        <td>
+          2216
+          -
+          2222
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          62
+        </td>
+        <td>
+          4785
+        </td>
+        <td>
+          2216
+          -
+          2222
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          66
+        </td>
+        <td>
+          4801
+        </td>
+        <td>
+          2263
+          -
+          2519
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.synchronized
+        </td>
+        <td style="background: #AEF1AE">
+          PublishSubject.this.lock.synchronized[Unit](if (PublishSubject.this.isCompleted.unary_!)
+  {
+    PublishSubject.this.isCompleted = true;
+    PublishSubject.this.errorThrown = ex;
+    var idx: Int = 0;
+    while$1(){
+      if (idx.&lt;(PublishSubject.this.subscriptions.length))
+        {
+          {
+            PublishSubject.this.subscriptions.apply(idx).observer.onError(ex);
+            idx = idx.+(1)
+          };
+          while$1()
+        }
+      else
+        ()
+    }
+  }
+else
+  ())
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          4799
+        </td>
+        <td>
+          2289
+          -
+          2289
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          4787
+        </td>
+        <td>
+          2293
+          -
+          2305
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          PublishSubject.this.isCompleted.unary_!
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          4798
+        </td>
+        <td>
+          2307
+          -
+          2513
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  PublishSubject.this.isCompleted = true;
+  PublishSubject.this.errorThrown = ex;
+  var idx: Int = 0;
+  while$1(){
+    if (idx.&lt;(PublishSubject.this.subscriptions.length))
+      {
+        {
+          PublishSubject.this.subscriptions.apply(idx).observer.onError(ex);
+          idx = idx.+(1)
+        };
+        while$1()
+      }
+    else
+      ()
+  }
+}
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          4800
+        </td>
+        <td>
+          2289
+          -
+          2289
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          68
+        </td>
+        <td>
+          4788
+        </td>
+        <td>
+          2331
+          -
+          2335
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          71
+        </td>
+        <td>
+          4789
+        </td>
+        <td>
+          2380
+          -
+          2381
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          0
+        </td>
+      </tr><tr>
+        <td>
+          72
+        </td>
+        <td>
+          4790
+        </td>
+        <td>
+          2403
+          -
+          2423
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Array.length
+        </td>
+        <td style="background: #AEF1AE">
+          PublishSubject.this.subscriptions.length
+        </td>
+      </tr><tr>
+        <td>
+          72
+        </td>
+        <td>
+          4796
+        </td>
+        <td>
+          2390
+          -
+          2390
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          72
+        </td>
+        <td>
+          4795
+        </td>
+        <td>
+          2425
+          -
+          2505
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  {
+    PublishSubject.this.subscriptions.apply(idx).observer.onError(ex);
+    idx = idx.+(1)
+  };
+  while$1()
+}
+        </td>
+      </tr><tr>
+        <td>
+          72
+        </td>
+        <td>
+          4791
+        </td>
+        <td>
+          2397
+          -
+          2423
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.&lt;
+        </td>
+        <td style="background: #AEF1AE">
+          idx.&lt;(PublishSubject.this.subscriptions.length)
+        </td>
+      </tr><tr>
+        <td>
+          72
+        </td>
+        <td>
+          4794
+        </td>
+        <td>
+          2425
+          -
+          2425
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.PublishSubject.while$1
+        </td>
+        <td style="background: #AEF1AE">
+          while$1()
+        </td>
+      </tr><tr>
+        <td>
+          72
+        </td>
+        <td>
+          4797
+        </td>
+        <td>
+          2390
+          -
+          2390
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          73
+        </td>
+        <td>
+          4792
+        </td>
+        <td>
+          2437
+          -
+          2476
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #AEF1AE">
+          PublishSubject.this.subscriptions.apply(idx).observer.onError(ex)
+        </td>
+      </tr><tr>
+        <td>
+          74
+        </td>
+        <td>
+          4793
+        </td>
+        <td>
+          2487
+          -
+          2495
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.+
+        </td>
+        <td style="background: #AEF1AE">
+          idx.+(1)
+        </td>
+      </tr><tr>
+        <td>
+          80
+        </td>
+        <td>
+          4816
+        </td>
+        <td>
+          2546
+          -
+          2778
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.synchronized
+        </td>
+        <td style="background: #AEF1AE">
+          PublishSubject.this.lock.synchronized[Unit](if (PublishSubject.this.isCompleted.unary_!)
+  {
+    PublishSubject.this.isCompleted = true;
+    var idx: Int = 0;
+    while$2(){
+      if (idx.&lt;(PublishSubject.this.subscriptions.length))
+        {
+          {
+            PublishSubject.this.subscriptions.apply(idx).observer.onComplete();
+            idx = idx.+(1)
+          };
+          while$2()
+        }
+      else
+        ()
+    }
+  }
+else
+  ())
+        </td>
+      </tr><tr>
+        <td>
+          81
+        </td>
+        <td>
+          4814
+        </td>
+        <td>
+          2572
+          -
+          2572
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          81
+        </td>
+        <td>
+          4802
+        </td>
+        <td>
+          2576
+          -
+          2588
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          PublishSubject.this.isCompleted.unary_!
+        </td>
+      </tr><tr>
+        <td>
+          81
+        </td>
+        <td>
+          4813
+        </td>
+        <td>
+          2590
+          -
+          2772
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  PublishSubject.this.isCompleted = true;
+  var idx: Int = 0;
+  while$2(){
+    if (idx.&lt;(PublishSubject.this.subscriptions.length))
+      {
+        {
+          PublishSubject.this.subscriptions.apply(idx).observer.onComplete();
+          idx = idx.+(1)
+        };
+        while$2()
+      }
+    else
+      ()
+  }
+}
+        </td>
+      </tr><tr>
+        <td>
+          81
+        </td>
+        <td>
+          4815
+        </td>
+        <td>
+          2572
+          -
+          2572
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          82
+        </td>
+        <td>
+          4803
+        </td>
+        <td>
+          2614
+          -
+          2618
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          84
+        </td>
+        <td>
+          4804
+        </td>
+        <td>
+          2638
+          -
+          2639
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          0
+        </td>
+      </tr><tr>
+        <td>
+          85
+        </td>
+        <td>
+          4805
+        </td>
+        <td>
+          2661
+          -
+          2681
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Array.length
+        </td>
+        <td style="background: #AEF1AE">
+          PublishSubject.this.subscriptions.length
+        </td>
+      </tr><tr>
+        <td>
+          85
+        </td>
+        <td>
+          4811
+        </td>
+        <td>
+          2648
+          -
+          2648
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          85
+        </td>
+        <td>
+          4810
+        </td>
+        <td>
+          2683
+          -
+          2764
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  {
+    PublishSubject.this.subscriptions.apply(idx).observer.onComplete();
+    idx = idx.+(1)
+  };
+  while$2()
+}
+        </td>
+      </tr><tr>
+        <td>
+          85
+        </td>
+        <td>
+          4809
+        </td>
+        <td>
+          2683
+          -
+          2683
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.PublishSubject.while$2
+        </td>
+        <td style="background: #AEF1AE">
+          while$2()
+        </td>
+      </tr><tr>
+        <td>
+          85
+        </td>
+        <td>
+          4812
+        </td>
+        <td>
+          2648
+          -
+          2648
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          85
+        </td>
+        <td>
+          4806
+        </td>
+        <td>
+          2655
+          -
+          2681
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.&lt;
+        </td>
+        <td style="background: #AEF1AE">
+          idx.&lt;(PublishSubject.this.subscriptions.length)
+        </td>
+      </tr><tr>
+        <td>
+          86
+        </td>
+        <td>
+          4807
+        </td>
+        <td>
+          2695
+          -
+          2735
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          PublishSubject.this.subscriptions.apply(idx).observer.onComplete()
+        </td>
+      </tr><tr>
+        <td>
+          87
+        </td>
+        <td>
+          4808
+        </td>
+        <td>
+          2746
+          -
+          2754
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.+
+        </td>
+        <td style="background: #AEF1AE">
+          idx.+(1)
+        </td>
+      </tr><tr>
+        <td>
+          93
+        </td>
+        <td>
+          4817
+        </td>
+        <td>
+          2919
+          -
+          2927
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Continue
+        </td>
+      </tr><tr>
+        <td>
+          93
+        </td>
+        <td>
+          4819
+        </td>
+        <td>
+          2894
+          -
+          2942
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.internals.PromiseCounter.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.internals.PromiseCounter.apply[monifu.reactive.Ack.Continue](monifu.reactive.Ack.Continue, array.length)
+        </td>
+      </tr><tr>
+        <td>
+          93
+        </td>
+        <td>
+          4818
+        </td>
+        <td>
+          2929
+          -
+          2941
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Array.length
+        </td>
+        <td style="background: #AEF1AE">
+          array.length
+        </td>
+      </tr><tr>
+        <td>
+          94
+        </td>
+        <td>
+          4820
+        </td>
+        <td>
+          2960
+          -
+          2972
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Array.length
+        </td>
+        <td style="background: #AEF1AE">
+          array.length
+        </td>
+      </tr><tr>
+        <td>
+          95
+        </td>
+        <td>
+          4821
+        </td>
+        <td>
+          2987
+          -
+          2988
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          0
+        </td>
+      </tr><tr>
+        <td>
+          97
+        </td>
+        <td>
+          4829
+        </td>
+        <td>
+          3015
+          -
+          3360
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  {
+    val subscriber: monifu.reactive.Subscriber[T] = array.apply(idx);
+    implicit val s: monifu.concurrent.Scheduler = subscriber.scheduler;
+    val obs: monifu.reactive.Observer[T] = subscriber.observer;
+    monifu.reactive.internals.`package`.FutureAckExtensions(obs.onNext(elem)).onCompleteNow(((x0$1: scala.util.Try[monifu.reactive.Ack]) =&gt; x0$1 match {
+      case monifu.reactive.Ack.Continue.IsSuccess =&gt; newPromise.countdown()
+      case _ =&gt; {
+        PublishSubject.this.removeSubscription(subscriber);
+        newPromise.countdown()
+      }
+    }))(s);
+    idx = idx.+(1)
+  };
+  while$3()
+}
+        </td>
+      </tr><tr>
+        <td>
+          97
+        </td>
+        <td>
+          4828
+        </td>
+        <td>
+          3015
+          -
+          3015
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.PublishSubject.while$3
+        </td>
+        <td style="background: #AEF1AE">
+          while$3()
+        </td>
+      </tr><tr>
+        <td>
+          97
+        </td>
+        <td>
+          4822
+        </td>
+        <td>
+          3001
+          -
+          3013
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.&lt;
+        </td>
+        <td style="background: #AEF1AE">
+          idx.&lt;(length)
+        </td>
+      </tr><tr>
+        <td>
+          97
+        </td>
+        <td>
+          4831
+        </td>
+        <td>
+          2994
+          -
+          2994
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          97
+        </td>
+        <td>
+          4830
+        </td>
+        <td>
+          2994
+          -
+          2994
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          98
+        </td>
+        <td>
+          4823
+        </td>
+        <td>
+          3040
+          -
+          3050
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Array.apply
+        </td>
+        <td style="background: #AEF1AE">
+          array.apply(idx)
+        </td>
+      </tr><tr>
+        <td>
+          99
+        </td>
+        <td>
+          4824
+        </td>
+        <td>
+          3074
+          -
+          3094
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          100
+        </td>
+        <td>
+          4825
+        </td>
+        <td>
+          3111
+          -
+          3130
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.observer
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.observer
+        </td>
+      </tr><tr>
+        <td>
+          102
+        </td>
+        <td>
+          4826
+        </td>
+        <td>
+          3138
+          -
+          3338
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.internals.FutureAckExtensions.onCompleteNow
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.internals.`package`.FutureAckExtensions(obs.onNext(elem)).onCompleteNow(((x0$1: scala.util.Try[monifu.reactive.Ack]) =&gt; x0$1 match {
+  case monifu.reactive.Ack.Continue.IsSuccess =&gt; newPromise.countdown()
+  case _ =&gt; {
+    PublishSubject.this.removeSubscription(subscriber);
+    newPromise.countdown()
+  }
+}))(s)
+        </td>
+      </tr><tr>
+        <td>
+          110
+        </td>
+        <td>
+          4827
+        </td>
+        <td>
+          3346
+          -
+          3354
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.+
+        </td>
+        <td style="background: #AEF1AE">
+          idx.+(1)
+        </td>
+      </tr><tr>
+        <td>
+          113
+        </td>
+        <td>
+          4832
+        </td>
+        <td>
+          3366
+          -
+          3383
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.PromiseCounter.future
+        </td>
+        <td style="background: #AEF1AE">
+          newPromise.future
+        </td>
+      </tr><tr>
+        <td>
+          117
+        </td>
+        <td>
+          4836
+        </td>
+        <td>
+          3467
+          -
+          3552
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.synchronized
+        </td>
+        <td style="background: #AEF1AE">
+          PublishSubject.this.lock.synchronized[Unit](PublishSubject.this.subscriptions = scala.this.Predef.refArrayOps[monifu.reactive.Subscriber[T]](PublishSubject.this.subscriptions).filter(((x$1: monifu.reactive.Subscriber[T]) =&gt; x$1.!=(subscriber))))
+        </td>
+      </tr><tr>
+        <td>
+          118
+        </td>
+        <td>
+          4835
+        </td>
+        <td>
+          3509
+          -
+          3546
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.collection.TraversableLike.filter
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.refArrayOps[monifu.reactive.Subscriber[T]](PublishSubject.this.subscriptions).filter(((x$1: monifu.reactive.Subscriber[T]) =&gt; x$1.!=(subscriber)))
+        </td>
+      </tr><tr>
+        <td>
+          118
+        </td>
+        <td>
+          4834
+        </td>
+        <td>
+          3530
+          -
+          3545
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.!=
+        </td>
+        <td style="background: #AEF1AE">
+          x$1.!=(subscriber)
+        </td>
+      </tr><tr>
+        <td>
+          118
+        </td>
+        <td>
+          4833
+        </td>
+        <td>
+          3509
+          -
+          3522
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.subjects.PublishSubject.subscriptions
+        </td>
+        <td style="background: #AEF1AE">
+          PublishSubject.this.subscriptions
+        </td>
+      </tr><tr>
+        <td>
+          122
+        </td>
+        <td>
+          4841
+        </td>
+        <td>
+          3679
+          -
+          3804
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.synchronized
+        </td>
+        <td style="background: #AEF1AE">
+          PublishSubject.this.lock.synchronized[Array[monifu.reactive.Subscriber[T]]](if (scala.this.Predef.refArrayOps[monifu.reactive.Subscriber[T]](observers).contains[monifu.reactive.Subscriber[T]](instance).unary_!)
+  scala.this.Predef.refArrayOps[monifu.reactive.Subscriber[T]](observers).:+[monifu.reactive.Subscriber[T]](instance)((ClassTag.apply[monifu.reactive.Subscriber[T]](classOf[monifu.reactive.Subscriber]): scala.reflect.ClassTag[monifu.reactive.Subscriber[T]]))
+else
+  observers)
+        </td>
+      </tr><tr>
+        <td>
+          123
+        </td>
+        <td>
+          4837
+        </td>
+        <td>
+          3709
+          -
+          3738
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.refArrayOps[monifu.reactive.Subscriber[T]](observers).contains[monifu.reactive.Subscriber[T]](instance).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          124
+        </td>
+        <td>
+          4838
+        </td>
+        <td>
+          3748
+          -
+          3769
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.collection.mutable.ArrayOps.:+
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.refArrayOps[monifu.reactive.Subscriber[T]](observers).:+[monifu.reactive.Subscriber[T]](instance)((ClassTag.apply[monifu.reactive.Subscriber[T]](classOf[monifu.reactive.Subscriber]): scala.reflect.ClassTag[monifu.reactive.Subscriber[T]]))
+        </td>
+      </tr><tr>
+        <td>
+          124
+        </td>
+        <td>
+          4839
+        </td>
+        <td>
+          3748
+          -
+          3769
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          scala.collection.mutable.ArrayOps.:+
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.refArrayOps[monifu.reactive.Subscriber[T]](observers).:+[monifu.reactive.Subscriber[T]](instance)((ClassTag.apply[monifu.reactive.Subscriber[T]](classOf[monifu.reactive.Subscriber]): scala.reflect.ClassTag[monifu.reactive.Subscriber[T]]))
+        </td>
+      </tr><tr>
+        <td>
+          126
+        </td>
+        <td>
+          4840
+        </td>
+        <td>
+          3789
+          -
+          3798
+        </td>
+        <td>
+          Ident
+        </td>
+        <td>
+          monifu.reactive.subjects.PublishSubject.observers
+        </td>
+        <td style="background: #AEF1AE">
+          observers
+        </td>
+      </tr><tr>
+        <td>
+          132
+        </td>
+        <td>
+          4842
+        </td>
+        <td>
+          3874
+          -
+          3897
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.PublishSubject.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new monifu.reactive.subjects.PublishSubject[T]()
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

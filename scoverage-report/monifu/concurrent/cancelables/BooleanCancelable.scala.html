@@ -1,0 +1,508 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          monifu/concurrent/cancelables/BooleanCancelable.scala.html
+        </title>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''> 
+</span>17 <span style=''>package monifu.concurrent.cancelables
+</span>18 <span style=''>
+</span>19 <span style=''>import monifu.concurrent.Cancelable
+</span>20 <span style=''>import monifu.concurrent.atomic.padded.Atomic
+</span>21 <span style=''>
+</span>22 <span style=''>/**
+</span>23 <span style=''> * Represents a Cancelable that can queried for the canceled status.
+</span>24 <span style=''> */
+</span>25 <span style=''>trait BooleanCancelable extends Cancelable {
+</span>26 <span style=''>  /**
+</span>27 <span style=''>   * @return true in case this cancelable hasn't been canceled.
+</span>28 <span style=''>   */
+</span>29 <span style=''>  def isCanceled: Boolean
+</span>30 <span style=''>}
+</span>31 <span style=''>
+</span>32 <span style=''>object BooleanCancelable {
+</span>33 <span style=''>  def apply(): BooleanCancelable =
+</span>34 <span style=''>    </span><span style='background: #AEF1AE'>new</span><span style=''> BooleanCancelable {
+</span>35 <span style=''>      private[this] val _isCanceled = </span><span style='background: #AEF1AE'>Atomic(false)</span><span style=''>
+</span>36 <span style=''>      def isCanceled = </span><span style='background: #AEF1AE'>_isCanceled.get</span><span style=''>
+</span>37 <span style=''>
+</span>38 <span style=''>      def cancel(): Boolean = {
+</span>39 <span style=''>        </span><span style='background: #AEF1AE'>_isCanceled.compareAndSet(expect = false, update = true)</span><span style=''>
+</span>40 <span style=''>      }
+</span>41 <span style=''>    }
+</span>42 <span style=''>
+</span>43 <span style=''>  def apply(callback: => Unit): BooleanCancelable =
+</span>44 <span style=''>    </span><span style='background: #AEF1AE'>new</span><span style=''> BooleanCancelable {
+</span>45 <span style=''>      private[this] val _isCanceled = </span><span style='background: #AEF1AE'>Atomic(false)</span><span style=''>
+</span>46 <span style=''>
+</span>47 <span style=''>      def isCanceled =
+</span>48 <span style=''>        </span><span style='background: #AEF1AE'>_isCanceled.get</span><span style=''>
+</span>49 <span style=''>
+</span>50 <span style=''>      def cancel(): Boolean = {
+</span>51 <span style=''>        if (</span><span style='background: #AEF1AE'>_isCanceled.compareAndSet(expect=false, update=true)</span><span style=''>) </span><span style='background: #AEF1AE'>{
+</span>52 <span style=''></span><span style='background: #AEF1AE'>          callback
+</span>53 <span style=''></span><span style='background: #AEF1AE'>          true
+</span>54 <span style=''></span><span style='background: #AEF1AE'>        }</span><span style=''>
+</span>55 <span style=''>        else
+</span>56 <span style=''>          </span><span style='background: #AEF1AE'>false</span><span style=''>
+</span>57 <span style=''>      }
+</span>58 <span style=''>    }
+</span>59 <span style=''>
+</span>60 <span style=''>  val alreadyCanceled: BooleanCancelable =
+</span>61 <span style=''>    </span><span style='background: #AEF1AE'>new</span><span style=''> BooleanCancelable {
+</span>62 <span style=''>      val isCanceled = </span><span style='background: #AEF1AE'>true</span><span style=''>
+</span>63 <span style=''>      def cancel() = </span><span style='background: #F0ADAD'>false</span><span style=''>
+</span>64 <span style=''>    }
+</span>65 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          34
+        </td>
+        <td>
+          2085
+        </td>
+        <td>
+          1027
+          -
+          1030
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.BooleanCancelable.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          35
+        </td>
+        <td>
+          2080
+        </td>
+        <td>
+          1096
+          -
+          1101
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          false
+        </td>
+      </tr><tr>
+        <td>
+          35
+        </td>
+        <td>
+          2082
+        </td>
+        <td>
+          1089
+          -
+          1102
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.Atomic.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.atomic.padded.Atomic.apply[Boolean, monifu.concurrent.atomic.padded.AtomicBoolean](false)(padded.this.AtomicBuilder.AtomicBooleanBuilder)
+        </td>
+      </tr><tr>
+        <td>
+          35
+        </td>
+        <td>
+          2081
+        </td>
+        <td>
+          1095
+          -
+          1095
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.Implicits.Level3.AtomicBooleanBuilder
+        </td>
+        <td style="background: #AEF1AE">
+          padded.this.AtomicBuilder.AtomicBooleanBuilder
+        </td>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          2083
+        </td>
+        <td>
+          1126
+          -
+          1141
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicBoolean.get
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this._isCanceled.get
+        </td>
+      </tr><tr>
+        <td>
+          39
+        </td>
+        <td>
+          2084
+        </td>
+        <td>
+          1183
+          -
+          1239
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicBoolean.compareAndSet
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this._isCanceled.compareAndSet(false, true)
+        </td>
+      </tr><tr>
+        <td>
+          44
+        </td>
+        <td>
+          2095
+        </td>
+        <td>
+          1311
+          -
+          1314
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.BooleanCancelable.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          45
+        </td>
+        <td>
+          2087
+        </td>
+        <td>
+          1379
+          -
+          1379
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.Implicits.Level3.AtomicBooleanBuilder
+        </td>
+        <td style="background: #AEF1AE">
+          padded.this.AtomicBuilder.AtomicBooleanBuilder
+        </td>
+      </tr><tr>
+        <td>
+          45
+        </td>
+        <td>
+          2086
+        </td>
+        <td>
+          1380
+          -
+          1385
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          false
+        </td>
+      </tr><tr>
+        <td>
+          45
+        </td>
+        <td>
+          2088
+        </td>
+        <td>
+          1373
+          -
+          1386
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.Atomic.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.atomic.padded.Atomic.apply[Boolean, monifu.concurrent.atomic.padded.AtomicBoolean](false)(padded.this.AtomicBuilder.AtomicBooleanBuilder)
+        </td>
+      </tr><tr>
+        <td>
+          48
+        </td>
+        <td>
+          2089
+        </td>
+        <td>
+          1419
+          -
+          1434
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicBoolean.get
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this._isCanceled.get
+        </td>
+      </tr><tr>
+        <td>
+          51
+        </td>
+        <td>
+          2092
+        </td>
+        <td>
+          1534
+          -
+          1579
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  callback;
+  true
+}
+        </td>
+      </tr><tr>
+        <td>
+          51
+        </td>
+        <td>
+          2090
+        </td>
+        <td>
+          1480
+          -
+          1532
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicBoolean.compareAndSet
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this._isCanceled.compareAndSet(false, true)
+        </td>
+      </tr><tr>
+        <td>
+          53
+        </td>
+        <td>
+          2091
+        </td>
+        <td>
+          1565
+          -
+          1569
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          56
+        </td>
+        <td>
+          2093
+        </td>
+        <td>
+          1603
+          -
+          1608
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          false
+        </td>
+      </tr><tr>
+        <td>
+          56
+        </td>
+        <td>
+          2094
+        </td>
+        <td>
+          1603
+          -
+          1608
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          false
+        </td>
+      </tr><tr>
+        <td>
+          61
+        </td>
+        <td>
+          2098
+        </td>
+        <td>
+          1671
+          -
+          1674
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.BooleanCancelable.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          62
+        </td>
+        <td>
+          2096
+        </td>
+        <td>
+          1718
+          -
+          1722
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          63
+        </td>
+        <td>
+          2097
+        </td>
+        <td>
+          1744
+          -
+          1749
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          false
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

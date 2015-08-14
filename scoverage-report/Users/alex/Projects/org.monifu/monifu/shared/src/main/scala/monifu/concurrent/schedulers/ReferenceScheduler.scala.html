@@ -1,0 +1,1691 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          /Users/alex/Projects/org.monifu/monifu/shared/src/main/scala/monifu/concurrent/schedulers/ReferenceScheduler.scala.html
+        </title>
+        <link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css"/>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+        <script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script>
+        <script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.18.3/addons/pager/jquery.tablesorter.pager.min.js"></script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''>
+</span>17 <span style=''>package monifu.concurrent.schedulers
+</span>18 <span style=''>
+</span>19 <span style=''>import java.util.concurrent.TimeUnit
+</span>20 <span style=''>
+</span>21 <span style=''>import monifu.concurrent.cancelables.MultiAssignmentCancelable
+</span>22 <span style=''>import monifu.concurrent.{Cancelable, Scheduler}
+</span>23 <span style=''>import scala.concurrent.duration._
+</span>24 <span style=''>
+</span>25 <span style=''>abstract class ReferenceScheduler extends Scheduler {
+</span>26 <span style=''>  def currentTimeMillis(): Long =
+</span>27 <span style=''>    </span><span style='background: #F0ADAD'>System.currentTimeMillis()</span><span style=''>
+</span>28 <span style=''>
+</span>29 <span style=''>  def execute(action: => Unit): Unit = {
+</span>30 <span style=''>    </span><span style='background: #AEF1AE'>execute(new Runnable { def run(): Unit = action })</span><span style=''>
+</span>31 <span style=''>  }
+</span>32 <span style=''>
+</span>33 <span style=''>  def scheduleOnce(initialDelay: FiniteDuration)(action: => Unit): Cancelable =
+</span>34 <span style=''>    </span><span style='background: #AEF1AE'>scheduleOnce(initialDelay, new Runnable {
+</span>35 <span style=''></span><span style='background: #AEF1AE'>      def run(): Unit = action
+</span>36 <span style=''></span><span style='background: #AEF1AE'>    })</span><span style=''>
+</span>37 <span style=''>
+</span>38 <span style=''>  def scheduleOnce(initialDelay: Long, unit: TimeUnit)(action: => Unit): Cancelable =
+</span>39 <span style=''>    </span><span style='background: #AEF1AE'>scheduleOnce(initialDelay, unit, new Runnable {
+</span>40 <span style=''></span><span style='background: #AEF1AE'>      def run(): Unit = action
+</span>41 <span style=''></span><span style='background: #AEF1AE'>    })</span><span style=''>
+</span>42 <span style=''>
+</span>43 <span style=''>  def scheduleWithFixedDelay(initialDelay: FiniteDuration, delay: FiniteDuration, r: Runnable): Cancelable = {
+</span>44 <span style=''>    val sub = </span><span style='background: #F0ADAD'>MultiAssignmentCancelable()</span><span style=''>
+</span>45 <span style=''>
+</span>46 <span style=''>    def loop(initialDelay: FiniteDuration, delay: FiniteDuration): Unit =
+</span>47 <span style=''>      </span><span style='background: #F0ADAD'>sub := scheduleOnce(initialDelay, new Runnable {
+</span>48 <span style=''></span><span style='background: #F0ADAD'>        def run(): Unit = {
+</span>49 <span style=''></span><span style='background: #F0ADAD'>          r.run()
+</span>50 <span style=''></span><span style='background: #F0ADAD'>          loop(delay, delay)
+</span>51 <span style=''></span><span style='background: #F0ADAD'>        }
+</span>52 <span style=''></span><span style='background: #F0ADAD'>      })</span><span style=''>
+</span>53 <span style=''>
+</span>54 <span style=''>    </span><span style='background: #F0ADAD'>loop(initialDelay, delay)</span><span style=''>
+</span>55 <span style=''>    sub
+</span>56 <span style=''>  }
+</span>57 <span style=''>
+</span>58 <span style=''>  def scheduleWithFixedDelay(initialDelay: Long, delay: Long, unit: TimeUnit, r: Runnable): Cancelable = {
+</span>59 <span style=''>    val sub = </span><span style='background: #F0ADAD'>MultiAssignmentCancelable()</span><span style=''>
+</span>60 <span style=''>
+</span>61 <span style=''>    def loop(initialDelay: Long, delay: Long): Unit =
+</span>62 <span style=''>      </span><span style='background: #F0ADAD'>sub := scheduleOnce(initialDelay, unit, new Runnable {
+</span>63 <span style=''></span><span style='background: #F0ADAD'>        def run(): Unit = {
+</span>64 <span style=''></span><span style='background: #F0ADAD'>          r.run()
+</span>65 <span style=''></span><span style='background: #F0ADAD'>          loop(delay, delay)
+</span>66 <span style=''></span><span style='background: #F0ADAD'>        }
+</span>67 <span style=''></span><span style='background: #F0ADAD'>      })</span><span style=''>
+</span>68 <span style=''>
+</span>69 <span style=''>    </span><span style='background: #F0ADAD'>loop(initialDelay, delay)</span><span style=''>
+</span>70 <span style=''>    sub
+</span>71 <span style=''>  }
+</span>72 <span style=''>
+</span>73 <span style=''>  def scheduleWithFixedDelay(initialDelay: FiniteDuration, delay: FiniteDuration)(action: => Unit): Cancelable =
+</span>74 <span style=''>    </span><span style='background: #AEF1AE'>scheduleWithFixedDelay(initialDelay, delay, new Runnable {
+</span>75 <span style=''></span><span style='background: #AEF1AE'>      def run(): Unit = action
+</span>76 <span style=''></span><span style='background: #AEF1AE'>    })</span><span style=''>
+</span>77 <span style=''>
+</span>78 <span style=''>  def scheduleWithFixedDelay(initialDelay: Long, delay: Long, unit: TimeUnit)(action: => Unit): Cancelable =
+</span>79 <span style=''>    </span><span style='background: #F0ADAD'>scheduleWithFixedDelay(initialDelay, delay, unit, new Runnable {
+</span>80 <span style=''></span><span style='background: #F0ADAD'>      def run(): Unit = action
+</span>81 <span style=''></span><span style='background: #F0ADAD'>    })</span><span style=''>
+</span>82 <span style=''>
+</span>83 <span style=''>  def scheduleAtFixedRate(initialDelay: FiniteDuration, period: FiniteDuration, r: Runnable): Cancelable = {
+</span>84 <span style=''>    val sub = </span><span style='background: #F0ADAD'>MultiAssignmentCancelable()</span><span style=''>
+</span>85 <span style=''>
+</span>86 <span style=''>    def loop(initialDelay: FiniteDuration): Unit = {
+</span>87 <span style=''>      val startedAtMillis = </span><span style='background: #F0ADAD'>currentTimeMillis()</span><span style=''>
+</span>88 <span style=''>
+</span>89 <span style=''>      </span><span style='background: #F0ADAD'>sub := scheduleOnce(initialDelay, new Runnable {
+</span>90 <span style=''></span><span style='background: #F0ADAD'>        def run(): Unit = {
+</span>91 <span style=''></span><span style='background: #F0ADAD'>          r.run()
+</span>92 <span style=''></span><span style='background: #F0ADAD'>
+</span>93 <span style=''></span><span style='background: #F0ADAD'>          val delay = {
+</span>94 <span style=''></span><span style='background: #F0ADAD'>            val duration = (currentTimeMillis() - startedAtMillis).millis
+</span>95 <span style=''></span><span style='background: #F0ADAD'>            val d = period - duration
+</span>96 <span style=''></span><span style='background: #F0ADAD'>            if (d >= Duration.Zero) d else Duration.Zero
+</span>97 <span style=''></span><span style='background: #F0ADAD'>          }
+</span>98 <span style=''></span><span style='background: #F0ADAD'>
+</span>99 <span style=''></span><span style='background: #F0ADAD'>          loop(delay)
+</span>100 <span style=''></span><span style='background: #F0ADAD'>        }
+</span>101 <span style=''></span><span style='background: #F0ADAD'>      })</span><span style=''>
+</span>102 <span style=''>    }
+</span>103 <span style=''>
+</span>104 <span style=''>
+</span>105 <span style=''>    </span><span style='background: #F0ADAD'>loop(initialDelay)</span><span style=''>
+</span>106 <span style=''>    sub
+</span>107 <span style=''>  }
+</span>108 <span style=''>
+</span>109 <span style=''>  def scheduleAtFixedRate(initialDelay: Long, period: Long, unit: TimeUnit, r: Runnable): Cancelable = {
+</span>110 <span style=''>    val sub = </span><span style='background: #F0ADAD'>MultiAssignmentCancelable()</span><span style=''>
+</span>111 <span style=''>
+</span>112 <span style=''>    def loop(initialDelayMs: Long, periodMs: Long): Unit = {
+</span>113 <span style=''>      val startedAtMillis = </span><span style='background: #F0ADAD'>currentTimeMillis()</span><span style=''>
+</span>114 <span style=''>
+</span>115 <span style=''>      </span><span style='background: #F0ADAD'>sub := scheduleOnce(initialDelayMs, TimeUnit.MILLISECONDS, new Runnable {
+</span>116 <span style=''></span><span style='background: #F0ADAD'>        def run(): Unit = {
+</span>117 <span style=''></span><span style='background: #F0ADAD'>          r.run()
+</span>118 <span style=''></span><span style='background: #F0ADAD'>
+</span>119 <span style=''></span><span style='background: #F0ADAD'>          val delay = {
+</span>120 <span style=''></span><span style='background: #F0ADAD'>            val durationMillis = currentTimeMillis() - startedAtMillis
+</span>121 <span style=''></span><span style='background: #F0ADAD'>            val d = periodMs - durationMillis
+</span>122 <span style=''></span><span style='background: #F0ADAD'>            if (d >= 0) d else 0
+</span>123 <span style=''></span><span style='background: #F0ADAD'>          }
+</span>124 <span style=''></span><span style='background: #F0ADAD'>
+</span>125 <span style=''></span><span style='background: #F0ADAD'>          loop(delay, periodMs)
+</span>126 <span style=''></span><span style='background: #F0ADAD'>        }
+</span>127 <span style=''></span><span style='background: #F0ADAD'>      })</span><span style=''>
+</span>128 <span style=''>    }
+</span>129 <span style=''>
+</span>130 <span style=''>    val initialMs = </span><span style='background: #F0ADAD'>TimeUnit.MILLISECONDS.convert(initialDelay, unit)</span><span style=''>
+</span>131 <span style=''>    val periodMs = </span><span style='background: #F0ADAD'>TimeUnit.MILLISECONDS.convert(period, unit)</span><span style=''>
+</span>132 <span style=''>    
+</span>133 <span style=''>    </span><span style='background: #F0ADAD'>loop(initialMs, periodMs)</span><span style=''>
+</span>134 <span style=''>    sub
+</span>135 <span style=''>  }
+</span>136 <span style=''>
+</span>137 <span style=''>  def scheduleAtFixedRate(initialDelay: FiniteDuration, period: FiniteDuration)(action: => Unit): Cancelable =
+</span>138 <span style=''>    </span><span style='background: #AEF1AE'>scheduleAtFixedRate(initialDelay, period, new Runnable {
+</span>139 <span style=''></span><span style='background: #AEF1AE'>      def run(): Unit = action
+</span>140 <span style=''></span><span style='background: #AEF1AE'>    })</span><span style=''>
+</span>141 <span style=''>
+</span>142 <span style=''>  def scheduleAtFixedRate(initialDelay: Long, period: Long, unit: TimeUnit)(action: => Unit): Cancelable =
+</span>143 <span style=''>    </span><span style='background: #F0ADAD'>scheduleAtFixedRate(initialDelay, period, unit, new Runnable {
+</span>144 <span style=''></span><span style='background: #F0ADAD'>      def run(): Unit = action
+</span>145 <span style=''></span><span style='background: #F0ADAD'>    })</span><span style=''>
+</span>146 <span style=''>
+</span>147 <span style=''>  /**
+</span>148 <span style=''>   * Runs a block of code in this `ExecutionContext`.
+</span>149 <span style=''>   */
+</span>150 <span style=''>  def execute(runnable: Runnable): Unit
+</span>151 <span style=''>
+</span>152 <span style=''>  /**
+</span>153 <span style=''>   * Reports that an asynchronous computation failed.
+</span>154 <span style=''>   */
+</span>155 <span style=''>  def reportFailure(t: Throwable): Unit
+</span>156 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          27
+        </td>
+        <td>
+          2274
+        </td>
+        <td>
+          927
+          -
+          953
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.System.currentTimeMillis
+        </td>
+        <td style="background: #F0ADAD">
+          java.this.lang.System.currentTimeMillis()
+        </td>
+      </tr><tr>
+        <td>
+          30
+        </td>
+        <td>
+          2275
+        </td>
+        <td>
+          1008
+          -
+          1011
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          30
+        </td>
+        <td>
+          2276
+        </td>
+        <td>
+          1000
+          -
+          1050
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.execute
+        </td>
+        <td style="background: #AEF1AE">
+          ReferenceScheduler.this.execute({
+  final class $anon extends Object with Runnable {
+    def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def run(): Unit = action
+  };
+  new $anon()
+})
+        </td>
+      </tr><tr>
+        <td>
+          34
+        </td>
+        <td>
+          2278
+        </td>
+        <td>
+          1140
+          -
+          1219
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.scheduleOnce
+        </td>
+        <td style="background: #AEF1AE">
+          ReferenceScheduler.this.scheduleOnce(initialDelay, {
+  final class $anon extends Object with Runnable {
+    def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def run(): Unit = action
+  };
+  new $anon()
+})
+        </td>
+      </tr><tr>
+        <td>
+          34
+        </td>
+        <td>
+          2277
+        </td>
+        <td>
+          1167
+          -
+          1170
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          39
+        </td>
+        <td>
+          2280
+        </td>
+        <td>
+          1311
+          -
+          1396
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.scheduleOnce
+        </td>
+        <td style="background: #AEF1AE">
+          ReferenceScheduler.this.scheduleOnce(initialDelay, unit, {
+  final class $anon extends Object with Runnable {
+    def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def run(): Unit = action
+  };
+  new $anon()
+})
+        </td>
+      </tr><tr>
+        <td>
+          39
+        </td>
+        <td>
+          2279
+        </td>
+        <td>
+          1344
+          -
+          1347
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          44
+        </td>
+        <td>
+          2281
+        </td>
+        <td>
+          1523
+          -
+          1550
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.MultiAssignmentCancelable.apply
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.concurrent.cancelables.MultiAssignmentCancelable.apply()
+        </td>
+      </tr><tr>
+        <td>
+          47
+        </td>
+        <td>
+          2284
+        </td>
+        <td>
+          1666
+          -
+          1669
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          47
+        </td>
+        <td>
+          2286
+        </td>
+        <td>
+          1632
+          -
+          1774
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.MultiAssignmentCancelable.:=
+        </td>
+        <td style="background: #F0ADAD">
+          sub.:=(ReferenceScheduler.this.scheduleOnce(initialDelay, {
+  final class $anon extends Object with Runnable {
+    def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def run(): Unit = {
+      r.run();
+      loop(delay, delay)
+    }
+  };
+  new $anon()
+}))
+        </td>
+      </tr><tr>
+        <td>
+          47
+        </td>
+        <td>
+          2285
+        </td>
+        <td>
+          1639
+          -
+          1774
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.scheduleOnce
+        </td>
+        <td style="background: #F0ADAD">
+          ReferenceScheduler.this.scheduleOnce(initialDelay, {
+  final class $anon extends Object with Runnable {
+    def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def run(): Unit = {
+      r.run();
+      loop(delay, delay)
+    }
+  };
+  new $anon()
+})
+        </td>
+      </tr><tr>
+        <td>
+          49
+        </td>
+        <td>
+          2282
+        </td>
+        <td>
+          1719
+          -
+          1726
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Runnable.run
+        </td>
+        <td style="background: #F0ADAD">
+          r.run()
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          2283
+        </td>
+        <td>
+          1737
+          -
+          1755
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.loop
+        </td>
+        <td style="background: #F0ADAD">
+          loop(delay, delay)
+        </td>
+      </tr><tr>
+        <td>
+          54
+        </td>
+        <td>
+          2287
+        </td>
+        <td>
+          1780
+          -
+          1805
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.loop
+        </td>
+        <td style="background: #F0ADAD">
+          loop(initialDelay, delay)
+        </td>
+      </tr><tr>
+        <td>
+          59
+        </td>
+        <td>
+          2288
+        </td>
+        <td>
+          1940
+          -
+          1967
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.MultiAssignmentCancelable.apply
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.concurrent.cancelables.MultiAssignmentCancelable.apply()
+        </td>
+      </tr><tr>
+        <td>
+          62
+        </td>
+        <td>
+          2293
+        </td>
+        <td>
+          2029
+          -
+          2177
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.MultiAssignmentCancelable.:=
+        </td>
+        <td style="background: #F0ADAD">
+          sub.:=(ReferenceScheduler.this.scheduleOnce(initialDelay, unit, {
+  final class $anon extends Object with Runnable {
+    def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def run(): Unit = {
+      r.run();
+      loop(delay, delay)
+    }
+  };
+  new $anon()
+}))
+        </td>
+      </tr><tr>
+        <td>
+          62
+        </td>
+        <td>
+          2292
+        </td>
+        <td>
+          2036
+          -
+          2177
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.scheduleOnce
+        </td>
+        <td style="background: #F0ADAD">
+          ReferenceScheduler.this.scheduleOnce(initialDelay, unit, {
+  final class $anon extends Object with Runnable {
+    def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def run(): Unit = {
+      r.run();
+      loop(delay, delay)
+    }
+  };
+  new $anon()
+})
+        </td>
+      </tr><tr>
+        <td>
+          62
+        </td>
+        <td>
+          2291
+        </td>
+        <td>
+          2069
+          -
+          2072
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          2289
+        </td>
+        <td>
+          2122
+          -
+          2129
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Runnable.run
+        </td>
+        <td style="background: #F0ADAD">
+          r.run()
+        </td>
+      </tr><tr>
+        <td>
+          65
+        </td>
+        <td>
+          2290
+        </td>
+        <td>
+          2140
+          -
+          2158
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.loop
+        </td>
+        <td style="background: #F0ADAD">
+          loop(delay, delay)
+        </td>
+      </tr><tr>
+        <td>
+          69
+        </td>
+        <td>
+          2294
+        </td>
+        <td>
+          2183
+          -
+          2208
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.loop
+        </td>
+        <td style="background: #F0ADAD">
+          loop(initialDelay, delay)
+        </td>
+      </tr><tr>
+        <td>
+          74
+        </td>
+        <td>
+          2296
+        </td>
+        <td>
+          2339
+          -
+          2435
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.scheduleWithFixedDelay
+        </td>
+        <td style="background: #AEF1AE">
+          ReferenceScheduler.this.scheduleWithFixedDelay(initialDelay, delay, {
+  final class $anon extends Object with Runnable {
+    def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def run(): Unit = action
+  };
+  new $anon()
+})
+        </td>
+      </tr><tr>
+        <td>
+          74
+        </td>
+        <td>
+          2295
+        </td>
+        <td>
+          2383
+          -
+          2386
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          79
+        </td>
+        <td>
+          2298
+        </td>
+        <td>
+          2550
+          -
+          2652
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.scheduleWithFixedDelay
+        </td>
+        <td style="background: #F0ADAD">
+          ReferenceScheduler.this.scheduleWithFixedDelay(initialDelay, delay, unit, {
+  final class $anon extends Object with Runnable {
+    def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def run(): Unit = action
+  };
+  new $anon()
+})
+        </td>
+      </tr><tr>
+        <td>
+          79
+        </td>
+        <td>
+          2297
+        </td>
+        <td>
+          2600
+          -
+          2603
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          84
+        </td>
+        <td>
+          2299
+        </td>
+        <td>
+          2777
+          -
+          2804
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.MultiAssignmentCancelable.apply
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.concurrent.cancelables.MultiAssignmentCancelable.apply()
+        </td>
+      </tr><tr>
+        <td>
+          87
+        </td>
+        <td>
+          2300
+        </td>
+        <td>
+          2887
+          -
+          2906
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.currentTimeMillis
+        </td>
+        <td style="background: #F0ADAD">
+          ReferenceScheduler.this.currentTimeMillis()
+        </td>
+      </tr><tr>
+        <td>
+          89
+        </td>
+        <td>
+          2311
+        </td>
+        <td>
+          2948
+          -
+          2951
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          89
+        </td>
+        <td>
+          2313
+        </td>
+        <td>
+          2914
+          -
+          3256
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.MultiAssignmentCancelable.:=
+        </td>
+        <td style="background: #F0ADAD">
+          sub.:=(ReferenceScheduler.this.scheduleOnce(initialDelay, {
+  final class $anon extends Object with Runnable {
+    def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def run(): Unit = {
+      r.run();
+      val delay: scala.concurrent.duration.FiniteDuration = {
+        val duration: scala.concurrent.duration.FiniteDuration = scala.concurrent.duration.`package`.DurationLong(ReferenceScheduler.this.currentTimeMillis().-(startedAtMillis)).millis;
+        val d: scala.concurrent.duration.FiniteDuration = period.-(duration);
+        if (d.&gt;=(scala.concurrent.duration.Duration.Zero))
+          d
+        else
+          scala.concurrent.duration.Duration.Zero
+      };
+      loop(delay)
+    }
+  };
+  new $anon()
+}))
+        </td>
+      </tr><tr>
+        <td>
+          89
+        </td>
+        <td>
+          2312
+        </td>
+        <td>
+          2921
+          -
+          3256
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.scheduleOnce
+        </td>
+        <td style="background: #F0ADAD">
+          ReferenceScheduler.this.scheduleOnce(initialDelay, {
+  final class $anon extends Object with Runnable {
+    def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def run(): Unit = {
+      r.run();
+      val delay: scala.concurrent.duration.FiniteDuration = {
+        val duration: scala.concurrent.duration.FiniteDuration = scala.concurrent.duration.`package`.DurationLong(ReferenceScheduler.this.currentTimeMillis().-(startedAtMillis)).millis;
+        val d: scala.concurrent.duration.FiniteDuration = period.-(duration);
+        if (d.&gt;=(scala.concurrent.duration.Duration.Zero))
+          d
+        else
+          scala.concurrent.duration.Duration.Zero
+      };
+      loop(delay)
+    }
+  };
+  new $anon()
+})
+        </td>
+      </tr><tr>
+        <td>
+          91
+        </td>
+        <td>
+          2301
+        </td>
+        <td>
+          3001
+          -
+          3008
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Runnable.run
+        </td>
+        <td style="background: #F0ADAD">
+          r.run()
+        </td>
+      </tr><tr>
+        <td>
+          94
+        </td>
+        <td>
+          2302
+        </td>
+        <td>
+          3062
+          -
+          3099
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.-
+        </td>
+        <td style="background: #F0ADAD">
+          ReferenceScheduler.this.currentTimeMillis().-(startedAtMillis)
+        </td>
+      </tr><tr>
+        <td>
+          94
+        </td>
+        <td>
+          2303
+        </td>
+        <td>
+          3062
+          -
+          3107
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.duration.DurationConversions.millis
+        </td>
+        <td style="background: #F0ADAD">
+          scala.concurrent.duration.`package`.DurationLong(ReferenceScheduler.this.currentTimeMillis().-(startedAtMillis)).millis
+        </td>
+      </tr><tr>
+        <td>
+          95
+        </td>
+        <td>
+          2304
+        </td>
+        <td>
+          3128
+          -
+          3145
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.concurrent.duration.FiniteDuration.-
+        </td>
+        <td style="background: #F0ADAD">
+          period.-(duration)
+        </td>
+      </tr><tr>
+        <td>
+          96
+        </td>
+        <td>
+          2305
+        </td>
+        <td>
+          3167
+          -
+          3180
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.duration.Duration.Zero
+        </td>
+        <td style="background: #F0ADAD">
+          scala.concurrent.duration.Duration.Zero
+        </td>
+      </tr><tr>
+        <td>
+          96
+        </td>
+        <td>
+          2308
+        </td>
+        <td>
+          3189
+          -
+          3202
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.duration.Duration.Zero
+        </td>
+        <td style="background: #F0ADAD">
+          scala.concurrent.duration.Duration.Zero
+        </td>
+      </tr><tr>
+        <td>
+          96
+        </td>
+        <td>
+          2307
+        </td>
+        <td>
+          3182
+          -
+          3183
+        </td>
+        <td>
+          Ident
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.$anon.d
+        </td>
+        <td style="background: #F0ADAD">
+          d
+        </td>
+      </tr><tr>
+        <td>
+          96
+        </td>
+        <td>
+          2306
+        </td>
+        <td>
+          3162
+          -
+          3180
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.math.Ordered.&gt;=
+        </td>
+        <td style="background: #F0ADAD">
+          d.&gt;=(scala.concurrent.duration.Duration.Zero)
+        </td>
+      </tr><tr>
+        <td>
+          96
+        </td>
+        <td>
+          2309
+        </td>
+        <td>
+          3189
+          -
+          3202
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          scala.concurrent.duration.Duration.Zero
+        </td>
+        <td style="background: #F0ADAD">
+          scala.concurrent.duration.Duration.Zero
+        </td>
+      </tr><tr>
+        <td>
+          99
+        </td>
+        <td>
+          2310
+        </td>
+        <td>
+          3226
+          -
+          3237
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.loop
+        </td>
+        <td style="background: #F0ADAD">
+          loop(delay)
+        </td>
+      </tr><tr>
+        <td>
+          105
+        </td>
+        <td>
+          2314
+        </td>
+        <td>
+          3269
+          -
+          3287
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.loop
+        </td>
+        <td style="background: #F0ADAD">
+          loop(initialDelay)
+        </td>
+      </tr><tr>
+        <td>
+          110
+        </td>
+        <td>
+          2315
+        </td>
+        <td>
+          3420
+          -
+          3447
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.MultiAssignmentCancelable.apply
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.concurrent.cancelables.MultiAssignmentCancelable.apply()
+        </td>
+      </tr><tr>
+        <td>
+          113
+        </td>
+        <td>
+          2316
+        </td>
+        <td>
+          3538
+          -
+          3557
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.currentTimeMillis
+        </td>
+        <td style="background: #F0ADAD">
+          ReferenceScheduler.this.currentTimeMillis()
+        </td>
+      </tr><tr>
+        <td>
+          115
+        </td>
+        <td>
+          2317
+        </td>
+        <td>
+          3601
+          -
+          3622
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          MILLISECONDS
+        </td>
+      </tr><tr>
+        <td>
+          115
+        </td>
+        <td>
+          2326
+        </td>
+        <td>
+          3624
+          -
+          3627
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          115
+        </td>
+        <td>
+          2328
+        </td>
+        <td>
+          3565
+          -
+          3923
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.MultiAssignmentCancelable.:=
+        </td>
+        <td style="background: #F0ADAD">
+          sub.:=(ReferenceScheduler.this.scheduleOnce(initialDelayMs, MILLISECONDS, {
+  final class $anon extends Object with Runnable {
+    def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def run(): Unit = {
+      r.run();
+      val delay: Long = {
+        val durationMillis: Long = ReferenceScheduler.this.currentTimeMillis().-(startedAtMillis);
+        val d: Long = periodMs.-(durationMillis);
+        if (d.&gt;=(0))
+          d
+        else
+          0L
+      };
+      loop(delay, periodMs)
+    }
+  };
+  new $anon()
+}))
+        </td>
+      </tr><tr>
+        <td>
+          115
+        </td>
+        <td>
+          2327
+        </td>
+        <td>
+          3572
+          -
+          3923
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.scheduleOnce
+        </td>
+        <td style="background: #F0ADAD">
+          ReferenceScheduler.this.scheduleOnce(initialDelayMs, MILLISECONDS, {
+  final class $anon extends Object with Runnable {
+    def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def run(): Unit = {
+      r.run();
+      val delay: Long = {
+        val durationMillis: Long = ReferenceScheduler.this.currentTimeMillis().-(startedAtMillis);
+        val d: Long = periodMs.-(durationMillis);
+        if (d.&gt;=(0))
+          d
+        else
+          0L
+      };
+      loop(delay, periodMs)
+    }
+  };
+  new $anon()
+})
+        </td>
+      </tr><tr>
+        <td>
+          117
+        </td>
+        <td>
+          2318
+        </td>
+        <td>
+          3677
+          -
+          3684
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Runnable.run
+        </td>
+        <td style="background: #F0ADAD">
+          r.run()
+        </td>
+      </tr><tr>
+        <td>
+          120
+        </td>
+        <td>
+          2319
+        </td>
+        <td>
+          3743
+          -
+          3780
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.-
+        </td>
+        <td style="background: #F0ADAD">
+          ReferenceScheduler.this.currentTimeMillis().-(startedAtMillis)
+        </td>
+      </tr><tr>
+        <td>
+          121
+        </td>
+        <td>
+          2320
+        </td>
+        <td>
+          3801
+          -
+          3826
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.-
+        </td>
+        <td style="background: #F0ADAD">
+          periodMs.-(durationMillis)
+        </td>
+      </tr><tr>
+        <td>
+          122
+        </td>
+        <td>
+          2323
+        </td>
+        <td>
+          3858
+          -
+          3859
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          0L
+        </td>
+      </tr><tr>
+        <td>
+          122
+        </td>
+        <td>
+          2322
+        </td>
+        <td>
+          3851
+          -
+          3852
+        </td>
+        <td>
+          Ident
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.$anon.d
+        </td>
+        <td style="background: #F0ADAD">
+          d
+        </td>
+      </tr><tr>
+        <td>
+          122
+        </td>
+        <td>
+          2321
+        </td>
+        <td>
+          3843
+          -
+          3849
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.&gt;=
+        </td>
+        <td style="background: #F0ADAD">
+          d.&gt;=(0)
+        </td>
+      </tr><tr>
+        <td>
+          122
+        </td>
+        <td>
+          2324
+        </td>
+        <td>
+          3858
+          -
+          3859
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          0L
+        </td>
+      </tr><tr>
+        <td>
+          125
+        </td>
+        <td>
+          2325
+        </td>
+        <td>
+          3883
+          -
+          3904
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.loop
+        </td>
+        <td style="background: #F0ADAD">
+          loop(delay, periodMs)
+        </td>
+      </tr><tr>
+        <td>
+          130
+        </td>
+        <td>
+          2329
+        </td>
+        <td>
+          3951
+          -
+          4000
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.util.concurrent.TimeUnit.convert
+        </td>
+        <td style="background: #F0ADAD">
+          MILLISECONDS.convert(initialDelay, unit)
+        </td>
+      </tr><tr>
+        <td>
+          131
+        </td>
+        <td>
+          2330
+        </td>
+        <td>
+          4020
+          -
+          4063
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.util.concurrent.TimeUnit.convert
+        </td>
+        <td style="background: #F0ADAD">
+          MILLISECONDS.convert(period, unit)
+        </td>
+      </tr><tr>
+        <td>
+          133
+        </td>
+        <td>
+          2331
+        </td>
+        <td>
+          4073
+          -
+          4098
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.loop
+        </td>
+        <td style="background: #F0ADAD">
+          loop(initialMs, periodMs)
+        </td>
+      </tr><tr>
+        <td>
+          138
+        </td>
+        <td>
+          2332
+        </td>
+        <td>
+          4269
+          -
+          4272
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          138
+        </td>
+        <td>
+          2333
+        </td>
+        <td>
+          4227
+          -
+          4321
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.scheduleAtFixedRate
+        </td>
+        <td style="background: #AEF1AE">
+          ReferenceScheduler.this.scheduleAtFixedRate(initialDelay, period, {
+  final class $anon extends Object with Runnable {
+    def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def run(): Unit = action
+  };
+  new $anon()
+})
+        </td>
+      </tr><tr>
+        <td>
+          143
+        </td>
+        <td>
+          2335
+        </td>
+        <td>
+          4434
+          -
+          4534
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.scheduleAtFixedRate
+        </td>
+        <td style="background: #F0ADAD">
+          ReferenceScheduler.this.scheduleAtFixedRate(initialDelay, period, unit, {
+  final class $anon extends Object with Runnable {
+    def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def run(): Unit = action
+  };
+  new $anon()
+})
+        </td>
+      </tr><tr>
+        <td>
+          143
+        </td>
+        <td>
+          2334
+        </td>
+        <td>
+          4482
+          -
+          4485
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.schedulers.ReferenceScheduler.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          new $anon()
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

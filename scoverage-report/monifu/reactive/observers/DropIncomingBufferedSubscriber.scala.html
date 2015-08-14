@@ -1,0 +1,3728 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          monifu/reactive/observers/DropIncomingBufferedSubscriber.scala.html
+        </title>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''>
+</span>17 <span style=''>package monifu.reactive.observers
+</span>18 <span style=''>
+</span>19 <span style=''>import monifu.collection.mutable.ConcurrentQueue
+</span>20 <span style=''>import monifu.concurrent.Scheduler
+</span>21 <span style=''>import monifu.concurrent.atomic.padded.Atomic
+</span>22 <span style=''>import monifu.reactive.Ack.{Cancel, Continue}
+</span>23 <span style=''>import monifu.reactive.{Ack, Observer}
+</span>24 <span style=''>
+</span>25 <span style=''>import scala.annotation.tailrec
+</span>26 <span style=''>import scala.util.Failure
+</span>27 <span style=''>import scala.util.control.NonFatal
+</span>28 <span style=''>
+</span>29 <span style=''>/**
+</span>30 <span style=''> * A [[BufferedSubscriber]] implementation for the following policies:
+</span>31 <span style=''> *
+</span>32 <span style=''> * - [[monifu.reactive.BufferPolicy.DropIncoming]]
+</span>33 <span style=''> * - [[monifu.reactive.BufferPolicy.DropIncomingThenSignal]]
+</span>34 <span style=''> */
+</span>35 <span style=''>final class DropIncomingBufferedSubscriber[-T] private
+</span>36 <span style=''>    (underlying: Observer[T], bufferSize: Int, onOverflow: Long => T = null)
+</span>37 <span style=''>    (implicit val scheduler: Scheduler)
+</span>38 <span style=''>  extends BufferedSubscriber[T] with SynchronousSubscriber[T] {
+</span>39 <span style=''>
+</span>40 <span style=''>  </span><span style='background: #AEF1AE'>require(bufferSize > 0, </span><span style='background: #F0ADAD'>"bufferSize must be a strictly positive number"</span><span style='background: #AEF1AE'>)</span><span style=''>
+</span>41 <span style=''>
+</span>42 <span style=''>  private[this] val queue = </span><span style='background: #AEF1AE'>ConcurrentQueue.empty[T]</span><span style=''>
+</span>43 <span style=''>  // to be modified only in onError, before upstreamIsComplete
+</span>44 <span style=''>  private[this] var errorThrown: Throwable = </span><span style='background: #AEF1AE'>null</span><span style=''>
+</span>45 <span style=''>  // to be modified only in onError / onComplete
+</span>46 <span style=''>  @volatile private[this] var upstreamIsComplete = </span><span style='background: #AEF1AE'>false</span><span style=''>
+</span>47 <span style=''>  // to be modified only by consumer
+</span>48 <span style=''>  @volatile private[this] var downstreamIsDone = </span><span style='background: #AEF1AE'>false</span><span style=''>
+</span>49 <span style=''>  // for enforcing non-concurrent updates
+</span>50 <span style=''>  private[this] val itemsToPush = </span><span style='background: #AEF1AE'>Atomic(0)</span><span style=''>
+</span>51 <span style=''>
+</span>52 <span style=''>  private[this] var eventsDropped = </span><span style='background: #AEF1AE'>0L</span><span style=''>
+</span>53 <span style=''>
+</span>54 <span style=''>  val observer: SynchronousObserver[T] = </span><span style='background: #AEF1AE'>new</span><span style=''> SynchronousObserver[T] {
+</span>55 <span style=''>    def onNext(elem: T): Ack = {
+</span>56 <span style=''>      if (</span><span style='background: #AEF1AE'>!upstreamIsComplete && !downstreamIsDone</span><span style=''>) {
+</span>57 <span style=''>        </span><span style='background: #AEF1AE'>if (itemsToPush.get >= bufferSize) {
+</span>58 <span style=''></span><span style='background: #AEF1AE'>          // no more room, dropping event
+</span>59 <span style=''></span><span style='background: #AEF1AE'>          eventsDropped += 1
+</span>60 <span style=''></span><span style='background: #AEF1AE'>          Continue
+</span>61 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>62 <span style=''></span><span style='background: #AEF1AE'>        else if (eventsDropped > 0 && onOverflow != null) {
+</span>63 <span style=''></span><span style='background: #AEF1AE'>          try {
+</span>64 <span style=''></span><span style='background: #AEF1AE'>            val message = onOverflow(eventsDropped)
+</span>65 <span style=''></span><span style='background: #AEF1AE'>            eventsDropped = 0
+</span>66 <span style=''></span><span style='background: #AEF1AE'>            // first send the overflow message
+</span>67 <span style=''></span><span style='background: #AEF1AE'>            queue.offer(message)
+</span>68 <span style=''></span><span style='background: #AEF1AE'>            notifyConsumerOfNewEvent()
+</span>69 <span style=''></span><span style='background: #AEF1AE'>            // then try to send our current event (recursive call)
+</span>70 <span style=''></span><span style='background: #AEF1AE'>            onNext(elem)
+</span>71 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>72 <span style=''></span><span style='background: #AEF1AE'>          catch {
+</span>73 <span style=''></span><span style='background: #AEF1AE'>            case NonFatal(ex) =>
+</span>74 <span style=''></span><span style='background: #AEF1AE'>              </span><span style='background: #F0ADAD'>onError(ex)</span><span style='background: #AEF1AE'>
+</span>75 <span style=''></span><span style='background: #AEF1AE'>              </span><span style='background: #F0ADAD'>Cancel</span><span style='background: #AEF1AE'>
+</span>76 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>77 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>78 <span style=''></span><span style='background: #AEF1AE'>        else try {
+</span>79 <span style=''></span><span style='background: #AEF1AE'>          queue.offer(elem)
+</span>80 <span style=''></span><span style='background: #AEF1AE'>          notifyConsumerOfNewEvent()
+</span>81 <span style=''></span><span style='background: #AEF1AE'>          Continue
+</span>82 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>83 <span style=''></span><span style='background: #AEF1AE'>        catch {
+</span>84 <span style=''></span><span style='background: #AEF1AE'>          case NonFatal(ex) =>
+</span>85 <span style=''></span><span style='background: #AEF1AE'>            </span><span style='background: #F0ADAD'>onError(ex)</span><span style='background: #AEF1AE'>
+</span>86 <span style=''></span><span style='background: #AEF1AE'>            </span><span style='background: #F0ADAD'>Cancel</span><span style='background: #AEF1AE'>
+</span>87 <span style=''></span><span style='background: #AEF1AE'>        }</span><span style=''>
+</span>88 <span style=''>      }
+</span>89 <span style=''>      else
+</span>90 <span style=''>        </span><span style='background: #AEF1AE'>Cancel</span><span style=''>
+</span>91 <span style=''>    }
+</span>92 <span style=''>
+</span>93 <span style=''>    def onError(ex: Throwable) = {
+</span>94 <span style=''>      if (</span><span style='background: #AEF1AE'>!upstreamIsComplete && !downstreamIsDone</span><span style=''>) </span><span style='background: #AEF1AE'>{
+</span>95 <span style=''></span><span style='background: #AEF1AE'>        errorThrown = ex
+</span>96 <span style=''></span><span style='background: #AEF1AE'>        upstreamIsComplete = true
+</span>97 <span style=''></span><span style='background: #AEF1AE'>        notifyConsumerOfNewEvent()
+</span>98 <span style=''></span><span style='background: #AEF1AE'>      }</span><span style=''>
+</span>99 <span style=''>    }
+</span>100 <span style=''>
+</span>101 <span style=''>    def onComplete(): Unit = {
+</span>102 <span style=''>      if (</span><span style='background: #AEF1AE'>!upstreamIsComplete && !downstreamIsDone</span><span style=''>) {
+</span>103 <span style=''>        </span><span style='background: #AEF1AE'>if (eventsDropped > 0 && onOverflow != null) try {
+</span>104 <span style=''></span><span style='background: #AEF1AE'>          val message = onOverflow(eventsDropped)
+</span>105 <span style=''></span><span style='background: #AEF1AE'>          eventsDropped = 0
+</span>106 <span style=''></span><span style='background: #AEF1AE'>          queue.offer(message)
+</span>107 <span style=''></span><span style='background: #AEF1AE'>          upstreamIsComplete = true
+</span>108 <span style=''></span><span style='background: #AEF1AE'>          notifyConsumerOfNewEvent()
+</span>109 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>110 <span style=''></span><span style='background: #AEF1AE'>        catch {
+</span>111 <span style=''></span><span style='background: #AEF1AE'>          case NonFatal(ex) =>
+</span>112 <span style=''></span><span style='background: #AEF1AE'>            </span><span style='background: #F0ADAD'>onError(ex)</span><span style='background: #AEF1AE'>
+</span>113 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>114 <span style=''></span><span style='background: #AEF1AE'>        else {
+</span>115 <span style=''></span><span style='background: #AEF1AE'>          upstreamIsComplete = true
+</span>116 <span style=''></span><span style='background: #AEF1AE'>          notifyConsumerOfNewEvent()
+</span>117 <span style=''></span><span style='background: #AEF1AE'>        }</span><span style=''>
+</span>118 <span style=''>      }
+</span>119 <span style=''>    }
+</span>120 <span style=''>  }
+</span>121 <span style=''>
+</span>122 <span style=''>  @tailrec
+</span>123 <span style=''>  private[this] def notifyConsumerOfNewEvent(): Unit = {
+</span>124 <span style=''>    val currentNr = </span><span style='background: #AEF1AE'>itemsToPush.get</span><span style=''>
+</span>125 <span style=''>
+</span>126 <span style=''>    if (</span><span style='background: #AEF1AE'>!itemsToPush.compareAndSet(currentNr, currentNr + 1)</span><span style=''>)
+</span>127 <span style=''>      </span><span style='background: #AEF1AE'>notifyConsumerOfNewEvent()</span><span style=''>
+</span>128 <span style=''>    else </span><span style='background: #AEF1AE'>if (currentNr == 0)
+</span>129 <span style=''></span><span style='background: #AEF1AE'>      scheduler.execute(new Runnable {
+</span>130 <span style=''></span><span style='background: #AEF1AE'>        def run() = fastLoop(0)
+</span>131 <span style=''></span><span style='background: #AEF1AE'>      })</span><span style=''>
+</span>132 <span style=''>  }
+</span>133 <span style=''>
+</span>134 <span style=''>  private[this] def rescheduled(processed: Int): Unit = {
+</span>135 <span style=''>    </span><span style='background: #AEF1AE'>fastLoop(processed)</span><span style=''>
+</span>136 <span style=''>  }
+</span>137 <span style=''>
+</span>138 <span style=''>  @tailrec
+</span>139 <span style=''>  private[this] def fastLoop(processed: Int): Unit = {
+</span>140 <span style=''>    if (</span><span style='background: #AEF1AE'>!downstreamIsDone</span><span style=''>) </span><span style='background: #AEF1AE'>{
+</span>141 <span style=''></span><span style='background: #AEF1AE'>      val hasError = errorThrown ne null
+</span>142 <span style=''></span><span style='background: #AEF1AE'>      val next = queue.poll()
+</span>143 <span style=''></span><span style='background: #AEF1AE'>
+</span>144 <span style=''></span><span style='background: #AEF1AE'>      if (next != null) {
+</span>145 <span style=''></span><span style='background: #AEF1AE'>        underlying.onNext(next) match {
+</span>146 <span style=''></span><span style='background: #AEF1AE'>          case sync if sync.isCompleted =>
+</span>147 <span style=''></span><span style='background: #AEF1AE'>            sync match {
+</span>148 <span style=''></span><span style='background: #AEF1AE'>              case continue if continue == Continue || continue.value.get == Continue.IsSuccess =>
+</span>149 <span style=''></span><span style='background: #AEF1AE'>                // process next
+</span>150 <span style=''></span><span style='background: #AEF1AE'>                fastLoop(processed + 1)
+</span>151 <span style=''></span><span style='background: #AEF1AE'>
+</span>152 <span style=''></span><span style='background: #AEF1AE'>              case done if </span><span style='background: #F0ADAD'>done == Cancel || done.value.get == Cancel.IsSuccess</span><span style='background: #AEF1AE'> =>
+</span>153 <span style=''></span><span style='background: #AEF1AE'>                // ending loop
+</span>154 <span style=''></span><span style='background: #AEF1AE'>                downstreamIsDone = </span><span style='background: #F0ADAD'>true</span><span style='background: #AEF1AE'>
+</span>155 <span style=''></span><span style='background: #AEF1AE'>                </span><span style='background: #F0ADAD'>itemsToPush.set(0)</span><span style='background: #AEF1AE'>
+</span>156 <span style=''></span><span style='background: #AEF1AE'>
+</span>157 <span style=''></span><span style='background: #AEF1AE'>              case error if </span><span style='background: #F0ADAD'>error.value.get.isFailure</span><span style='background: #AEF1AE'> =>
+</span>158 <span style=''></span><span style='background: #AEF1AE'>                // ending loop
+</span>159 <span style=''></span><span style='background: #AEF1AE'>                downstreamIsDone = </span><span style='background: #F0ADAD'>true</span><span style='background: #AEF1AE'>
+</span>160 <span style=''></span><span style='background: #AEF1AE'>                </span><span style='background: #F0ADAD'>itemsToPush.set(0)</span><span style='background: #AEF1AE'>
+</span>161 <span style=''></span><span style='background: #AEF1AE'>                </span><span style='background: #F0ADAD'>underlying.onError(error.value.get.failed.get)</span><span style='background: #AEF1AE'>
+</span>162 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>163 <span style=''></span><span style='background: #AEF1AE'>
+</span>164 <span style=''></span><span style='background: #AEF1AE'>          case async =>
+</span>165 <span style=''></span><span style='background: #AEF1AE'>            async.onComplete {
+</span>166 <span style=''></span><span style='background: #AEF1AE'>              case Continue.IsSuccess =>
+</span>167 <span style=''></span><span style='background: #AEF1AE'>                // re-run loop (in different thread)
+</span>168 <span style=''></span><span style='background: #AEF1AE'>                rescheduled(processed + 1)
+</span>169 <span style=''></span><span style='background: #AEF1AE'>
+</span>170 <span style=''></span><span style='background: #AEF1AE'>              case Cancel.IsSuccess =>
+</span>171 <span style=''></span><span style='background: #AEF1AE'>                // ending loop
+</span>172 <span style=''></span><span style='background: #AEF1AE'>                downstreamIsDone = </span><span style='background: #F0ADAD'>true</span><span style='background: #AEF1AE'>
+</span>173 <span style=''></span><span style='background: #AEF1AE'>                </span><span style='background: #F0ADAD'>itemsToPush.set(0)</span><span style='background: #AEF1AE'>
+</span>174 <span style=''></span><span style='background: #AEF1AE'>
+</span>175 <span style=''></span><span style='background: #AEF1AE'>              case Failure(ex) =>
+</span>176 <span style=''></span><span style='background: #AEF1AE'>                // ending loop
+</span>177 <span style=''></span><span style='background: #AEF1AE'>                downstreamIsDone = </span><span style='background: #F0ADAD'>true</span><span style='background: #AEF1AE'>
+</span>178 <span style=''></span><span style='background: #AEF1AE'>                </span><span style='background: #F0ADAD'>itemsToPush.set(0)</span><span style='background: #AEF1AE'>
+</span>179 <span style=''></span><span style='background: #AEF1AE'>                </span><span style='background: #F0ADAD'>underlying.onError(ex)</span><span style='background: #AEF1AE'>
+</span>180 <span style=''></span><span style='background: #AEF1AE'>
+</span>181 <span style=''></span><span style='background: #AEF1AE'>              case other =>
+</span>182 <span style=''></span><span style='background: #AEF1AE'>                // never happens, but to appease Scala's compiler
+</span>183 <span style=''></span><span style='background: #AEF1AE'>                downstreamIsDone = </span><span style='background: #F0ADAD'>true</span><span style='background: #AEF1AE'>
+</span>184 <span style=''></span><span style='background: #AEF1AE'>                </span><span style='background: #F0ADAD'>itemsToPush.set(0)</span><span style='background: #AEF1AE'>
+</span>185 <span style=''></span><span style='background: #AEF1AE'>                </span><span style='background: #F0ADAD'>underlying.onError(new MatchError(s"$other"))</span><span style='background: #AEF1AE'>
+</span>186 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>187 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>188 <span style=''></span><span style='background: #AEF1AE'>      }
+</span>189 <span style=''></span><span style='background: #AEF1AE'>      else if (upstreamIsComplete || hasError) {
+</span>190 <span style=''></span><span style='background: #AEF1AE'>        // Race-condition check, but if upstreamIsComplete=true is visible,
+</span>191 <span style=''></span><span style='background: #AEF1AE'>        // then the queue should be fully published because there's a clear happens-before
+</span>192 <span style=''></span><span style='background: #AEF1AE'>        // relationship between queue.offer() and upstreamIsComplete=true
+</span>193 <span style=''></span><span style='background: #AEF1AE'>        if (!queue.isEmpty) {
+</span>194 <span style=''></span><span style='background: #AEF1AE'>          </span><span style='background: #F0ADAD'>fastLoop(processed)</span><span style='background: #AEF1AE'>
+</span>195 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>196 <span style=''></span><span style='background: #AEF1AE'>        else {
+</span>197 <span style=''></span><span style='background: #AEF1AE'>          // ending loop
+</span>198 <span style=''></span><span style='background: #AEF1AE'>          downstreamIsDone = true
+</span>199 <span style=''></span><span style='background: #AEF1AE'>          itemsToPush.set(0)
+</span>200 <span style=''></span><span style='background: #AEF1AE'>          queue.clear() // for GC purposes
+</span>201 <span style=''></span><span style='background: #AEF1AE'>          if (errorThrown ne null)
+</span>202 <span style=''></span><span style='background: #AEF1AE'>            underlying.onError(errorThrown)
+</span>203 <span style=''></span><span style='background: #AEF1AE'>          else
+</span>204 <span style=''></span><span style='background: #AEF1AE'>            underlying.onComplete()
+</span>205 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>206 <span style=''></span><span style='background: #AEF1AE'>      }
+</span>207 <span style=''></span><span style='background: #AEF1AE'>      else {
+</span>208 <span style=''></span><span style='background: #AEF1AE'>        val remaining = itemsToPush.decrementAndGet(processed)
+</span>209 <span style=''></span><span style='background: #AEF1AE'>        // if the queue is non-empty (i.e. concurrent modifications just happened)
+</span>210 <span style=''></span><span style='background: #AEF1AE'>        // then start all over again
+</span>211 <span style=''></span><span style='background: #AEF1AE'>        if (remaining > 0) fastLoop(0)
+</span>212 <span style=''></span><span style='background: #AEF1AE'>      }
+</span>213 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>214 <span style=''>  }
+</span>215 <span style=''>}
+</span>216 <span style=''>
+</span>217 <span style=''>object DropIncomingBufferedSubscriber {
+</span>218 <span style=''>  /**
+</span>219 <span style=''>   * Returns an instance of a [[DropIncomingBufferedSubscriber]]
+</span>220 <span style=''>   * for the [[monifu.reactive.BufferPolicy.DropIncoming DropIncoming]]
+</span>221 <span style=''>   * policy.
+</span>222 <span style=''>   */
+</span>223 <span style=''>  def simple[T](underlying: Observer[T], bufferSize: Int)
+</span>224 <span style=''>      (implicit s: Scheduler): DropIncomingBufferedSubscriber[T] = {
+</span>225 <span style=''>
+</span>226 <span style=''>    </span><span style='background: #AEF1AE'>new DropIncomingBufferedSubscriber[T](underlying, bufferSize, null)</span><span style=''>
+</span>227 <span style=''>  }
+</span>228 <span style=''>
+</span>229 <span style=''>  /**
+</span>230 <span style=''>   * Returns an instance of a [[DropIncomingBufferedSubscriber]]
+</span>231 <span style=''>   * for the [[monifu.reactive.BufferPolicy.DropIncoming DropIncoming]]
+</span>232 <span style=''>   * policy.
+</span>233 <span style=''>   */
+</span>234 <span style=''>  def withSignal[T](underlying: Observer[T], bufferSize: Int, onOverflow: Long => T)
+</span>235 <span style=''>      (implicit s: Scheduler): DropIncomingBufferedSubscriber[T] = {
+</span>236 <span style=''>
+</span>237 <span style=''>    </span><span style='background: #AEF1AE'>new DropIncomingBufferedSubscriber[T](underlying, bufferSize, onOverflow)</span><span style=''>
+</span>238 <span style=''>  }
+</span>239 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          40
+        </td>
+        <td>
+          3447
+        </td>
+        <td>
+          1413
+          -
+          1460
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          &quot;bufferSize must be a strictly positive number&quot;
+        </td>
+      </tr><tr>
+        <td>
+          40
+        </td>
+        <td>
+          3446
+        </td>
+        <td>
+          1397
+          -
+          1411
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.bufferSize.&gt;(0)
+        </td>
+      </tr><tr>
+        <td>
+          40
+        </td>
+        <td>
+          3448
+        </td>
+        <td>
+          1389
+          -
+          1461
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Predef.require
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.require(DropIncomingBufferedSubscriber.this.bufferSize.&gt;(0), &quot;bufferSize must be a strictly positive number&quot;)
+        </td>
+      </tr><tr>
+        <td>
+          42
+        </td>
+        <td>
+          3449
+        </td>
+        <td>
+          1491
+          -
+          1515
+        </td>
+        <td>
+          TypeApply
+        </td>
+        <td>
+          scala.collection.generic.GenericCompanion.empty
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.collection.mutable.ConcurrentQueue.empty[T]
+        </td>
+      </tr><tr>
+        <td>
+          44
+        </td>
+        <td>
+          3450
+        </td>
+        <td>
+          1624
+          -
+          1628
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          null
+        </td>
+      </tr><tr>
+        <td>
+          46
+        </td>
+        <td>
+          3451
+        </td>
+        <td>
+          1729
+          -
+          1734
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          false
+        </td>
+      </tr><tr>
+        <td>
+          48
+        </td>
+        <td>
+          3452
+        </td>
+        <td>
+          1821
+          -
+          1826
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          false
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          3453
+        </td>
+        <td>
+          1910
+          -
+          1911
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          0
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          3455
+        </td>
+        <td>
+          1903
+          -
+          1912
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.Atomic.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.atomic.padded.Atomic.apply[Int, monifu.concurrent.atomic.padded.AtomicInt](0)(padded.this.AtomicBuilder.AtomicIntBuilder)
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          3454
+        </td>
+        <td>
+          1909
+          -
+          1909
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.Implicits.Level3.AtomicIntBuilder
+        </td>
+        <td style="background: #AEF1AE">
+          padded.this.AtomicBuilder.AtomicIntBuilder
+        </td>
+      </tr><tr>
+        <td>
+          52
+        </td>
+        <td>
+          3456
+        </td>
+        <td>
+          1950
+          -
+          1952
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          0L
+        </td>
+      </tr><tr>
+        <td>
+          54
+        </td>
+        <td>
+          3515
+        </td>
+        <td>
+          1995
+          -
+          1998
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          56
+        </td>
+        <td>
+          3458
+        </td>
+        <td>
+          2067
+          -
+          2107
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Boolean.&amp;&amp;
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.upstreamIsComplete.unary_!.&amp;&amp;(DropIncomingBufferedSubscriber.this.downstreamIsDone.unary_!)
+        </td>
+      </tr><tr>
+        <td>
+          56
+        </td>
+        <td>
+          3457
+        </td>
+        <td>
+          2090
+          -
+          2107
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.downstreamIsDone.unary_!
+        </td>
+      </tr><tr>
+        <td>
+          57
+        </td>
+        <td>
+          3459
+        </td>
+        <td>
+          2142
+          -
+          2152
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.bufferSize
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.bufferSize
+        </td>
+      </tr><tr>
+        <td>
+          57
+        </td>
+        <td>
+          3485
+        </td>
+        <td>
+          2119
+          -
+          2969
+        </td>
+        <td>
+          If
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          if (DropIncomingBufferedSubscriber.this.itemsToPush.get.&gt;=(DropIncomingBufferedSubscriber.this.bufferSize))
+  {
+    DropIncomingBufferedSubscriber.this.eventsDropped = DropIncomingBufferedSubscriber.this.eventsDropped.+(1);
+    monifu.reactive.Ack.Continue
+  }
+else
+  if (DropIncomingBufferedSubscriber.this.eventsDropped.&gt;(0).&amp;&amp;(DropIncomingBufferedSubscriber.this.onOverflow.!=(null)))
+    try {
+      val message: T = DropIncomingBufferedSubscriber.this.onOverflow.apply(DropIncomingBufferedSubscriber.this.eventsDropped);
+      DropIncomingBufferedSubscriber.this.eventsDropped = 0L;
+      DropIncomingBufferedSubscriber.this.queue.offer(message);
+      DropIncomingBufferedSubscriber.this.notifyConsumerOfNewEvent();
+      $anon.this.onNext(elem)
+    } catch {
+      case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((ex @ _)) =&gt; {
+        $anon.this.onError(ex);
+        monifu.reactive.Ack.Cancel
+      }
+    }
+  else
+    try {
+      DropIncomingBufferedSubscriber.this.queue.offer(elem);
+      DropIncomingBufferedSubscriber.this.notifyConsumerOfNewEvent();
+      monifu.reactive.Ack.Continue
+    } catch {
+      case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((ex @ _)) =&gt; {
+        $anon.this.onError(ex);
+        monifu.reactive.Ack.Cancel
+      }
+    }
+        </td>
+      </tr><tr>
+        <td>
+          57
+        </td>
+        <td>
+          3460
+        </td>
+        <td>
+          2123
+          -
+          2152
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.&gt;=
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.itemsToPush.get.&gt;=(DropIncomingBufferedSubscriber.this.bufferSize)
+        </td>
+      </tr><tr>
+        <td>
+          57
+        </td>
+        <td>
+          3463
+        </td>
+        <td>
+          2154
+          -
+          2255
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  DropIncomingBufferedSubscriber.this.eventsDropped = DropIncomingBufferedSubscriber.this.eventsDropped.+(1);
+  monifu.reactive.Ack.Continue
+}
+        </td>
+      </tr><tr>
+        <td>
+          59
+        </td>
+        <td>
+          3461
+        </td>
+        <td>
+          2208
+          -
+          2226
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.+
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.eventsDropped.+(1)
+        </td>
+      </tr><tr>
+        <td>
+          60
+        </td>
+        <td>
+          3462
+        </td>
+        <td>
+          2237
+          -
+          2245
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Continue
+        </td>
+      </tr><tr>
+        <td>
+          62
+        </td>
+        <td>
+          3465
+        </td>
+        <td>
+          2294
+          -
+          2312
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.!=
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.onOverflow.!=(null)
+        </td>
+      </tr><tr>
+        <td>
+          62
+        </td>
+        <td>
+          3464
+        </td>
+        <td>
+          2289
+          -
+          2290
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          0
+        </td>
+      </tr><tr>
+        <td>
+          62
+        </td>
+        <td>
+          3466
+        </td>
+        <td>
+          2273
+          -
+          2312
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Boolean.&amp;&amp;
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.eventsDropped.&gt;(0).&amp;&amp;(DropIncomingBufferedSubscriber.this.onOverflow.!=(null))
+        </td>
+      </tr><tr>
+        <td>
+          62
+        </td>
+        <td>
+          3484
+        </td>
+        <td>
+          2269
+          -
+          2969
+        </td>
+        <td>
+          If
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          if (DropIncomingBufferedSubscriber.this.eventsDropped.&gt;(0).&amp;&amp;(DropIncomingBufferedSubscriber.this.onOverflow.!=(null)))
+  try {
+    val message: T = DropIncomingBufferedSubscriber.this.onOverflow.apply(DropIncomingBufferedSubscriber.this.eventsDropped);
+    DropIncomingBufferedSubscriber.this.eventsDropped = 0L;
+    DropIncomingBufferedSubscriber.this.queue.offer(message);
+    DropIncomingBufferedSubscriber.this.notifyConsumerOfNewEvent();
+    $anon.this.onNext(elem)
+  } catch {
+    case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((ex @ _)) =&gt; {
+      $anon.this.onError(ex);
+      monifu.reactive.Ack.Cancel
+    }
+  }
+else
+  try {
+    DropIncomingBufferedSubscriber.this.queue.offer(elem);
+    DropIncomingBufferedSubscriber.this.notifyConsumerOfNewEvent();
+    monifu.reactive.Ack.Continue
+  } catch {
+    case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((ex @ _)) =&gt; {
+      $anon.this.onError(ex);
+      monifu.reactive.Ack.Cancel
+    }
+  }
+        </td>
+      </tr><tr>
+        <td>
+          63
+        </td>
+        <td>
+          3473
+        </td>
+        <td>
+          2344
+          -
+          2624
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  val message: T = DropIncomingBufferedSubscriber.this.onOverflow.apply(DropIncomingBufferedSubscriber.this.eventsDropped);
+  DropIncomingBufferedSubscriber.this.eventsDropped = 0L;
+  DropIncomingBufferedSubscriber.this.queue.offer(message);
+  DropIncomingBufferedSubscriber.this.notifyConsumerOfNewEvent();
+  $anon.this.onNext(elem)
+}
+        </td>
+      </tr><tr>
+        <td>
+          63
+        </td>
+        <td>
+          3476
+        </td>
+        <td>
+          2326
+          -
+          2746
+        </td>
+        <td>
+          Try
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          try {
+  val message: T = DropIncomingBufferedSubscriber.this.onOverflow.apply(DropIncomingBufferedSubscriber.this.eventsDropped);
+  DropIncomingBufferedSubscriber.this.eventsDropped = 0L;
+  DropIncomingBufferedSubscriber.this.queue.offer(message);
+  DropIncomingBufferedSubscriber.this.notifyConsumerOfNewEvent();
+  $anon.this.onNext(elem)
+} catch {
+  case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((ex @ _)) =&gt; {
+    $anon.this.onError(ex);
+    monifu.reactive.Ack.Cancel
+  }
+}
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          3468
+        </td>
+        <td>
+          2358
+          -
+          2383
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Function1.apply
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.onOverflow.apply(DropIncomingBufferedSubscriber.this.eventsDropped)
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          3467
+        </td>
+        <td>
+          2369
+          -
+          2382
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.eventsDropped
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.eventsDropped
+        </td>
+      </tr><tr>
+        <td>
+          65
+        </td>
+        <td>
+          3469
+        </td>
+        <td>
+          2412
+          -
+          2413
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          0L
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          3470
+        </td>
+        <td>
+          2473
+          -
+          2493
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.collection.mutable.ConcurrentQueue.offer
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.queue.offer(message)
+        </td>
+      </tr><tr>
+        <td>
+          68
+        </td>
+        <td>
+          3471
+        </td>
+        <td>
+          2506
+          -
+          2532
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.notifyConsumerOfNewEvent
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.notifyConsumerOfNewEvent()
+        </td>
+      </tr><tr>
+        <td>
+          70
+        </td>
+        <td>
+          3472
+        </td>
+        <td>
+          2612
+          -
+          2624
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.$anon.onNext
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this.onNext(elem)
+        </td>
+      </tr><tr>
+        <td>
+          74
+        </td>
+        <td>
+          3474
+        </td>
+        <td>
+          2702
+          -
+          2713
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.$anon.onError
+        </td>
+        <td style="background: #F0ADAD">
+          $anon.this.onError(ex)
+        </td>
+      </tr><tr>
+        <td>
+          75
+        </td>
+        <td>
+          3475
+        </td>
+        <td>
+          2728
+          -
+          2734
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          3480
+        </td>
+        <td>
+          2786
+          -
+          2859
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  DropIncomingBufferedSubscriber.this.queue.offer(elem);
+  DropIncomingBufferedSubscriber.this.notifyConsumerOfNewEvent();
+  monifu.reactive.Ack.Continue
+}
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          3483
+        </td>
+        <td>
+          2770
+          -
+          2969
+        </td>
+        <td>
+          Try
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          try {
+  DropIncomingBufferedSubscriber.this.queue.offer(elem);
+  DropIncomingBufferedSubscriber.this.notifyConsumerOfNewEvent();
+  monifu.reactive.Ack.Continue
+} catch {
+  case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((ex @ _)) =&gt; {
+    $anon.this.onError(ex);
+    monifu.reactive.Ack.Cancel
+  }
+}
+        </td>
+      </tr><tr>
+        <td>
+          79
+        </td>
+        <td>
+          3477
+        </td>
+        <td>
+          2786
+          -
+          2803
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.collection.mutable.ConcurrentQueue.offer
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.queue.offer(elem)
+        </td>
+      </tr><tr>
+        <td>
+          80
+        </td>
+        <td>
+          3478
+        </td>
+        <td>
+          2814
+          -
+          2840
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.notifyConsumerOfNewEvent
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.notifyConsumerOfNewEvent()
+        </td>
+      </tr><tr>
+        <td>
+          81
+        </td>
+        <td>
+          3479
+        </td>
+        <td>
+          2851
+          -
+          2859
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Continue
+        </td>
+      </tr><tr>
+        <td>
+          85
+        </td>
+        <td>
+          3481
+        </td>
+        <td>
+          2929
+          -
+          2940
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.$anon.onError
+        </td>
+        <td style="background: #F0ADAD">
+          $anon.this.onError(ex)
+        </td>
+      </tr><tr>
+        <td>
+          86
+        </td>
+        <td>
+          3482
+        </td>
+        <td>
+          2953
+          -
+          2959
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          90
+        </td>
+        <td>
+          3486
+        </td>
+        <td>
+          2997
+          -
+          3003
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          90
+        </td>
+        <td>
+          3487
+        </td>
+        <td>
+          2997
+          -
+          3003
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          94
+        </td>
+        <td>
+          3489
+        </td>
+        <td>
+          3056
+          -
+          3096
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Boolean.&amp;&amp;
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.upstreamIsComplete.unary_!.&amp;&amp;(DropIncomingBufferedSubscriber.this.downstreamIsDone.unary_!)
+        </td>
+      </tr><tr>
+        <td>
+          94
+        </td>
+        <td>
+          3492
+        </td>
+        <td>
+          3098
+          -
+          3201
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  DropIncomingBufferedSubscriber.this.errorThrown = ex;
+  DropIncomingBufferedSubscriber.this.upstreamIsComplete = true;
+  DropIncomingBufferedSubscriber.this.notifyConsumerOfNewEvent()
+}
+        </td>
+      </tr><tr>
+        <td>
+          94
+        </td>
+        <td>
+          3494
+        </td>
+        <td>
+          3052
+          -
+          3052
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          94
+        </td>
+        <td>
+          3488
+        </td>
+        <td>
+          3079
+          -
+          3096
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.downstreamIsDone.unary_!
+        </td>
+      </tr><tr>
+        <td>
+          94
+        </td>
+        <td>
+          3493
+        </td>
+        <td>
+          3052
+          -
+          3052
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          96
+        </td>
+        <td>
+          3490
+        </td>
+        <td>
+          3154
+          -
+          3158
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          97
+        </td>
+        <td>
+          3491
+        </td>
+        <td>
+          3167
+          -
+          3193
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.notifyConsumerOfNewEvent
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.notifyConsumerOfNewEvent()
+        </td>
+      </tr><tr>
+        <td>
+          102
+        </td>
+        <td>
+          3495
+        </td>
+        <td>
+          3273
+          -
+          3290
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.downstreamIsDone.unary_!
+        </td>
+      </tr><tr>
+        <td>
+          102
+        </td>
+        <td>
+          3513
+        </td>
+        <td>
+          3246
+          -
+          3246
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          102
+        </td>
+        <td>
+          3496
+        </td>
+        <td>
+          3250
+          -
+          3290
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Boolean.&amp;&amp;
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.upstreamIsComplete.unary_!.&amp;&amp;(DropIncomingBufferedSubscriber.this.downstreamIsDone.unary_!)
+        </td>
+      </tr><tr>
+        <td>
+          102
+        </td>
+        <td>
+          3514
+        </td>
+        <td>
+          3246
+          -
+          3246
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          103
+        </td>
+        <td>
+          3498
+        </td>
+        <td>
+          3327
+          -
+          3345
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.!=
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.onOverflow.!=(null)
+        </td>
+      </tr><tr>
+        <td>
+          103
+        </td>
+        <td>
+          3512
+        </td>
+        <td>
+          3302
+          -
+          3723
+        </td>
+        <td>
+          If
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          if (DropIncomingBufferedSubscriber.this.eventsDropped.&gt;(0).&amp;&amp;(DropIncomingBufferedSubscriber.this.onOverflow.!=(null)))
+  try {
+    val message: T = DropIncomingBufferedSubscriber.this.onOverflow.apply(DropIncomingBufferedSubscriber.this.eventsDropped);
+    DropIncomingBufferedSubscriber.this.eventsDropped = 0L;
+    DropIncomingBufferedSubscriber.this.queue.offer(message);
+    DropIncomingBufferedSubscriber.this.upstreamIsComplete = true;
+    DropIncomingBufferedSubscriber.this.notifyConsumerOfNewEvent()
+  } catch {
+    case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((ex @ _)) =&gt; $anon.this.onError(ex)
+  }
+else
+  {
+    DropIncomingBufferedSubscriber.this.upstreamIsComplete = true;
+    DropIncomingBufferedSubscriber.this.notifyConsumerOfNewEvent()
+  }
+        </td>
+      </tr><tr>
+        <td>
+          103
+        </td>
+        <td>
+          3506
+        </td>
+        <td>
+          3363
+          -
+          3534
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  val message: T = DropIncomingBufferedSubscriber.this.onOverflow.apply(DropIncomingBufferedSubscriber.this.eventsDropped);
+  DropIncomingBufferedSubscriber.this.eventsDropped = 0L;
+  DropIncomingBufferedSubscriber.this.queue.offer(message);
+  DropIncomingBufferedSubscriber.this.upstreamIsComplete = true;
+  DropIncomingBufferedSubscriber.this.notifyConsumerOfNewEvent()
+}
+        </td>
+      </tr><tr>
+        <td>
+          103
+        </td>
+        <td>
+          3497
+        </td>
+        <td>
+          3322
+          -
+          3323
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          0
+        </td>
+      </tr><tr>
+        <td>
+          103
+        </td>
+        <td>
+          3508
+        </td>
+        <td>
+          3347
+          -
+          3625
+        </td>
+        <td>
+          Try
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          try {
+  val message: T = DropIncomingBufferedSubscriber.this.onOverflow.apply(DropIncomingBufferedSubscriber.this.eventsDropped);
+  DropIncomingBufferedSubscriber.this.eventsDropped = 0L;
+  DropIncomingBufferedSubscriber.this.queue.offer(message);
+  DropIncomingBufferedSubscriber.this.upstreamIsComplete = true;
+  DropIncomingBufferedSubscriber.this.notifyConsumerOfNewEvent()
+} catch {
+  case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((ex @ _)) =&gt; $anon.this.onError(ex)
+}
+        </td>
+      </tr><tr>
+        <td>
+          103
+        </td>
+        <td>
+          3499
+        </td>
+        <td>
+          3306
+          -
+          3345
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Boolean.&amp;&amp;
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.eventsDropped.&gt;(0).&amp;&amp;(DropIncomingBufferedSubscriber.this.onOverflow.!=(null))
+        </td>
+      </tr><tr>
+        <td>
+          104
+        </td>
+        <td>
+          3501
+        </td>
+        <td>
+          3377
+          -
+          3402
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Function1.apply
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.onOverflow.apply(DropIncomingBufferedSubscriber.this.eventsDropped)
+        </td>
+      </tr><tr>
+        <td>
+          104
+        </td>
+        <td>
+          3500
+        </td>
+        <td>
+          3388
+          -
+          3401
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.eventsDropped
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.eventsDropped
+        </td>
+      </tr><tr>
+        <td>
+          105
+        </td>
+        <td>
+          3502
+        </td>
+        <td>
+          3429
+          -
+          3430
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          0L
+        </td>
+      </tr><tr>
+        <td>
+          106
+        </td>
+        <td>
+          3503
+        </td>
+        <td>
+          3441
+          -
+          3461
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.collection.mutable.ConcurrentQueue.offer
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.queue.offer(message)
+        </td>
+      </tr><tr>
+        <td>
+          107
+        </td>
+        <td>
+          3504
+        </td>
+        <td>
+          3493
+          -
+          3497
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          108
+        </td>
+        <td>
+          3505
+        </td>
+        <td>
+          3508
+          -
+          3534
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.notifyConsumerOfNewEvent
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.notifyConsumerOfNewEvent()
+        </td>
+      </tr><tr>
+        <td>
+          112
+        </td>
+        <td>
+          3507
+        </td>
+        <td>
+          3604
+          -
+          3615
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.$anon.onError
+        </td>
+        <td style="background: #F0ADAD">
+          $anon.this.onError(ex)
+        </td>
+      </tr><tr>
+        <td>
+          114
+        </td>
+        <td>
+          3511
+        </td>
+        <td>
+          3639
+          -
+          3723
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  DropIncomingBufferedSubscriber.this.upstreamIsComplete = true;
+  DropIncomingBufferedSubscriber.this.notifyConsumerOfNewEvent()
+}
+        </td>
+      </tr><tr>
+        <td>
+          115
+        </td>
+        <td>
+          3509
+        </td>
+        <td>
+          3672
+          -
+          3676
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          116
+        </td>
+        <td>
+          3510
+        </td>
+        <td>
+          3687
+          -
+          3713
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.notifyConsumerOfNewEvent
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.notifyConsumerOfNewEvent()
+        </td>
+      </tr><tr>
+        <td>
+          124
+        </td>
+        <td>
+          3516
+        </td>
+        <td>
+          3831
+          -
+          3846
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicInt.get
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.itemsToPush.get
+        </td>
+      </tr><tr>
+        <td>
+          126
+        </td>
+        <td>
+          3518
+        </td>
+        <td>
+          3856
+          -
+          3908
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.itemsToPush.compareAndSet(currentNr, currentNr.+(1)).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          126
+        </td>
+        <td>
+          3517
+        </td>
+        <td>
+          3894
+          -
+          3907
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.+
+        </td>
+        <td style="background: #AEF1AE">
+          currentNr.+(1)
+        </td>
+      </tr><tr>
+        <td>
+          127
+        </td>
+        <td>
+          3519
+        </td>
+        <td>
+          3916
+          -
+          3942
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.notifyConsumerOfNewEvent
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.notifyConsumerOfNewEvent()
+        </td>
+      </tr><tr>
+        <td>
+          127
+        </td>
+        <td>
+          3520
+        </td>
+        <td>
+          3916
+          -
+          3942
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.notifyConsumerOfNewEvent
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.notifyConsumerOfNewEvent()
+        </td>
+      </tr><tr>
+        <td>
+          128
+        </td>
+        <td>
+          3528
+        </td>
+        <td>
+          3952
+          -
+          4051
+        </td>
+        <td>
+          If
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          if (currentNr.==(0))
+  DropIncomingBufferedSubscriber.this.scheduler.execute({
+    final class $anon extends Object with Runnable {
+      def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+        $anon.super.&lt;init&gt;();
+        ()
+      };
+      def run(): Unit = DropIncomingBufferedSubscriber.this.fastLoop(0)
+    };
+    new $anon()
+  })
+else
+  ()
+        </td>
+      </tr><tr>
+        <td>
+          128
+        </td>
+        <td>
+          3521
+        </td>
+        <td>
+          3956
+          -
+          3970
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.==
+        </td>
+        <td style="background: #AEF1AE">
+          currentNr.==(0)
+        </td>
+      </tr><tr>
+        <td>
+          128
+        </td>
+        <td>
+          3527
+        </td>
+        <td>
+          3952
+          -
+          3952
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          128
+        </td>
+        <td>
+          3526
+        </td>
+        <td>
+          3952
+          -
+          3952
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          129
+        </td>
+        <td>
+          3525
+        </td>
+        <td>
+          3978
+          -
+          4051
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.execute
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.scheduler.execute({
+  final class $anon extends Object with Runnable {
+    def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def run(): Unit = DropIncomingBufferedSubscriber.this.fastLoop(0)
+  };
+  new $anon()
+})
+        </td>
+      </tr><tr>
+        <td>
+          129
+        </td>
+        <td>
+          3524
+        </td>
+        <td>
+          3978
+          -
+          4051
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.execute
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.scheduler.execute({
+  final class $anon extends Object with Runnable {
+    def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    def run(): Unit = DropIncomingBufferedSubscriber.this.fastLoop(0)
+  };
+  new $anon()
+})
+        </td>
+      </tr><tr>
+        <td>
+          129
+        </td>
+        <td>
+          3523
+        </td>
+        <td>
+          3996
+          -
+          3999
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          130
+        </td>
+        <td>
+          3522
+        </td>
+        <td>
+          4031
+          -
+          4042
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.fastLoop
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.fastLoop(0)
+        </td>
+      </tr><tr>
+        <td>
+          135
+        </td>
+        <td>
+          3529
+        </td>
+        <td>
+          4119
+          -
+          4138
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.fastLoop
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.fastLoop(processed)
+        </td>
+      </tr><tr>
+        <td>
+          140
+        </td>
+        <td>
+          3591
+        </td>
+        <td>
+          4237
+          -
+          6732
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  val hasError: Boolean = DropIncomingBufferedSubscriber.this.errorThrown.ne(null);
+  val next: T = DropIncomingBufferedSubscriber.this.queue.poll();
+  if (next.!=(null))
+    DropIncomingBufferedSubscriber.this.underlying.onNext(next) match {
+      case (sync @ _) if sync.isCompleted =&gt; sync match {
+        case (continue @ _) if continue.==(monifu.reactive.Ack.Continue).||(continue.value.get.==(monifu.reactive.Ack.Continue.IsSuccess)) =&gt; DropIncomingBufferedSubscriber.this.fastLoop(processed.+(1))
+        case (done @ _) if done.==(monifu.reactive.Ack.Cancel).||(done.value.get.==(monifu.reactive.Ack.Cancel.IsSuccess)) =&gt; {
+          DropIncomingBufferedSubscriber.this.downstreamIsDone = true;
+          DropIncomingBufferedSubscriber.this.itemsToPush.set(0)
+        }
+        case (error @ _) if error.value.get.isFailure =&gt; {
+          DropIncomingBufferedSubscriber.this.downstreamIsDone = true;
+          DropIncomingBufferedSubscriber.this.itemsToPush.set(0);
+          DropIncomingBufferedSubscriber.this.underlying.onError(error.value.get.failed.get)
+        }
+      }
+      case (async @ _) =&gt; async.onComplete[Unit](((x0$1: scala.util.Try[monifu.reactive.Ack]) =&gt; x0$1 match {
+        case monifu.reactive.Ack.Continue.IsSuccess =&gt; DropIncomingBufferedSubscriber.this.rescheduled(processed.+(1))
+        case monifu.reactive.Ack.Cancel.IsSuccess =&gt; {
+          DropIncomingBufferedSubscriber.this.downstreamIsDone = true;
+          DropIncomingBufferedSubscriber.this.itemsToPush.set(0)
+        }
+        case (exception: Throwable)scala.util.Failure[monifu.reactive.Ack]((ex @ _)) =&gt; {
+          DropIncomingBufferedSubscriber.this.downstreamIsDone = true;
+          DropIncomingBufferedSubscriber.this.itemsToPush.set(0);
+          DropIncomingBufferedSubscriber.this.underlying.onError(ex)
+        }
+        case (other @ _) =&gt; {
+          DropIncomingBufferedSubscriber.this.downstreamIsDone = true;
+          DropIncomingBufferedSubscriber.this.itemsToPush.set(0);
+          DropIncomingBufferedSubscriber.this.underlying.onError(new scala.MatchError(scala.StringContext.apply(&quot;&quot;, &quot;&quot;).s(other)))
+        }
+      }))(DropIncomingBufferedSubscriber.this.scheduler)
+    }
+  else
+    if (DropIncomingBufferedSubscriber.this.upstreamIsComplete.||(hasError))
+      if (DropIncomingBufferedSubscriber.this.queue.isEmpty.unary_!)
+        DropIncomingBufferedSubscriber.this.fastLoop(processed)
+      else
+        {
+          DropIncomingBufferedSubscriber.this.downstreamIsDone = true;
+          DropIncomingBufferedSubscriber.this.itemsToPush.set(0);
+          DropIncomingBufferedSubscriber.this.queue.clear();
+          if (DropIncomingBufferedSubscriber.this.errorThrown.ne(null))
+            DropIncomingBufferedSubscriber.this.underlying.onError(DropIncomingBufferedSubscriber.this.errorThrown)
+          else
+            DropIncomingBufferedSubscriber.this.underlying.onComplete()
+        }
+    else
+      {
+        val remaining: Int = DropIncomingBufferedSubscriber.this.itemsToPush.decrementAndGet(processed);
+        if (remaining.&gt;(0))
+          DropIncomingBufferedSubscriber.this.fastLoop(0)
+        else
+          ()
+      }
+}
+        </td>
+      </tr><tr>
+        <td>
+          140
+        </td>
+        <td>
+          3530
+        </td>
+        <td>
+          4218
+          -
+          4235
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.downstreamIsDone.unary_!
+        </td>
+      </tr><tr>
+        <td>
+          140
+        </td>
+        <td>
+          3593
+        </td>
+        <td>
+          4214
+          -
+          4214
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          140
+        </td>
+        <td>
+          3592
+        </td>
+        <td>
+          4214
+          -
+          4214
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          141
+        </td>
+        <td>
+          3531
+        </td>
+        <td>
+          4260
+          -
+          4279
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.ne
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.errorThrown.ne(null)
+        </td>
+      </tr><tr>
+        <td>
+          142
+        </td>
+        <td>
+          3532
+        </td>
+        <td>
+          4297
+          -
+          4309
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.collection.mutable.ConcurrentQueue.poll
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.queue.poll()
+        </td>
+      </tr><tr>
+        <td>
+          144
+        </td>
+        <td>
+          3533
+        </td>
+        <td>
+          4321
+          -
+          4333
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Any.!=
+        </td>
+        <td style="background: #AEF1AE">
+          next.!=(null)
+        </td>
+      </tr><tr>
+        <td>
+          145
+        </td>
+        <td>
+          3567
+        </td>
+        <td>
+          4345
+          -
+          5821
+        </td>
+        <td>
+          Match
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.underlying.onNext(next) match {
+  case (sync @ _) if sync.isCompleted =&gt; sync match {
+    case (continue @ _) if continue.==(monifu.reactive.Ack.Continue).||(continue.value.get.==(monifu.reactive.Ack.Continue.IsSuccess)) =&gt; DropIncomingBufferedSubscriber.this.fastLoop(processed.+(1))
+    case (done @ _) if done.==(monifu.reactive.Ack.Cancel).||(done.value.get.==(monifu.reactive.Ack.Cancel.IsSuccess)) =&gt; {
+      DropIncomingBufferedSubscriber.this.downstreamIsDone = true;
+      DropIncomingBufferedSubscriber.this.itemsToPush.set(0)
+    }
+    case (error @ _) if error.value.get.isFailure =&gt; {
+      DropIncomingBufferedSubscriber.this.downstreamIsDone = true;
+      DropIncomingBufferedSubscriber.this.itemsToPush.set(0);
+      DropIncomingBufferedSubscriber.this.underlying.onError(error.value.get.failed.get)
+    }
+  }
+  case (async @ _) =&gt; async.onComplete[Unit](((x0$1: scala.util.Try[monifu.reactive.Ack]) =&gt; x0$1 match {
+    case monifu.reactive.Ack.Continue.IsSuccess =&gt; DropIncomingBufferedSubscriber.this.rescheduled(processed.+(1))
+    case monifu.reactive.Ack.Cancel.IsSuccess =&gt; {
+      DropIncomingBufferedSubscriber.this.downstreamIsDone = true;
+      DropIncomingBufferedSubscriber.this.itemsToPush.set(0)
+    }
+    case (exception: Throwable)scala.util.Failure[monifu.reactive.Ack]((ex @ _)) =&gt; {
+      DropIncomingBufferedSubscriber.this.downstreamIsDone = true;
+      DropIncomingBufferedSubscriber.this.itemsToPush.set(0);
+      DropIncomingBufferedSubscriber.this.underlying.onError(ex)
+    }
+    case (other @ _) =&gt; {
+      DropIncomingBufferedSubscriber.this.downstreamIsDone = true;
+      DropIncomingBufferedSubscriber.this.itemsToPush.set(0);
+      DropIncomingBufferedSubscriber.this.underlying.onError(new scala.MatchError(scala.StringContext.apply(&quot;&quot;, &quot;&quot;).s(other)))
+    }
+  }))(DropIncomingBufferedSubscriber.this.scheduler)
+}
+        </td>
+      </tr><tr>
+        <td>
+          145
+        </td>
+        <td>
+          3534
+        </td>
+        <td>
+          4345
+          -
+          4368
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onNext
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.underlying.onNext(next)
+        </td>
+      </tr><tr>
+        <td>
+          146
+        </td>
+        <td>
+          3535
+        </td>
+        <td>
+          4400
+          -
+          4416
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.Future.isCompleted
+        </td>
+        <td style="background: #AEF1AE">
+          sync.isCompleted
+        </td>
+      </tr><tr>
+        <td>
+          148
+        </td>
+        <td>
+          3537
+        </td>
+        <td>
+          4522
+          -
+          4540
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue.IsSuccess
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Continue.IsSuccess
+        </td>
+      </tr><tr>
+        <td>
+          148
+        </td>
+        <td>
+          3539
+        </td>
+        <td>
+          4476
+          -
+          4540
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Boolean.||
+        </td>
+        <td style="background: #AEF1AE">
+          continue.==(monifu.reactive.Ack.Continue).||(continue.value.get.==(monifu.reactive.Ack.Continue.IsSuccess))
+        </td>
+      </tr><tr>
+        <td>
+          148
+        </td>
+        <td>
+          3536
+        </td>
+        <td>
+          4488
+          -
+          4496
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Continue
+        </td>
+      </tr><tr>
+        <td>
+          148
+        </td>
+        <td>
+          3538
+        </td>
+        <td>
+          4500
+          -
+          4540
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.==
+        </td>
+        <td style="background: #AEF1AE">
+          continue.value.get.==(monifu.reactive.Ack.Continue.IsSuccess)
+        </td>
+      </tr><tr>
+        <td>
+          150
+        </td>
+        <td>
+          3540
+        </td>
+        <td>
+          4601
+          -
+          4614
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.+
+        </td>
+        <td style="background: #AEF1AE">
+          processed.+(1)
+        </td>
+      </tr><tr>
+        <td>
+          150
+        </td>
+        <td>
+          3541
+        </td>
+        <td>
+          4592
+          -
+          4615
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.fastLoop
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.fastLoop(processed.+(1))
+        </td>
+      </tr><tr>
+        <td>
+          152
+        </td>
+        <td>
+          3543
+        </td>
+        <td>
+          4680
+          -
+          4696
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel.IsSuccess
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Ack.Cancel.IsSuccess
+        </td>
+      </tr><tr>
+        <td>
+          152
+        </td>
+        <td>
+          3545
+        </td>
+        <td>
+          4644
+          -
+          4696
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Boolean.||
+        </td>
+        <td style="background: #F0ADAD">
+          done.==(monifu.reactive.Ack.Cancel).||(done.value.get.==(monifu.reactive.Ack.Cancel.IsSuccess))
+        </td>
+      </tr><tr>
+        <td>
+          152
+        </td>
+        <td>
+          3542
+        </td>
+        <td>
+          4652
+          -
+          4658
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          152
+        </td>
+        <td>
+          3544
+        </td>
+        <td>
+          4662
+          -
+          4696
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.==
+        </td>
+        <td style="background: #F0ADAD">
+          done.value.get.==(monifu.reactive.Ack.Cancel.IsSuccess)
+        </td>
+      </tr><tr>
+        <td>
+          154
+        </td>
+        <td>
+          3546
+        </td>
+        <td>
+          4766
+          -
+          4770
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          155
+        </td>
+        <td>
+          3547
+        </td>
+        <td>
+          4787
+          -
+          4805
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicInt.set
+        </td>
+        <td style="background: #F0ADAD">
+          DropIncomingBufferedSubscriber.this.itemsToPush.set(0)
+        </td>
+      </tr><tr>
+        <td>
+          157
+        </td>
+        <td>
+          3548
+        </td>
+        <td>
+          4835
+          -
+          4860
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.util.Try.isFailure
+        </td>
+        <td style="background: #F0ADAD">
+          error.value.get.isFailure
+        </td>
+      </tr><tr>
+        <td>
+          159
+        </td>
+        <td>
+          3549
+        </td>
+        <td>
+          4930
+          -
+          4934
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          160
+        </td>
+        <td>
+          3550
+        </td>
+        <td>
+          4951
+          -
+          4969
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicInt.set
+        </td>
+        <td style="background: #F0ADAD">
+          DropIncomingBufferedSubscriber.this.itemsToPush.set(0)
+        </td>
+      </tr><tr>
+        <td>
+          161
+        </td>
+        <td>
+          3552
+        </td>
+        <td>
+          4986
+          -
+          5032
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #F0ADAD">
+          DropIncomingBufferedSubscriber.this.underlying.onError(error.value.get.failed.get)
+        </td>
+      </tr><tr>
+        <td>
+          161
+        </td>
+        <td>
+          3551
+        </td>
+        <td>
+          5005
+          -
+          5031
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.util.Try.get
+        </td>
+        <td style="background: #F0ADAD">
+          error.value.get.failed.get
+        </td>
+      </tr><tr>
+        <td>
+          165
+        </td>
+        <td>
+          3566
+        </td>
+        <td>
+          5084
+          -
+          5811
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.concurrent.Future.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          async.onComplete[Unit](((x0$1: scala.util.Try[monifu.reactive.Ack]) =&gt; x0$1 match {
+  case monifu.reactive.Ack.Continue.IsSuccess =&gt; DropIncomingBufferedSubscriber.this.rescheduled(processed.+(1))
+  case monifu.reactive.Ack.Cancel.IsSuccess =&gt; {
+    DropIncomingBufferedSubscriber.this.downstreamIsDone = true;
+    DropIncomingBufferedSubscriber.this.itemsToPush.set(0)
+  }
+  case (exception: Throwable)scala.util.Failure[monifu.reactive.Ack]((ex @ _)) =&gt; {
+    DropIncomingBufferedSubscriber.this.downstreamIsDone = true;
+    DropIncomingBufferedSubscriber.this.itemsToPush.set(0);
+    DropIncomingBufferedSubscriber.this.underlying.onError(ex)
+  }
+  case (other @ _) =&gt; {
+    DropIncomingBufferedSubscriber.this.downstreamIsDone = true;
+    DropIncomingBufferedSubscriber.this.itemsToPush.set(0);
+    DropIncomingBufferedSubscriber.this.underlying.onError(new scala.MatchError(scala.StringContext.apply(&quot;&quot;, &quot;&quot;).s(other)))
+  }
+}))(DropIncomingBufferedSubscriber.this.scheduler)
+        </td>
+      </tr><tr>
+        <td>
+          165
+        </td>
+        <td>
+          3565
+        </td>
+        <td>
+          5101
+          -
+          5101
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          168
+        </td>
+        <td>
+          3554
+        </td>
+        <td>
+          5213
+          -
+          5239
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.rescheduled
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.rescheduled(processed.+(1))
+        </td>
+      </tr><tr>
+        <td>
+          168
+        </td>
+        <td>
+          3553
+        </td>
+        <td>
+          5225
+          -
+          5238
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.+
+        </td>
+        <td style="background: #AEF1AE">
+          processed.+(1)
+        </td>
+      </tr><tr>
+        <td>
+          172
+        </td>
+        <td>
+          3555
+        </td>
+        <td>
+          5346
+          -
+          5350
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          173
+        </td>
+        <td>
+          3556
+        </td>
+        <td>
+          5367
+          -
+          5385
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicInt.set
+        </td>
+        <td style="background: #F0ADAD">
+          DropIncomingBufferedSubscriber.this.itemsToPush.set(0)
+        </td>
+      </tr><tr>
+        <td>
+          177
+        </td>
+        <td>
+          3557
+        </td>
+        <td>
+          5487
+          -
+          5491
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          178
+        </td>
+        <td>
+          3558
+        </td>
+        <td>
+          5508
+          -
+          5526
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicInt.set
+        </td>
+        <td style="background: #F0ADAD">
+          DropIncomingBufferedSubscriber.this.itemsToPush.set(0)
+        </td>
+      </tr><tr>
+        <td>
+          179
+        </td>
+        <td>
+          3559
+        </td>
+        <td>
+          5543
+          -
+          5565
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #F0ADAD">
+          DropIncomingBufferedSubscriber.this.underlying.onError(ex)
+        </td>
+      </tr><tr>
+        <td>
+          183
+        </td>
+        <td>
+          3560
+        </td>
+        <td>
+          5696
+          -
+          5700
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          184
+        </td>
+        <td>
+          3561
+        </td>
+        <td>
+          5717
+          -
+          5735
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicInt.set
+        </td>
+        <td style="background: #F0ADAD">
+          DropIncomingBufferedSubscriber.this.itemsToPush.set(0)
+        </td>
+      </tr><tr>
+        <td>
+          185
+        </td>
+        <td>
+          3564
+        </td>
+        <td>
+          5752
+          -
+          5797
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #F0ADAD">
+          DropIncomingBufferedSubscriber.this.underlying.onError(new scala.MatchError(scala.StringContext.apply(&quot;&quot;, &quot;&quot;).s(other)))
+        </td>
+      </tr><tr>
+        <td>
+          185
+        </td>
+        <td>
+          3563
+        </td>
+        <td>
+          5771
+          -
+          5796
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.MatchError.&lt;init&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          new scala.MatchError(scala.StringContext.apply(&quot;&quot;, &quot;&quot;).s(other))
+        </td>
+      </tr><tr>
+        <td>
+          185
+        </td>
+        <td>
+          3562
+        </td>
+        <td>
+          5786
+          -
+          5795
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.StringContext.s
+        </td>
+        <td style="background: #F0ADAD">
+          scala.StringContext.apply(&quot;&quot;, &quot;&quot;).s(other)
+        </td>
+      </tr><tr>
+        <td>
+          189
+        </td>
+        <td>
+          3590
+        </td>
+        <td>
+          5841
+          -
+          6726
+        </td>
+        <td>
+          If
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          if (DropIncomingBufferedSubscriber.this.upstreamIsComplete.||(hasError))
+  if (DropIncomingBufferedSubscriber.this.queue.isEmpty.unary_!)
+    DropIncomingBufferedSubscriber.this.fastLoop(processed)
+  else
+    {
+      DropIncomingBufferedSubscriber.this.downstreamIsDone = true;
+      DropIncomingBufferedSubscriber.this.itemsToPush.set(0);
+      DropIncomingBufferedSubscriber.this.queue.clear();
+      if (DropIncomingBufferedSubscriber.this.errorThrown.ne(null))
+        DropIncomingBufferedSubscriber.this.underlying.onError(DropIncomingBufferedSubscriber.this.errorThrown)
+      else
+        DropIncomingBufferedSubscriber.this.underlying.onComplete()
+    }
+else
+  {
+    val remaining: Int = DropIncomingBufferedSubscriber.this.itemsToPush.decrementAndGet(processed);
+    if (remaining.&gt;(0))
+      DropIncomingBufferedSubscriber.this.fastLoop(0)
+    else
+      ()
+  }
+        </td>
+      </tr><tr>
+        <td>
+          189
+        </td>
+        <td>
+          3568
+        </td>
+        <td>
+          5845
+          -
+          5875
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Boolean.||
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.upstreamIsComplete.||(hasError)
+        </td>
+      </tr><tr>
+        <td>
+          193
+        </td>
+        <td>
+          3582
+        </td>
+        <td>
+          6128
+          -
+          6475
+        </td>
+        <td>
+          If
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          if (DropIncomingBufferedSubscriber.this.queue.isEmpty.unary_!)
+  DropIncomingBufferedSubscriber.this.fastLoop(processed)
+else
+  {
+    DropIncomingBufferedSubscriber.this.downstreamIsDone = true;
+    DropIncomingBufferedSubscriber.this.itemsToPush.set(0);
+    DropIncomingBufferedSubscriber.this.queue.clear();
+    if (DropIncomingBufferedSubscriber.this.errorThrown.ne(null))
+      DropIncomingBufferedSubscriber.this.underlying.onError(DropIncomingBufferedSubscriber.this.errorThrown)
+    else
+      DropIncomingBufferedSubscriber.this.underlying.onComplete()
+  }
+        </td>
+      </tr><tr>
+        <td>
+          193
+        </td>
+        <td>
+          3569
+        </td>
+        <td>
+          6132
+          -
+          6146
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.queue.isEmpty.unary_!
+        </td>
+      </tr><tr>
+        <td>
+          194
+        </td>
+        <td>
+          3570
+        </td>
+        <td>
+          6160
+          -
+          6179
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.fastLoop
+        </td>
+        <td style="background: #F0ADAD">
+          DropIncomingBufferedSubscriber.this.fastLoop(processed)
+        </td>
+      </tr><tr>
+        <td>
+          194
+        </td>
+        <td>
+          3571
+        </td>
+        <td>
+          6160
+          -
+          6179
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.fastLoop
+        </td>
+        <td style="background: #F0ADAD">
+          DropIncomingBufferedSubscriber.this.fastLoop(processed)
+        </td>
+      </tr><tr>
+        <td>
+          196
+        </td>
+        <td>
+          3581
+        </td>
+        <td>
+          6203
+          -
+          6475
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  DropIncomingBufferedSubscriber.this.downstreamIsDone = true;
+  DropIncomingBufferedSubscriber.this.itemsToPush.set(0);
+  DropIncomingBufferedSubscriber.this.queue.clear();
+  if (DropIncomingBufferedSubscriber.this.errorThrown.ne(null))
+    DropIncomingBufferedSubscriber.this.underlying.onError(DropIncomingBufferedSubscriber.this.errorThrown)
+  else
+    DropIncomingBufferedSubscriber.this.underlying.onComplete()
+}
+        </td>
+      </tr><tr>
+        <td>
+          198
+        </td>
+        <td>
+          3572
+        </td>
+        <td>
+          6259
+          -
+          6263
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          199
+        </td>
+        <td>
+          3573
+        </td>
+        <td>
+          6274
+          -
+          6292
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicInt.set
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.itemsToPush.set(0)
+        </td>
+      </tr><tr>
+        <td>
+          200
+        </td>
+        <td>
+          3574
+        </td>
+        <td>
+          6303
+          -
+          6316
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.collection.mutable.ConcurrentQueue.clear
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.queue.clear()
+        </td>
+      </tr><tr>
+        <td>
+          201
+        </td>
+        <td>
+          3575
+        </td>
+        <td>
+          6350
+          -
+          6369
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.ne
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.errorThrown.ne(null)
+        </td>
+      </tr><tr>
+        <td>
+          202
+        </td>
+        <td>
+          3576
+        </td>
+        <td>
+          6402
+          -
+          6413
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.errorThrown
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.errorThrown
+        </td>
+      </tr><tr>
+        <td>
+          202
+        </td>
+        <td>
+          3578
+        </td>
+        <td>
+          6383
+          -
+          6414
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.underlying.onError(DropIncomingBufferedSubscriber.this.errorThrown)
+        </td>
+      </tr><tr>
+        <td>
+          202
+        </td>
+        <td>
+          3577
+        </td>
+        <td>
+          6383
+          -
+          6414
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.underlying.onError(DropIncomingBufferedSubscriber.this.errorThrown)
+        </td>
+      </tr><tr>
+        <td>
+          204
+        </td>
+        <td>
+          3579
+        </td>
+        <td>
+          6442
+          -
+          6465
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.underlying.onComplete()
+        </td>
+      </tr><tr>
+        <td>
+          204
+        </td>
+        <td>
+          3580
+        </td>
+        <td>
+          6442
+          -
+          6465
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Observer.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.underlying.onComplete()
+        </td>
+      </tr><tr>
+        <td>
+          207
+        </td>
+        <td>
+          3589
+        </td>
+        <td>
+          6495
+          -
+          6726
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  val remaining: Int = DropIncomingBufferedSubscriber.this.itemsToPush.decrementAndGet(processed);
+  if (remaining.&gt;(0))
+    DropIncomingBufferedSubscriber.this.fastLoop(0)
+  else
+    ()
+}
+        </td>
+      </tr><tr>
+        <td>
+          208
+        </td>
+        <td>
+          3583
+        </td>
+        <td>
+          6521
+          -
+          6559
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicInt.decrementAndGet
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.itemsToPush.decrementAndGet(processed)
+        </td>
+      </tr><tr>
+        <td>
+          211
+        </td>
+        <td>
+          3585
+        </td>
+        <td>
+          6707
+          -
+          6718
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.fastLoop
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.fastLoop(0)
+        </td>
+      </tr><tr>
+        <td>
+          211
+        </td>
+        <td>
+          3588
+        </td>
+        <td>
+          6688
+          -
+          6688
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          211
+        </td>
+        <td>
+          3584
+        </td>
+        <td>
+          6692
+          -
+          6705
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          remaining.&gt;(0)
+        </td>
+      </tr><tr>
+        <td>
+          211
+        </td>
+        <td>
+          3587
+        </td>
+        <td>
+          6688
+          -
+          6688
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          211
+        </td>
+        <td>
+          3586
+        </td>
+        <td>
+          6707
+          -
+          6718
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.fastLoop
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingBufferedSubscriber.this.fastLoop(0)
+        </td>
+      </tr><tr>
+        <td>
+          226
+        </td>
+        <td>
+          3594
+        </td>
+        <td>
+          7074
+          -
+          7141
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new monifu.reactive.observers.DropIncomingBufferedSubscriber[T](underlying, bufferSize, null)(s)
+        </td>
+      </tr><tr>
+        <td>
+          237
+        </td>
+        <td>
+          3595
+        </td>
+        <td>
+          7468
+          -
+          7541
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.observers.DropIncomingBufferedSubscriber.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new monifu.reactive.observers.DropIncomingBufferedSubscriber[T](underlying, bufferSize, onOverflow)(s)
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

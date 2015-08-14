@@ -1,0 +1,2896 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          monifu/reactive/subjects/BehaviorSubject.scala.html
+        </title>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''> 
+</span>17 <span style=''>package monifu.reactive.subjects
+</span>18 <span style=''>
+</span>19 <span style=''>import monifu.concurrent.atomic.padded.Atomic
+</span>20 <span style=''>import monifu.reactive.Ack.{Cancel, Continue}
+</span>21 <span style=''>import monifu.reactive.internals._
+</span>22 <span style=''>import monifu.reactive.observers.ConnectableSubscriber
+</span>23 <span style=''>import monifu.reactive.{Ack, Subject, Subscriber}
+</span>24 <span style=''>
+</span>25 <span style=''>import scala.annotation.tailrec
+</span>26 <span style=''>import scala.concurrent.Future
+</span>27 <span style=''>
+</span>28 <span style=''>
+</span>29 <span style=''>/**
+</span>30 <span style=''> * `BehaviorSubject` when subscribed, will emit the most recently emitted item by the source,
+</span>31 <span style=''> * or the `initialValue` (as the seed) in case no value has yet been emitted, then continuing
+</span>32 <span style=''> * to emit events subsequent to the time of invocation.
+</span>33 <span style=''> *
+</span>34 <span style=''> * <img src="https://raw.githubusercontent.com/wiki/alexandru/monifu/assets/rx-operators/S.BehaviorSubject.png" />
+</span>35 <span style=''> *
+</span>36 <span style=''> * When the source terminates in error, the `BehaviorSubject` will not emit any items to
+</span>37 <span style=''> * subsequent subscribers, but instead it will pass along the error notification.
+</span>38 <span style=''> *
+</span>39 <span style=''> * <img src="https://raw.githubusercontent.com/wiki/alexandru/monifu/assets/rx-operators/S.BehaviorSubject.png" />
+</span>40 <span style=''> */
+</span>41 <span style=''>final class BehaviorSubject[T](initialValue: T) extends Subject[T,T] { self =>
+</span>42 <span style=''>  import monifu.reactive.subjects.BehaviorSubject.State
+</span>43 <span style=''>  import monifu.reactive.subjects.BehaviorSubject.State._
+</span>44 <span style=''>
+</span>45 <span style=''>  private[this] val state = </span><span style='background: #AEF1AE'>Atomic(Empty(initialValue) : State[T])</span><span style=''>
+</span>46 <span style=''>
+</span>47 <span style=''>  def subscribeFn(subscriber: Subscriber[T]): Unit = {
+</span>48 <span style=''>    @tailrec
+</span>49 <span style=''>    def loop(): ConnectableSubscriber[T] = {
+</span>50 <span style=''>      </span><span style='background: #AEF1AE'>state.get</span><span style=''> match {
+</span>51 <span style=''>        case current @ Empty(cachedValue) =>
+</span>52 <span style=''>          val obs = </span><span style='background: #AEF1AE'>ConnectableSubscriber[T](subscriber)</span><span style=''>
+</span>53 <span style=''>          </span><span style='background: #AEF1AE'>obs.pushNext(cachedValue)</span><span style=''>
+</span>54 <span style=''>
+</span>55 <span style=''>          if (</span><span style='background: #AEF1AE'>!state.compareAndSet(current, Active(Array(obs), cachedValue))</span><span style=''>)
+</span>56 <span style=''>            </span><span style='background: #F0ADAD'>loop()</span><span style=''>
+</span>57 <span style=''>          else
+</span>58 <span style=''>            </span><span style='background: #AEF1AE'>obs</span><span style=''>
+</span>59 <span style=''>
+</span>60 <span style=''>        case current @ Active(observers, cachedValue) =>
+</span>61 <span style=''>          val obs = </span><span style='background: #AEF1AE'>ConnectableSubscriber[T](subscriber)</span><span style=''>
+</span>62 <span style=''>          </span><span style='background: #AEF1AE'>obs.pushNext(cachedValue)</span><span style=''>
+</span>63 <span style=''>
+</span>64 <span style=''>          if (</span><span style='background: #AEF1AE'>!state.compareAndSet(current, Active(observers :+ obs, cachedValue))</span><span style=''>)
+</span>65 <span style=''>            </span><span style='background: #F0ADAD'>loop()</span><span style=''>
+</span>66 <span style=''>          else
+</span>67 <span style=''>            </span><span style='background: #AEF1AE'>obs</span><span style=''>
+</span>68 <span style=''>
+</span>69 <span style=''>        case current @ Complete(cachedValue, errorThrown) =>
+</span>70 <span style=''>          val obs = </span><span style='background: #AEF1AE'>ConnectableSubscriber[T](subscriber)</span><span style=''>
+</span>71 <span style=''>          if (</span><span style='background: #AEF1AE'>errorThrown eq null</span><span style=''>) </span><span style='background: #AEF1AE'>{
+</span>72 <span style=''></span><span style='background: #AEF1AE'>            obs.pushNext(cachedValue)
+</span>73 <span style=''></span><span style='background: #AEF1AE'>            obs.pushComplete()
+</span>74 <span style=''></span><span style='background: #AEF1AE'>          }</span><span style=''>
+</span>75 <span style=''>          else {
+</span>76 <span style=''>            </span><span style='background: #AEF1AE'>obs.pushError(errorThrown)</span><span style=''>
+</span>77 <span style=''>          }
+</span>78 <span style=''>          obs
+</span>79 <span style=''>      }
+</span>80 <span style=''>    }
+</span>81 <span style=''>
+</span>82 <span style=''>    </span><span style='background: #AEF1AE'>loop().connect()</span><span style=''>
+</span>83 <span style=''>  }
+</span>84 <span style=''>
+</span>85 <span style=''>  @tailrec
+</span>86 <span style=''>  def onNext(elem: T): Future[Ack] = {
+</span>87 <span style=''>    </span><span style='background: #AEF1AE'>state.get</span><span style=''> match {
+</span>88 <span style=''>      case current @ Empty(_) =>
+</span>89 <span style=''>        if (</span><span style='background: #AEF1AE'>!state.compareAndSet(current, Empty(elem))</span><span style=''>)
+</span>90 <span style=''>          </span><span style='background: #F0ADAD'>onNext(elem)</span><span style=''>
+</span>91 <span style=''>        else
+</span>92 <span style=''>          </span><span style='background: #AEF1AE'>Continue</span><span style=''>
+</span>93 <span style=''>
+</span>94 <span style=''>      case current @ Active(observers, cachedValue) =>
+</span>95 <span style=''>        if (</span><span style='background: #AEF1AE'>!state.compareAndSet(current, Active(observers, elem))</span><span style=''>)
+</span>96 <span style=''>          </span><span style='background: #F0ADAD'>onNext(elem)</span><span style=''>
+</span>97 <span style=''>
+</span>98 <span style=''>        else
+</span>99 <span style=''>          </span><span style='background: #AEF1AE'>stream(observers, elem)</span><span style=''>
+</span>100 <span style=''>
+</span>101 <span style=''>      case _ =>
+</span>102 <span style=''>        </span><span style='background: #AEF1AE'>Cancel</span><span style=''>
+</span>103 <span style=''>    }
+</span>104 <span style=''>  }
+</span>105 <span style=''>
+</span>106 <span style=''>  @tailrec
+</span>107 <span style=''>  def onComplete(): Unit =
+</span>108 <span style=''>    </span><span style='background: #AEF1AE'>state.get</span><span style=''> match {
+</span>109 <span style=''>      case current @ Empty(cachedValue) =>
+</span>110 <span style=''>        if (</span><span style='background: #AEF1AE'>!state.compareAndSet(current, Complete(cachedValue, null))</span><span style=''>) {
+</span>111 <span style=''>          </span><span style='background: #F0ADAD'>onComplete()</span><span style=''> // retry
+</span>112 <span style=''>        }
+</span>113 <span style=''>      case current @ Active(observers, cachedValue) =>
+</span>114 <span style=''>        if (</span><span style='background: #AEF1AE'>!state.compareAndSet(current, Complete(cachedValue, null))</span><span style=''>) {
+</span>115 <span style=''>          </span><span style='background: #F0ADAD'>onComplete()</span><span style=''> // retry
+</span>116 <span style=''>        }
+</span>117 <span style=''>        else </span><span style='background: #AEF1AE'>{
+</span>118 <span style=''></span><span style='background: #AEF1AE'>          var idx = 0
+</span>119 <span style=''></span><span style='background: #AEF1AE'>          while (idx < observers.length) {
+</span>120 <span style=''></span><span style='background: #AEF1AE'>            observers(idx).observer.onComplete()
+</span>121 <span style=''></span><span style='background: #AEF1AE'>            idx += 1
+</span>122 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>123 <span style=''></span><span style='background: #AEF1AE'>        }</span><span style=''>
+</span>124 <span style=''>      case _ </span><span style='background: #F0ADAD'>=></span><span style=''>
+</span>125 <span style=''>        // already complete, ignore
+</span>126 <span style=''>    }
+</span>127 <span style=''>
+</span>128 <span style=''>  @tailrec
+</span>129 <span style=''>  def onError(ex: Throwable): Unit =
+</span>130 <span style=''>    </span><span style='background: #AEF1AE'>state.get</span><span style=''> match {
+</span>131 <span style=''>      case current @ Empty(cachedValue) =>
+</span>132 <span style=''>        if (</span><span style='background: #AEF1AE'>!state.compareAndSet(current, Complete(cachedValue, ex))</span><span style=''>) {
+</span>133 <span style=''>          </span><span style='background: #F0ADAD'>onError(ex)</span><span style=''> // retry
+</span>134 <span style=''>        }
+</span>135 <span style=''>      case current @ Active(observers, cachedValue) =>
+</span>136 <span style=''>        if (</span><span style='background: #F0ADAD'>!state.compareAndSet(current, Complete(cachedValue, ex))</span><span style=''>) {
+</span>137 <span style=''>          </span><span style='background: #F0ADAD'>onError(ex)</span><span style=''> // retry
+</span>138 <span style=''>        }
+</span>139 <span style=''>        else </span><span style='background: #F0ADAD'>{
+</span>140 <span style=''></span><span style='background: #F0ADAD'>          var idx = 0
+</span>141 <span style=''></span><span style='background: #F0ADAD'>          while (idx < observers.length) {
+</span>142 <span style=''></span><span style='background: #F0ADAD'>            observers(idx).observer.onError(ex)
+</span>143 <span style=''></span><span style='background: #F0ADAD'>            idx += 1
+</span>144 <span style=''></span><span style='background: #F0ADAD'>          }
+</span>145 <span style=''></span><span style='background: #F0ADAD'>        }</span><span style=''>
+</span>146 <span style=''>      case _ </span><span style='background: #F0ADAD'>=></span><span style=''>
+</span>147 <span style=''>        // already complete, ignore
+</span>148 <span style=''>    }
+</span>149 <span style=''>
+</span>150 <span style=''>  private[this] def stream(array: Array[ConnectableSubscriber[T]], elem: T): Future[Continue] = {
+</span>151 <span style=''>    val newPromise = </span><span style='background: #AEF1AE'>PromiseCounter[Continue](Continue, array.length)</span><span style=''>
+</span>152 <span style=''>    val length = </span><span style='background: #AEF1AE'>array.length</span><span style=''>
+</span>153 <span style=''>    var idx = </span><span style='background: #AEF1AE'>0</span><span style=''>
+</span>154 <span style=''>
+</span>155 <span style=''>    while (</span><span style='background: #AEF1AE'>idx < length</span><span style=''>) </span><span style='background: #AEF1AE'>{
+</span>156 <span style=''></span><span style='background: #AEF1AE'>      val subscriber = array(idx)
+</span>157 <span style=''></span><span style='background: #AEF1AE'>      val obs = subscriber.observer
+</span>158 <span style=''></span><span style='background: #AEF1AE'>      implicit val s = subscriber.scheduler
+</span>159 <span style=''></span><span style='background: #AEF1AE'>
+</span>160 <span style=''></span><span style='background: #AEF1AE'>      obs.onNext(elem).onCompleteNow {
+</span>161 <span style=''></span><span style='background: #AEF1AE'>        case Continue.IsSuccess =>
+</span>162 <span style=''></span><span style='background: #AEF1AE'>          newPromise.countdown()
+</span>163 <span style=''></span><span style='background: #AEF1AE'>        case _ =>
+</span>164 <span style=''></span><span style='background: #AEF1AE'>          removeSubscription(subscriber)
+</span>165 <span style=''></span><span style='background: #AEF1AE'>          newPromise.countdown()
+</span>166 <span style=''></span><span style='background: #AEF1AE'>      }
+</span>167 <span style=''></span><span style='background: #AEF1AE'>
+</span>168 <span style=''></span><span style='background: #AEF1AE'>      idx += 1
+</span>169 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>170 <span style=''>
+</span>171 <span style=''>    </span><span style='background: #AEF1AE'>newPromise.future</span><span style=''>
+</span>172 <span style=''>  }
+</span>173 <span style=''>
+</span>174 <span style=''>  @tailrec
+</span>175 <span style=''>  private[this] def removeSubscription(subscriber: Subscriber[T]): Unit =
+</span>176 <span style=''>    </span><span style='background: #AEF1AE'>state.get</span><span style=''> match {
+</span>177 <span style=''>      case current @ Active(subscribers, cachedValue) =>
+</span>178 <span style=''>        val update = </span><span style='background: #AEF1AE'>subscribers.filterNot(_ == subscriber)</span><span style=''>
+</span>179 <span style=''>        if (</span><span style='background: #AEF1AE'>update.nonEmpty</span><span style=''>) {
+</span>180 <span style=''>          </span><span style='background: #AEF1AE'>if (!state.compareAndSet(current, Active(update, cachedValue)))
+</span>181 <span style=''></span><span style='background: #AEF1AE'>            </span><span style='background: #F0ADAD'>removeSubscription(subscriber)</span><span style=''>
+</span>182 <span style=''>        }
+</span>183 <span style=''>        else {
+</span>184 <span style=''>          </span><span style='background: #F0ADAD'>if (!state.compareAndSet(current, Empty(cachedValue)))
+</span>185 <span style=''></span><span style='background: #F0ADAD'>            removeSubscription(subscriber)</span><span style=''>
+</span>186 <span style=''>        }
+</span>187 <span style=''>      case _ =>
+</span>188 <span style=''>        </span><span style='background: #F0ADAD'>()</span><span style=''> // ignore
+</span>189 <span style=''>    }
+</span>190 <span style=''>}
+</span>191 <span style=''>
+</span>192 <span style=''>object BehaviorSubject {
+</span>193 <span style=''>  def apply[T](initialValue: T): BehaviorSubject[T] =
+</span>194 <span style=''>    </span><span style='background: #AEF1AE'>new BehaviorSubject[T](initialValue)</span><span style=''>
+</span>195 <span style=''>
+</span>196 <span style=''>  private sealed trait State[T]
+</span>197 <span style=''>  private object State {
+</span>198 <span style=''>    case class Empty[T](cachedValue: T) extends State[T]
+</span>199 <span style=''>    case class Active[T](iterator: Array[ConnectableSubscriber[T]], cachedValue: T) extends State[T]
+</span>200 <span style=''>    case class Complete[T](cachedValue: T, errorThrown: Throwable = null) extends State[T]
+</span>201 <span style=''>  }
+</span>202 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          45
+        </td>
+        <td>
+          4641
+        </td>
+        <td>
+          1828
+          -
+          1866
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.Atomic.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.atomic.padded.Atomic.apply[monifu.reactive.subjects.BehaviorSubject.State[T], monifu.concurrent.atomic.padded.AtomicAny[monifu.reactive.subjects.BehaviorSubject.State[T]]]((monifu.reactive.subjects.BehaviorSubject.State.Empty.apply[T](BehaviorSubject.this.initialValue): monifu.reactive.subjects.BehaviorSubject.State[T]))(padded.this.AtomicBuilder.AtomicRefBuilder[monifu.reactive.subjects.BehaviorSubject.State[T]])
+        </td>
+      </tr><tr>
+        <td>
+          45
+        </td>
+        <td>
+          4640
+        </td>
+        <td>
+          1834
+          -
+          1834
+        </td>
+        <td>
+          TypeApply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.Implicits.Level1.AtomicRefBuilder
+        </td>
+        <td style="background: #AEF1AE">
+          padded.this.AtomicBuilder.AtomicRefBuilder[monifu.reactive.subjects.BehaviorSubject.State[T]]
+        </td>
+      </tr><tr>
+        <td>
+          45
+        </td>
+        <td>
+          4639
+        </td>
+        <td>
+          1835
+          -
+          1854
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.State.Empty.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.subjects.BehaviorSubject.State.Empty.apply[T](BehaviorSubject.this.initialValue)
+        </td>
+      </tr><tr>
+        <td>
+          45
+        </td>
+        <td>
+          4638
+        </td>
+        <td>
+          1841
+          -
+          1853
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.initialValue
+        </td>
+        <td style="background: #AEF1AE">
+          BehaviorSubject.this.initialValue
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          4642
+        </td>
+        <td>
+          1987
+          -
+          1996
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicAny.get
+        </td>
+        <td style="background: #AEF1AE">
+          BehaviorSubject.this.state.get
+        </td>
+      </tr><tr>
+        <td>
+          52
+        </td>
+        <td>
+          4643
+        </td>
+        <td>
+          2070
+          -
+          2106
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.ConnectableSubscriber.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.observers.ConnectableSubscriber.apply[T](subscriber)
+        </td>
+      </tr><tr>
+        <td>
+          53
+        </td>
+        <td>
+          4644
+        </td>
+        <td>
+          2117
+          -
+          2142
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.ConnectableSubscriber.pushNext
+        </td>
+        <td style="background: #AEF1AE">
+          obs.pushNext(cachedValue)
+        </td>
+      </tr><tr>
+        <td>
+          55
+        </td>
+        <td>
+          4646
+        </td>
+        <td>
+          2188
+          -
+          2219
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.State.Active.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.subjects.BehaviorSubject.State.Active.apply[T](scala.Array.apply[monifu.reactive.observers.ConnectableSubscriber[T]](obs)((ClassTag.apply[monifu.reactive.observers.ConnectableSubscriber[T]](classOf[monifu.reactive.observers.ConnectableSubscriber]): scala.reflect.ClassTag[monifu.reactive.observers.ConnectableSubscriber[T]])), cachedValue)
+        </td>
+      </tr><tr>
+        <td>
+          55
+        </td>
+        <td>
+          4645
+        </td>
+        <td>
+          2195
+          -
+          2205
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.Array.apply
+        </td>
+        <td style="background: #AEF1AE">
+          scala.Array.apply[monifu.reactive.observers.ConnectableSubscriber[T]](obs)((ClassTag.apply[monifu.reactive.observers.ConnectableSubscriber[T]](classOf[monifu.reactive.observers.ConnectableSubscriber]): scala.reflect.ClassTag[monifu.reactive.observers.ConnectableSubscriber[T]]))
+        </td>
+      </tr><tr>
+        <td>
+          55
+        </td>
+        <td>
+          4647
+        </td>
+        <td>
+          2158
+          -
+          2220
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          BehaviorSubject.this.state.compareAndSet(current, monifu.reactive.subjects.BehaviorSubject.State.Active.apply[T](scala.Array.apply[monifu.reactive.observers.ConnectableSubscriber[T]](obs)((ClassTag.apply[monifu.reactive.observers.ConnectableSubscriber[T]](classOf[monifu.reactive.observers.ConnectableSubscriber]): scala.reflect.ClassTag[monifu.reactive.observers.ConnectableSubscriber[T]])), cachedValue)).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          56
+        </td>
+        <td>
+          4649
+        </td>
+        <td>
+          2234
+          -
+          2240
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.loop
+        </td>
+        <td style="background: #F0ADAD">
+          loop()
+        </td>
+      </tr><tr>
+        <td>
+          56
+        </td>
+        <td>
+          4648
+        </td>
+        <td>
+          2234
+          -
+          2240
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.loop
+        </td>
+        <td style="background: #F0ADAD">
+          loop()
+        </td>
+      </tr><tr>
+        <td>
+          58
+        </td>
+        <td>
+          4650
+        </td>
+        <td>
+          2268
+          -
+          2271
+        </td>
+        <td>
+          Ident
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.obs
+        </td>
+        <td style="background: #AEF1AE">
+          obs
+        </td>
+      </tr><tr>
+        <td>
+          61
+        </td>
+        <td>
+          4651
+        </td>
+        <td>
+          2350
+          -
+          2386
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.ConnectableSubscriber.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.observers.ConnectableSubscriber.apply[T](subscriber)
+        </td>
+      </tr><tr>
+        <td>
+          62
+        </td>
+        <td>
+          4652
+        </td>
+        <td>
+          2397
+          -
+          2422
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.ConnectableSubscriber.pushNext
+        </td>
+        <td style="background: #AEF1AE">
+          obs.pushNext(cachedValue)
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          4653
+        </td>
+        <td>
+          2475
+          -
+          2491
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.collection.mutable.ArrayOps.:+
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.refArrayOps[monifu.reactive.observers.ConnectableSubscriber[T]](observers).:+[monifu.reactive.observers.ConnectableSubscriber[T]](obs)((ClassTag.apply[monifu.reactive.observers.ConnectableSubscriber[T]](classOf[monifu.reactive.observers.ConnectableSubscriber]): scala.reflect.ClassTag[monifu.reactive.observers.ConnectableSubscriber[T]]))
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          4655
+        </td>
+        <td>
+          2438
+          -
+          2506
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          BehaviorSubject.this.state.compareAndSet(current, monifu.reactive.subjects.BehaviorSubject.State.Active.apply[T](scala.this.Predef.refArrayOps[monifu.reactive.observers.ConnectableSubscriber[T]](observers).:+[monifu.reactive.observers.ConnectableSubscriber[T]](obs)((ClassTag.apply[monifu.reactive.observers.ConnectableSubscriber[T]](classOf[monifu.reactive.observers.ConnectableSubscriber]): scala.reflect.ClassTag[monifu.reactive.observers.ConnectableSubscriber[T]])), cachedValue)).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          4654
+        </td>
+        <td>
+          2468
+          -
+          2505
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.State.Active.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.subjects.BehaviorSubject.State.Active.apply[T](scala.this.Predef.refArrayOps[monifu.reactive.observers.ConnectableSubscriber[T]](observers).:+[monifu.reactive.observers.ConnectableSubscriber[T]](obs)((ClassTag.apply[monifu.reactive.observers.ConnectableSubscriber[T]](classOf[monifu.reactive.observers.ConnectableSubscriber]): scala.reflect.ClassTag[monifu.reactive.observers.ConnectableSubscriber[T]])), cachedValue)
+        </td>
+      </tr><tr>
+        <td>
+          65
+        </td>
+        <td>
+          4657
+        </td>
+        <td>
+          2520
+          -
+          2526
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.loop
+        </td>
+        <td style="background: #F0ADAD">
+          loop()
+        </td>
+      </tr><tr>
+        <td>
+          65
+        </td>
+        <td>
+          4656
+        </td>
+        <td>
+          2520
+          -
+          2526
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.loop
+        </td>
+        <td style="background: #F0ADAD">
+          loop()
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          4658
+        </td>
+        <td>
+          2554
+          -
+          2557
+        </td>
+        <td>
+          Ident
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.obs
+        </td>
+        <td style="background: #AEF1AE">
+          obs
+        </td>
+      </tr><tr>
+        <td>
+          70
+        </td>
+        <td>
+          4659
+        </td>
+        <td>
+          2640
+          -
+          2676
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.ConnectableSubscriber.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.observers.ConnectableSubscriber.apply[T](subscriber)
+        </td>
+      </tr><tr>
+        <td>
+          71
+        </td>
+        <td>
+          4660
+        </td>
+        <td>
+          2691
+          -
+          2710
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.eq
+        </td>
+        <td style="background: #AEF1AE">
+          errorThrown.eq(null)
+        </td>
+      </tr><tr>
+        <td>
+          71
+        </td>
+        <td>
+          4663
+        </td>
+        <td>
+          2712
+          -
+          2794
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  obs.pushNext(cachedValue);
+  obs.pushComplete()
+}
+        </td>
+      </tr><tr>
+        <td>
+          72
+        </td>
+        <td>
+          4661
+        </td>
+        <td>
+          2726
+          -
+          2751
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.ConnectableSubscriber.pushNext
+        </td>
+        <td style="background: #AEF1AE">
+          obs.pushNext(cachedValue)
+        </td>
+      </tr><tr>
+        <td>
+          73
+        </td>
+        <td>
+          4662
+        </td>
+        <td>
+          2764
+          -
+          2782
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.ConnectableSubscriber.pushComplete
+        </td>
+        <td style="background: #AEF1AE">
+          obs.pushComplete()
+        </td>
+      </tr><tr>
+        <td>
+          76
+        </td>
+        <td>
+          4664
+        </td>
+        <td>
+          2824
+          -
+          2850
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.ConnectableSubscriber.pushError
+        </td>
+        <td style="background: #AEF1AE">
+          obs.pushError(errorThrown)
+        </td>
+      </tr><tr>
+        <td>
+          76
+        </td>
+        <td>
+          4665
+        </td>
+        <td>
+          2824
+          -
+          2850
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.observers.ConnectableSubscriber.pushError
+        </td>
+        <td style="background: #AEF1AE">
+          obs.pushError(errorThrown)
+        </td>
+      </tr><tr>
+        <td>
+          82
+        </td>
+        <td>
+          4666
+        </td>
+        <td>
+          2896
+          -
+          2912
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.ConnectableSubscriber.connect
+        </td>
+        <td style="background: #AEF1AE">
+          loop().connect()
+        </td>
+      </tr><tr>
+        <td>
+          87
+        </td>
+        <td>
+          4667
+        </td>
+        <td>
+          2972
+          -
+          2981
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicAny.get
+        </td>
+        <td style="background: #AEF1AE">
+          BehaviorSubject.this.state.get
+        </td>
+      </tr><tr>
+        <td>
+          89
+        </td>
+        <td>
+          4668
+        </td>
+        <td>
+          3065
+          -
+          3076
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.State.Empty.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.subjects.BehaviorSubject.State.Empty.apply[T](elem)
+        </td>
+      </tr><tr>
+        <td>
+          89
+        </td>
+        <td>
+          4669
+        </td>
+        <td>
+          3035
+          -
+          3077
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          BehaviorSubject.this.state.compareAndSet(current, monifu.reactive.subjects.BehaviorSubject.State.Empty.apply[T](elem)).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          90
+        </td>
+        <td>
+          4670
+        </td>
+        <td>
+          3089
+          -
+          3101
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.onNext
+        </td>
+        <td style="background: #F0ADAD">
+          BehaviorSubject.this.onNext(elem)
+        </td>
+      </tr><tr>
+        <td>
+          90
+        </td>
+        <td>
+          4671
+        </td>
+        <td>
+          3089
+          -
+          3101
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.onNext
+        </td>
+        <td style="background: #F0ADAD">
+          BehaviorSubject.this.onNext(elem)
+        </td>
+      </tr><tr>
+        <td>
+          92
+        </td>
+        <td>
+          4673
+        </td>
+        <td>
+          3125
+          -
+          3133
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Continue
+        </td>
+      </tr><tr>
+        <td>
+          92
+        </td>
+        <td>
+          4672
+        </td>
+        <td>
+          3125
+          -
+          3133
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Continue
+        </td>
+      </tr><tr>
+        <td>
+          95
+        </td>
+        <td>
+          4675
+        </td>
+        <td>
+          3202
+          -
+          3256
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          BehaviorSubject.this.state.compareAndSet(current, monifu.reactive.subjects.BehaviorSubject.State.Active.apply[T](observers, elem)).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          95
+        </td>
+        <td>
+          4674
+        </td>
+        <td>
+          3232
+          -
+          3255
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.State.Active.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.subjects.BehaviorSubject.State.Active.apply[T](observers, elem)
+        </td>
+      </tr><tr>
+        <td>
+          96
+        </td>
+        <td>
+          4677
+        </td>
+        <td>
+          3268
+          -
+          3280
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.onNext
+        </td>
+        <td style="background: #F0ADAD">
+          BehaviorSubject.this.onNext(elem)
+        </td>
+      </tr><tr>
+        <td>
+          96
+        </td>
+        <td>
+          4676
+        </td>
+        <td>
+          3268
+          -
+          3280
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.onNext
+        </td>
+        <td style="background: #F0ADAD">
+          BehaviorSubject.this.onNext(elem)
+        </td>
+      </tr><tr>
+        <td>
+          99
+        </td>
+        <td>
+          4679
+        </td>
+        <td>
+          3305
+          -
+          3328
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.stream
+        </td>
+        <td style="background: #AEF1AE">
+          BehaviorSubject.this.stream(observers, elem)
+        </td>
+      </tr><tr>
+        <td>
+          99
+        </td>
+        <td>
+          4678
+        </td>
+        <td>
+          3305
+          -
+          3328
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.stream
+        </td>
+        <td style="background: #AEF1AE">
+          BehaviorSubject.this.stream(observers, elem)
+        </td>
+      </tr><tr>
+        <td>
+          102
+        </td>
+        <td>
+          4680
+        </td>
+        <td>
+          3354
+          -
+          3360
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Cancel
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Cancel
+        </td>
+      </tr><tr>
+        <td>
+          108
+        </td>
+        <td>
+          4681
+        </td>
+        <td>
+          3414
+          -
+          3423
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicAny.get
+        </td>
+        <td style="background: #AEF1AE">
+          BehaviorSubject.this.state.get
+        </td>
+      </tr><tr>
+        <td>
+          110
+        </td>
+        <td>
+          4686
+        </td>
+        <td>
+          3483
+          -
+          3483
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          110
+        </td>
+        <td>
+          4682
+        </td>
+        <td>
+          3517
+          -
+          3544
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.State.Complete.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.subjects.BehaviorSubject.State.Complete.apply[T](cachedValue, null)
+        </td>
+      </tr><tr>
+        <td>
+          110
+        </td>
+        <td>
+          4687
+        </td>
+        <td>
+          3483
+          -
+          3483
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          110
+        </td>
+        <td>
+          4683
+        </td>
+        <td>
+          3487
+          -
+          3545
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          BehaviorSubject.this.state.compareAndSet(current, monifu.reactive.subjects.BehaviorSubject.State.Complete.apply[T](cachedValue, null)).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          111
+        </td>
+        <td>
+          4685
+        </td>
+        <td>
+          3559
+          -
+          3571
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.onComplete
+        </td>
+        <td style="background: #F0ADAD">
+          BehaviorSubject.this.onComplete()
+        </td>
+      </tr><tr>
+        <td>
+          111
+        </td>
+        <td>
+          4684
+        </td>
+        <td>
+          3559
+          -
+          3571
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.onComplete
+        </td>
+        <td style="background: #F0ADAD">
+          BehaviorSubject.this.onComplete()
+        </td>
+      </tr><tr>
+        <td>
+          114
+        </td>
+        <td>
+          4688
+        </td>
+        <td>
+          3688
+          -
+          3715
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.State.Complete.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.subjects.BehaviorSubject.State.Complete.apply[T](cachedValue, null)
+        </td>
+      </tr><tr>
+        <td>
+          114
+        </td>
+        <td>
+          4689
+        </td>
+        <td>
+          3658
+          -
+          3716
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          BehaviorSubject.this.state.compareAndSet(current, monifu.reactive.subjects.BehaviorSubject.State.Complete.apply[T](cachedValue, null)).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          115
+        </td>
+        <td>
+          4691
+        </td>
+        <td>
+          3730
+          -
+          3742
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.onComplete
+        </td>
+        <td style="background: #F0ADAD">
+          BehaviorSubject.this.onComplete()
+        </td>
+      </tr><tr>
+        <td>
+          115
+        </td>
+        <td>
+          4690
+        </td>
+        <td>
+          3730
+          -
+          3742
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.onComplete
+        </td>
+        <td style="background: #F0ADAD">
+          BehaviorSubject.this.onComplete()
+        </td>
+      </tr><tr>
+        <td>
+          117
+        </td>
+        <td>
+          4701
+        </td>
+        <td>
+          3775
+          -
+          3933
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  var idx: Int = 0;
+  while$1(){
+    if (idx.&lt;(observers.length))
+      {
+        {
+          observers.apply(idx).observer.onComplete();
+          idx = idx.+(1)
+        };
+        while$1()
+      }
+    else
+      ()
+  }
+}
+        </td>
+      </tr><tr>
+        <td>
+          118
+        </td>
+        <td>
+          4692
+        </td>
+        <td>
+          3797
+          -
+          3798
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          0
+        </td>
+      </tr><tr>
+        <td>
+          119
+        </td>
+        <td>
+          4694
+        </td>
+        <td>
+          3816
+          -
+          3838
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.&lt;
+        </td>
+        <td style="background: #AEF1AE">
+          idx.&lt;(observers.length)
+        </td>
+      </tr><tr>
+        <td>
+          119
+        </td>
+        <td>
+          4697
+        </td>
+        <td>
+          3840
+          -
+          3840
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.while$1
+        </td>
+        <td style="background: #AEF1AE">
+          while$1()
+        </td>
+      </tr><tr>
+        <td>
+          119
+        </td>
+        <td>
+          4700
+        </td>
+        <td>
+          3809
+          -
+          3809
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          119
+        </td>
+        <td>
+          4699
+        </td>
+        <td>
+          3809
+          -
+          3809
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          119
+        </td>
+        <td>
+          4693
+        </td>
+        <td>
+          3822
+          -
+          3838
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Array.length
+        </td>
+        <td style="background: #AEF1AE">
+          observers.length
+        </td>
+      </tr><tr>
+        <td>
+          119
+        </td>
+        <td>
+          4698
+        </td>
+        <td>
+          3840
+          -
+          3923
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  {
+    observers.apply(idx).observer.onComplete();
+    idx = idx.+(1)
+  };
+  while$1()
+}
+        </td>
+      </tr><tr>
+        <td>
+          120
+        </td>
+        <td>
+          4695
+        </td>
+        <td>
+          3854
+          -
+          3890
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          observers.apply(idx).observer.onComplete()
+        </td>
+      </tr><tr>
+        <td>
+          121
+        </td>
+        <td>
+          4696
+        </td>
+        <td>
+          3903
+          -
+          3911
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.+
+        </td>
+        <td style="background: #AEF1AE">
+          idx.+(1)
+        </td>
+      </tr><tr>
+        <td>
+          124
+        </td>
+        <td>
+          4702
+        </td>
+        <td>
+          3947
+          -
+          3949
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          130
+        </td>
+        <td>
+          4703
+        </td>
+        <td>
+          4045
+          -
+          4054
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicAny.get
+        </td>
+        <td style="background: #AEF1AE">
+          BehaviorSubject.this.state.get
+        </td>
+      </tr><tr>
+        <td>
+          132
+        </td>
+        <td>
+          4704
+        </td>
+        <td>
+          4148
+          -
+          4173
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.State.Complete.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.subjects.BehaviorSubject.State.Complete.apply[T](cachedValue, ex)
+        </td>
+      </tr><tr>
+        <td>
+          132
+        </td>
+        <td>
+          4709
+        </td>
+        <td>
+          4114
+          -
+          4114
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          132
+        </td>
+        <td>
+          4708
+        </td>
+        <td>
+          4114
+          -
+          4114
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          132
+        </td>
+        <td>
+          4705
+        </td>
+        <td>
+          4118
+          -
+          4174
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          BehaviorSubject.this.state.compareAndSet(current, monifu.reactive.subjects.BehaviorSubject.State.Complete.apply[T](cachedValue, ex)).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          133
+        </td>
+        <td>
+          4706
+        </td>
+        <td>
+          4188
+          -
+          4199
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.onError
+        </td>
+        <td style="background: #F0ADAD">
+          BehaviorSubject.this.onError(ex)
+        </td>
+      </tr><tr>
+        <td>
+          133
+        </td>
+        <td>
+          4707
+        </td>
+        <td>
+          4188
+          -
+          4199
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.onError
+        </td>
+        <td style="background: #F0ADAD">
+          BehaviorSubject.this.onError(ex)
+        </td>
+      </tr><tr>
+        <td>
+          136
+        </td>
+        <td>
+          4711
+        </td>
+        <td>
+          4286
+          -
+          4342
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #F0ADAD">
+          BehaviorSubject.this.state.compareAndSet(current, monifu.reactive.subjects.BehaviorSubject.State.Complete.apply[T](cachedValue, ex)).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          136
+        </td>
+        <td>
+          4710
+        </td>
+        <td>
+          4316
+          -
+          4341
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.State.Complete.apply
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.subjects.BehaviorSubject.State.Complete.apply[T](cachedValue, ex)
+        </td>
+      </tr><tr>
+        <td>
+          137
+        </td>
+        <td>
+          4713
+        </td>
+        <td>
+          4356
+          -
+          4367
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.onError
+        </td>
+        <td style="background: #F0ADAD">
+          BehaviorSubject.this.onError(ex)
+        </td>
+      </tr><tr>
+        <td>
+          137
+        </td>
+        <td>
+          4712
+        </td>
+        <td>
+          4356
+          -
+          4367
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.onError
+        </td>
+        <td style="background: #F0ADAD">
+          BehaviorSubject.this.onError(ex)
+        </td>
+      </tr><tr>
+        <td>
+          139
+        </td>
+        <td>
+          4723
+        </td>
+        <td>
+          4400
+          -
+          4557
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          {
+  var idx: Int = 0;
+  while$2(){
+    if (idx.&lt;(observers.length))
+      {
+        {
+          observers.apply(idx).observer.onError(ex);
+          idx = idx.+(1)
+        };
+        while$2()
+      }
+    else
+      ()
+  }
+}
+        </td>
+      </tr><tr>
+        <td>
+          140
+        </td>
+        <td>
+          4714
+        </td>
+        <td>
+          4422
+          -
+          4423
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          0
+        </td>
+      </tr><tr>
+        <td>
+          141
+        </td>
+        <td>
+          4721
+        </td>
+        <td>
+          4434
+          -
+          4434
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          141
+        </td>
+        <td>
+          4715
+        </td>
+        <td>
+          4447
+          -
+          4463
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Array.length
+        </td>
+        <td style="background: #F0ADAD">
+          observers.length
+        </td>
+      </tr><tr>
+        <td>
+          141
+        </td>
+        <td>
+          4720
+        </td>
+        <td>
+          4465
+          -
+          4547
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          {
+  {
+    observers.apply(idx).observer.onError(ex);
+    idx = idx.+(1)
+  };
+  while$2()
+}
+        </td>
+      </tr><tr>
+        <td>
+          141
+        </td>
+        <td>
+          4722
+        </td>
+        <td>
+          4434
+          -
+          4434
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          141
+        </td>
+        <td>
+          4716
+        </td>
+        <td>
+          4441
+          -
+          4463
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.&lt;
+        </td>
+        <td style="background: #F0ADAD">
+          idx.&lt;(observers.length)
+        </td>
+      </tr><tr>
+        <td>
+          141
+        </td>
+        <td>
+          4719
+        </td>
+        <td>
+          4465
+          -
+          4465
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.while$2
+        </td>
+        <td style="background: #F0ADAD">
+          while$2()
+        </td>
+      </tr><tr>
+        <td>
+          142
+        </td>
+        <td>
+          4717
+        </td>
+        <td>
+          4479
+          -
+          4514
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #F0ADAD">
+          observers.apply(idx).observer.onError(ex)
+        </td>
+      </tr><tr>
+        <td>
+          143
+        </td>
+        <td>
+          4718
+        </td>
+        <td>
+          4527
+          -
+          4535
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.+
+        </td>
+        <td style="background: #F0ADAD">
+          idx.+(1)
+        </td>
+      </tr><tr>
+        <td>
+          146
+        </td>
+        <td>
+          4724
+        </td>
+        <td>
+          4571
+          -
+          4573
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          151
+        </td>
+        <td>
+          4727
+        </td>
+        <td>
+          4736
+          -
+          4784
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.internals.PromiseCounter.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.internals.PromiseCounter.apply[monifu.reactive.Ack.Continue](monifu.reactive.Ack.Continue, array.length)
+        </td>
+      </tr><tr>
+        <td>
+          151
+        </td>
+        <td>
+          4726
+        </td>
+        <td>
+          4771
+          -
+          4783
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Array.length
+        </td>
+        <td style="background: #AEF1AE">
+          array.length
+        </td>
+      </tr><tr>
+        <td>
+          151
+        </td>
+        <td>
+          4725
+        </td>
+        <td>
+          4761
+          -
+          4769
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Ack.Continue
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Ack.Continue
+        </td>
+      </tr><tr>
+        <td>
+          152
+        </td>
+        <td>
+          4728
+        </td>
+        <td>
+          4802
+          -
+          4814
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Array.length
+        </td>
+        <td style="background: #AEF1AE">
+          array.length
+        </td>
+      </tr><tr>
+        <td>
+          153
+        </td>
+        <td>
+          4729
+        </td>
+        <td>
+          4829
+          -
+          4830
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          0
+        </td>
+      </tr><tr>
+        <td>
+          155
+        </td>
+        <td>
+          4730
+        </td>
+        <td>
+          4843
+          -
+          4855
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.&lt;
+        </td>
+        <td style="background: #AEF1AE">
+          idx.&lt;(length)
+        </td>
+      </tr><tr>
+        <td>
+          155
+        </td>
+        <td>
+          4739
+        </td>
+        <td>
+          4836
+          -
+          4836
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          155
+        </td>
+        <td>
+          4736
+        </td>
+        <td>
+          4857
+          -
+          4857
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.while$3
+        </td>
+        <td style="background: #AEF1AE">
+          while$3()
+        </td>
+      </tr><tr>
+        <td>
+          155
+        </td>
+        <td>
+          4738
+        </td>
+        <td>
+          4836
+          -
+          4836
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          155
+        </td>
+        <td>
+          4737
+        </td>
+        <td>
+          4857
+          -
+          5202
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  {
+    val subscriber: monifu.reactive.observers.ConnectableSubscriber[T] = array.apply(idx);
+    val obs: monifu.reactive.Observer[T] = subscriber.observer;
+    implicit val s: monifu.concurrent.Scheduler = subscriber.scheduler;
+    monifu.reactive.internals.`package`.FutureAckExtensions(obs.onNext(elem)).onCompleteNow(((x0$1: scala.util.Try[monifu.reactive.Ack]) =&gt; x0$1 match {
+      case monifu.reactive.Ack.Continue.IsSuccess =&gt; newPromise.countdown()
+      case _ =&gt; {
+        BehaviorSubject.this.removeSubscription(subscriber);
+        newPromise.countdown()
+      }
+    }))(s);
+    idx = idx.+(1)
+  };
+  while$3()
+}
+        </td>
+      </tr><tr>
+        <td>
+          156
+        </td>
+        <td>
+          4731
+        </td>
+        <td>
+          4882
+          -
+          4892
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Array.apply
+        </td>
+        <td style="background: #AEF1AE">
+          array.apply(idx)
+        </td>
+      </tr><tr>
+        <td>
+          157
+        </td>
+        <td>
+          4732
+        </td>
+        <td>
+          4909
+          -
+          4928
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.observers.ConnectableSubscriber.observer
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.observer
+        </td>
+      </tr><tr>
+        <td>
+          158
+        </td>
+        <td>
+          4733
+        </td>
+        <td>
+          4952
+          -
+          4972
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.observers.ConnectableSubscriber.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          160
+        </td>
+        <td>
+          4734
+        </td>
+        <td>
+          4980
+          -
+          5180
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.internals.FutureAckExtensions.onCompleteNow
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.internals.`package`.FutureAckExtensions(obs.onNext(elem)).onCompleteNow(((x0$1: scala.util.Try[monifu.reactive.Ack]) =&gt; x0$1 match {
+  case monifu.reactive.Ack.Continue.IsSuccess =&gt; newPromise.countdown()
+  case _ =&gt; {
+    BehaviorSubject.this.removeSubscription(subscriber);
+    newPromise.countdown()
+  }
+}))(s)
+        </td>
+      </tr><tr>
+        <td>
+          168
+        </td>
+        <td>
+          4735
+        </td>
+        <td>
+          5188
+          -
+          5196
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.+
+        </td>
+        <td style="background: #AEF1AE">
+          idx.+(1)
+        </td>
+      </tr><tr>
+        <td>
+          171
+        </td>
+        <td>
+          4740
+        </td>
+        <td>
+          5208
+          -
+          5225
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.internals.PromiseCounter.future
+        </td>
+        <td style="background: #AEF1AE">
+          newPromise.future
+        </td>
+      </tr><tr>
+        <td>
+          176
+        </td>
+        <td>
+          4741
+        </td>
+        <td>
+          5320
+          -
+          5329
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicAny.get
+        </td>
+        <td style="background: #AEF1AE">
+          BehaviorSubject.this.state.get
+        </td>
+      </tr><tr>
+        <td>
+          178
+        </td>
+        <td>
+          4742
+        </td>
+        <td>
+          5438
+          -
+          5453
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Object.==
+        </td>
+        <td style="background: #AEF1AE">
+          x$1.==(subscriber)
+        </td>
+      </tr><tr>
+        <td>
+          178
+        </td>
+        <td>
+          4743
+        </td>
+        <td>
+          5416
+          -
+          5454
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.collection.TraversableLike.filterNot
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.refArrayOps[monifu.reactive.observers.ConnectableSubscriber[T]](subscribers).filterNot(((x$1: monifu.reactive.observers.ConnectableSubscriber[T]) =&gt; x$1.==(subscriber)))
+        </td>
+      </tr><tr>
+        <td>
+          179
+        </td>
+        <td>
+          4744
+        </td>
+        <td>
+          5467
+          -
+          5482
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.collection.TraversableOnce.nonEmpty
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.refArrayOps[monifu.reactive.observers.ConnectableSubscriber[T]](update).nonEmpty
+        </td>
+      </tr><tr>
+        <td>
+          180
+        </td>
+        <td>
+          4745
+        </td>
+        <td>
+          5530
+          -
+          5557
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.State.Active.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.subjects.BehaviorSubject.State.Active.apply[T](update, cachedValue)
+        </td>
+      </tr><tr>
+        <td>
+          180
+        </td>
+        <td>
+          4751
+        </td>
+        <td>
+          5496
+          -
+          5602
+        </td>
+        <td>
+          If
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          if (BehaviorSubject.this.state.compareAndSet(current, monifu.reactive.subjects.BehaviorSubject.State.Active.apply[T](update, cachedValue)).unary_!)
+  BehaviorSubject.this.removeSubscription(subscriber)
+else
+  ()
+        </td>
+      </tr><tr>
+        <td>
+          180
+        </td>
+        <td>
+          4750
+        </td>
+        <td>
+          5496
+          -
+          5496
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          180
+        </td>
+        <td>
+          4749
+        </td>
+        <td>
+          5496
+          -
+          5496
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          180
+        </td>
+        <td>
+          4746
+        </td>
+        <td>
+          5500
+          -
+          5558
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          BehaviorSubject.this.state.compareAndSet(current, monifu.reactive.subjects.BehaviorSubject.State.Active.apply[T](update, cachedValue)).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          181
+        </td>
+        <td>
+          4748
+        </td>
+        <td>
+          5572
+          -
+          5602
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.removeSubscription
+        </td>
+        <td style="background: #F0ADAD">
+          BehaviorSubject.this.removeSubscription(subscriber)
+        </td>
+      </tr><tr>
+        <td>
+          181
+        </td>
+        <td>
+          4747
+        </td>
+        <td>
+          5572
+          -
+          5602
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.removeSubscription
+        </td>
+        <td style="background: #F0ADAD">
+          BehaviorSubject.this.removeSubscription(subscriber)
+        </td>
+      </tr><tr>
+        <td>
+          184
+        </td>
+        <td>
+          4757
+        </td>
+        <td>
+          5638
+          -
+          5638
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          184
+        </td>
+        <td>
+          4753
+        </td>
+        <td>
+          5642
+          -
+          5691
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #F0ADAD">
+          BehaviorSubject.this.state.compareAndSet(current, monifu.reactive.subjects.BehaviorSubject.State.Empty.apply[T](cachedValue)).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          184
+        </td>
+        <td>
+          4756
+        </td>
+        <td>
+          5638
+          -
+          5638
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          184
+        </td>
+        <td>
+          4758
+        </td>
+        <td>
+          5638
+          -
+          5735
+        </td>
+        <td>
+          If
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          if (BehaviorSubject.this.state.compareAndSet(current, monifu.reactive.subjects.BehaviorSubject.State.Empty.apply[T](cachedValue)).unary_!)
+  BehaviorSubject.this.removeSubscription(subscriber)
+else
+  ()
+        </td>
+      </tr><tr>
+        <td>
+          184
+        </td>
+        <td>
+          4752
+        </td>
+        <td>
+          5672
+          -
+          5690
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.State.Empty.apply
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.subjects.BehaviorSubject.State.Empty.apply[T](cachedValue)
+        </td>
+      </tr><tr>
+        <td>
+          185
+        </td>
+        <td>
+          4754
+        </td>
+        <td>
+          5705
+          -
+          5735
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.removeSubscription
+        </td>
+        <td style="background: #F0ADAD">
+          BehaviorSubject.this.removeSubscription(subscriber)
+        </td>
+      </tr><tr>
+        <td>
+          185
+        </td>
+        <td>
+          4755
+        </td>
+        <td>
+          5705
+          -
+          5735
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.removeSubscription
+        </td>
+        <td style="background: #F0ADAD">
+          BehaviorSubject.this.removeSubscription(subscriber)
+        </td>
+      </tr><tr>
+        <td>
+          188
+        </td>
+        <td>
+          4759
+        </td>
+        <td>
+          5770
+          -
+          5772
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          194
+        </td>
+        <td>
+          4760
+        </td>
+        <td>
+          5875
+          -
+          5911
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.subjects.BehaviorSubject.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new monifu.reactive.subjects.BehaviorSubject[T](initialValue)
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

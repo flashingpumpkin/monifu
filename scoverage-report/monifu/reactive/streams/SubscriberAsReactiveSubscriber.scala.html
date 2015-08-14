@@ -1,0 +1,1606 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          monifu/reactive/streams/SubscriberAsReactiveSubscriber.scala.html
+        </title>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''>
+</span>17 <span style=''>package monifu.reactive.streams
+</span>18 <span style=''>
+</span>19 <span style=''>import monifu.reactive.Ack.{Cancel, Continue}
+</span>20 <span style=''>import monifu.reactive.observers.{SynchronousBufferedSubscriber, SynchronousSubscriber}
+</span>21 <span style=''>import org.reactivestreams.{Subscriber, Subscription}
+</span>22 <span style=''>
+</span>23 <span style=''>/**
+</span>24 <span style=''> * Wraps a [[monifu.reactive.Observer Observer]] instance into an
+</span>25 <span style=''> * `org.reactivestreams.Subscriber` instance. The resulting
+</span>26 <span style=''> * subscriber respects the [[http://www.reactive-streams.org/ Reactive Streams]]
+</span>27 <span style=''> * contract.
+</span>28 <span style=''> *
+</span>29 <span style=''> * Given that when emitting [[monifu.reactive.Observer.onNext Observer.onNext]] calls,
+</span>30 <span style=''> * the call may pass asynchronous boundaries, the emitted events need to be buffered.
+</span>31 <span style=''> * The `requestCount` constructor parameter also represents the buffer size.
+</span>32 <span style=''> * 
+</span>33 <span style=''> * To create an instance, [[SubscriberAsReactiveSubscriber.apply]] must be used: {{{
+</span>34 <span style=''> *   // uses the default requestCount of 128
+</span>35 <span style=''> *   val subscriber = SubscriberAsReactiveSubscriber(new Observer[Int] {
+</span>36 <span style=''> *     private[this] var sum = 0
+</span>37 <span style=''> *     
+</span>38 <span style=''> *     def onNext(elem: Int) = {
+</span>39 <span style=''> *       sum += elem
+</span>40 <span style=''> *       Continue
+</span>41 <span style=''> *     }
+</span>42 <span style=''> *     
+</span>43 <span style=''> *     def onError(ex: Throwable) = {
+</span>44 <span style=''> *       logger.error(ex)
+</span>45 <span style=''> *     }
+</span>46 <span style=''> *     
+</span>47 <span style=''> *     def onComplete() = {
+</span>48 <span style=''> *       logger.info("Stream completed")
+</span>49 <span style=''> *     }
+</span>50 <span style=''> *   })
+</span>51 <span style=''> * }}}
+</span>52 <span style=''> *
+</span>53 <span style=''> * @param subscriber the observer instance that will get wrapped into a
+</span>54 <span style=''> *                   `org.reactivestreams.Subscriber`, along with the scheduler used
+</span>55 <span style=''> *
+</span>56 <span style=''> * @param requestCount the parameter passed to `Subscription.request`,
+</span>57 <span style=''> *                    also representing the buffer size; MUST BE strictly positive
+</span>58 <span style=''> */
+</span>59 <span style=''>final class SubscriberAsReactiveSubscriber[T] private
+</span>60 <span style=''>    (subscriber: monifu.reactive.Subscriber[T], requestCount: Int)
+</span>61 <span style=''>  extends Subscriber[T] {
+</span>62 <span style=''>
+</span>63 <span style=''>  </span><span style='background: #AEF1AE'>require(requestCount > 0, </span><span style='background: #F0ADAD'>"requestCount must be strictly positive, according to the Reactive Streams contract"</span><span style='background: #AEF1AE'>)</span><span style=''>
+</span>64 <span style=''>
+</span>65 <span style=''>  private[this] val buffer =
+</span>66 <span style=''>    </span><span style='background: #AEF1AE'>SynchronousSubscriberAsReactiveSubscriber(
+</span>67 <span style=''></span><span style='background: #AEF1AE'>      SynchronousBufferedSubscriber.unbounded(subscriber.observer)(subscriber.scheduler),
+</span>68 <span style=''></span><span style='background: #AEF1AE'>      requestCount = requestCount
+</span>69 <span style=''></span><span style='background: #AEF1AE'>    )</span><span style=''>
+</span>70 <span style=''>
+</span>71 <span style=''>  def onSubscribe(s: Subscription): Unit =
+</span>72 <span style=''>    </span><span style='background: #AEF1AE'>buffer.onSubscribe(s)</span><span style=''>
+</span>73 <span style=''>
+</span>74 <span style=''>  def onNext(elem: T): Unit =
+</span>75 <span style=''>    </span><span style='background: #AEF1AE'>buffer.onNext(elem)</span><span style=''>
+</span>76 <span style=''>
+</span>77 <span style=''>  def onError(ex: Throwable): Unit =
+</span>78 <span style=''>    </span><span style='background: #F0ADAD'>buffer.onError(ex)</span><span style=''>
+</span>79 <span style=''>
+</span>80 <span style=''>  def onComplete(): Unit =
+</span>81 <span style=''>    </span><span style='background: #AEF1AE'>buffer.onComplete()</span><span style=''>
+</span>82 <span style=''>}
+</span>83 <span style=''>
+</span>84 <span style=''>
+</span>85 <span style=''>object SubscriberAsReactiveSubscriber {
+</span>86 <span style=''>  /**
+</span>87 <span style=''>   * Wraps a [[monifu.reactive.Observer Observer]] instance into a
+</span>88 <span style=''>   * `org.reactivestreams.Subscriber` instance. The resulting
+</span>89 <span style=''>   * subscriber respects the [[http://www.reactive-streams.org/ Reactive Streams]]
+</span>90 <span style=''>   * contract.
+</span>91 <span style=''>   *
+</span>92 <span style=''>   * Given that when emitting [[monifu.reactive.Observer.onNext Observer.onNext]] calls,
+</span>93 <span style=''>   * the call may pass asynchronous boundaries, the emitted events need to be buffered.
+</span>94 <span style=''>   * The `requestCount` constructor parameter also represents the buffer size.
+</span>95 <span style=''>   *
+</span>96 <span style=''>   * To create an instance, [[SubscriberAsReactiveSubscriber.apply]] must be used: {{{
+</span>97 <span style=''>   *   // uses the default requestCount of 128
+</span>98 <span style=''>   *   val subscriber = SubscriberAsReactiveSubscriber(new Observer[Int] {
+</span>99 <span style=''>   *     private[this] var sum = 0
+</span>100 <span style=''>   *
+</span>101 <span style=''>   *     def onNext(elem: Int) = {
+</span>102 <span style=''>   *       sum += elem
+</span>103 <span style=''>   *       Continue
+</span>104 <span style=''>   *     }
+</span>105 <span style=''>   *
+</span>106 <span style=''>   *     def onError(ex: Throwable) = {
+</span>107 <span style=''>   *       logger.error(ex)
+</span>108 <span style=''>   *     }
+</span>109 <span style=''>   *
+</span>110 <span style=''>   *     def onComplete() = {
+</span>111 <span style=''>   *       logger.info("Stream completed")
+</span>112 <span style=''>   *     }
+</span>113 <span style=''>   *   })
+</span>114 <span style=''>   * }}}
+</span>115 <span style=''>   *
+</span>116 <span style=''>   * @param subscriber the subscriber instance that will get wrapped into a
+</span>117 <span style=''>   *                  `org.reactivestreams.Subscriber`
+</span>118 <span style=''>   *
+</span>119 <span style=''>   * @param requestCount the parameter passed to each `Subscription.request` call,
+</span>120 <span style=''>   *                    also representing the buffer size; MUST BE strictly positive
+</span>121 <span style=''>   */
+</span>122 <span style=''>  def apply[T](subscriber: monifu.reactive.Subscriber[T], requestCount: Int = 128): Subscriber[T] =
+</span>123 <span style=''>    subscriber match {
+</span>124 <span style=''>      case ref: SynchronousSubscriber[_] =>
+</span>125 <span style=''>        </span><span style='background: #F0ADAD'>SynchronousSubscriberAsReactiveSubscriber(ref.asInstanceOf[SynchronousSubscriber[T]], requestCount)</span><span style=''>
+</span>126 <span style=''>      case _ =>
+</span>127 <span style=''>        </span><span style='background: #AEF1AE'>new SubscriberAsReactiveSubscriber[T](subscriber, requestCount)</span><span style=''>
+</span>128 <span style=''>    }
+</span>129 <span style=''>}
+</span>130 <span style=''>
+</span>131 <span style=''>/**
+</span>132 <span style=''> * Wraps a [[monifu.reactive.observers.SynchronousObserver SynchronousObserver]] instance into a
+</span>133 <span style=''> * `org.reactivestreams.Subscriber` instance. The resulting
+</span>134 <span style=''> * subscriber respects the [[http://www.reactive-streams.org/ Reactive Streams]]
+</span>135 <span style=''> * contract.
+</span>136 <span style=''> *
+</span>137 <span style=''> * Given that we can guarantee a [[monifu.reactive.observers.SynchronousObserver SynchronousObserver]]
+</span>138 <span style=''> * is used, then no buffering is needed and thus the implementation is very efficient.
+</span>139 <span style=''> *
+</span>140 <span style=''> * To create an instance, [[SynchronousSubscriberAsReactiveSubscriber.apply]] must be used: {{{
+</span>141 <span style=''> *   // uses the default requestCount of 128
+</span>142 <span style=''> *   val subscriber = SynchronousSubscriberAsReactiveSubscriber(new Observer[Int] {
+</span>143 <span style=''> *     private[this] var sum = 0
+</span>144 <span style=''> *
+</span>145 <span style=''> *     def onNext(elem: Int) = {
+</span>146 <span style=''> *       sum += elem
+</span>147 <span style=''> *       Continue
+</span>148 <span style=''> *     }
+</span>149 <span style=''> *
+</span>150 <span style=''> *     def onError(ex: Throwable) = {
+</span>151 <span style=''> *       logger.error(ex)
+</span>152 <span style=''> *     }
+</span>153 <span style=''> *
+</span>154 <span style=''> *     def onComplete() = {
+</span>155 <span style=''> *       logger.info("Stream completed")
+</span>156 <span style=''> *     }
+</span>157 <span style=''> *   })
+</span>158 <span style=''> * }}}
+</span>159 <span style=''> */
+</span>160 <span style=''>final class SynchronousSubscriberAsReactiveSubscriber[T] private
+</span>161 <span style=''>    (subscriber: SynchronousSubscriber[T], requestCount: Int)
+</span>162 <span style=''>  extends Subscriber[T] {
+</span>163 <span style=''>
+</span>164 <span style=''>  </span><span style='background: #AEF1AE'>require(requestCount > 0, </span><span style='background: #F0ADAD'>"requestCount must be strictly positive, according to the Reactive Streams contract"</span><span style='background: #AEF1AE'>)</span><span style=''>
+</span>165 <span style=''>
+</span>166 <span style=''>  private[this] implicit val s = </span><span style='background: #AEF1AE'>subscriber.scheduler</span><span style=''>
+</span>167 <span style=''>
+</span>168 <span style=''>  private[this] var subscription = </span><span style='background: #AEF1AE'>null</span><span style=''> : Subscription
+</span>169 <span style=''>  private[this] var expectingCount = </span><span style='background: #AEF1AE'>0</span><span style=''>
+</span>170 <span style=''>  @volatile private[this] var isCanceled = </span><span style='background: #AEF1AE'>false</span><span style=''>
+</span>171 <span style=''>
+</span>172 <span style=''>  def onSubscribe(s: Subscription): Unit =
+</span>173 <span style=''>    if (</span><span style='background: #AEF1AE'>!isCanceled</span><span style=''>) </span><span style='background: #AEF1AE'>{
+</span>174 <span style=''></span><span style='background: #AEF1AE'>      subscription = s
+</span>175 <span style=''></span><span style='background: #AEF1AE'>      expectingCount = requestCount
+</span>176 <span style=''></span><span style='background: #AEF1AE'>      s.request(requestCount)
+</span>177 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>178 <span style=''>
+</span>179 <span style=''>  def onNext(elem: T): Unit = {
+</span>180 <span style=''>    if (</span><span style='background: #AEF1AE'>!isCanceled</span><span style=''>) </span><span style='background: #AEF1AE'>{
+</span>181 <span style=''></span><span style='background: #AEF1AE'>      if (expectingCount > 0) expectingCount -= 1
+</span>182 <span style=''></span><span style='background: #AEF1AE'>
+</span>183 <span style=''></span><span style='background: #AEF1AE'>      subscriber.observer.onNext(elem) match {
+</span>184 <span style=''></span><span style='background: #AEF1AE'>        case Continue =>
+</span>185 <span style=''></span><span style='background: #AEF1AE'>          // should it request more events?
+</span>186 <span style=''></span><span style='background: #AEF1AE'>          if (expectingCount == 0) {
+</span>187 <span style=''></span><span style='background: #AEF1AE'>            expectingCount = requestCount
+</span>188 <span style=''></span><span style='background: #AEF1AE'>            subscription.request(requestCount)
+</span>189 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>190 <span style=''></span><span style='background: #AEF1AE'>        case Cancel =>
+</span>191 <span style=''></span><span style='background: #AEF1AE'>          // downstream canceled, so we MUST cancel too
+</span>192 <span style=''></span><span style='background: #AEF1AE'>          isCanceled = true
+</span>193 <span style=''></span><span style='background: #AEF1AE'>          subscription.cancel()
+</span>194 <span style=''></span><span style='background: #AEF1AE'>      }
+</span>195 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>196 <span style=''>  }
+</span>197 <span style=''>
+</span>198 <span style=''>  def onError(ex: Throwable): Unit = {
+</span>199 <span style=''>    if (</span><span style='background: #F0ADAD'>!isCanceled</span><span style=''>) </span><span style='background: #F0ADAD'>{
+</span>200 <span style=''></span><span style='background: #F0ADAD'>      isCanceled = true
+</span>201 <span style=''></span><span style='background: #F0ADAD'>      subscriber.observer.onError(ex)
+</span>202 <span style=''></span><span style='background: #F0ADAD'>    }</span><span style=''>
+</span>203 <span style=''>  }
+</span>204 <span style=''>
+</span>205 <span style=''>  def onComplete(): Unit = {
+</span>206 <span style=''>    if (</span><span style='background: #AEF1AE'>!isCanceled</span><span style=''>) </span><span style='background: #AEF1AE'>{
+</span>207 <span style=''></span><span style='background: #AEF1AE'>      isCanceled = true
+</span>208 <span style=''></span><span style='background: #AEF1AE'>      subscriber.observer.onComplete()
+</span>209 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>210 <span style=''>  }
+</span>211 <span style=''>}
+</span>212 <span style=''>
+</span>213 <span style=''>
+</span>214 <span style=''>object SynchronousSubscriberAsReactiveSubscriber {
+</span>215 <span style=''>  /**
+</span>216 <span style=''>   * Wraps a [[monifu.reactive.observers.SynchronousObserver SynchronousObserver]] instance into a
+</span>217 <span style=''>   * `org.reactivestreams.Subscriber` instance. The resulting
+</span>218 <span style=''>   * subscriber respects the [[http://www.reactive-streams.org/ Reactive Streams]]
+</span>219 <span style=''>   * contract.
+</span>220 <span style=''>   *
+</span>221 <span style=''>   * Given that we can guarantee a [[monifu.reactive.observers.SynchronousObserver SynchronousObserver]]
+</span>222 <span style=''>   * is used, then no buffering is needed and thus the implementation is very efficient.
+</span>223 <span style=''>   *
+</span>224 <span style=''>   * To create an instance, [[SynchronousSubscriberAsReactiveSubscriber.apply]] must be used: {{{
+</span>225 <span style=''>   *   // uses the default requestCount of 128
+</span>226 <span style=''>   *   val subscriber = SynchronousSubscriberAsReactiveSubscriber(new Observer[Int] {
+</span>227 <span style=''>   *     private[this] var sum = 0
+</span>228 <span style=''>   *
+</span>229 <span style=''>   *     def onNext(elem: Int) = {
+</span>230 <span style=''>   *       sum += elem
+</span>231 <span style=''>   *       Continue
+</span>232 <span style=''>   *     }
+</span>233 <span style=''>   *
+</span>234 <span style=''>   *     def onError(ex: Throwable) = {
+</span>235 <span style=''>   *       logger.error(ex)
+</span>236 <span style=''>   *     }
+</span>237 <span style=''>   *
+</span>238 <span style=''>   *     def onComplete() = {
+</span>239 <span style=''>   *       logger.info("Stream completed")
+</span>240 <span style=''>   *     }
+</span>241 <span style=''>   *   })
+</span>242 <span style=''>   * }}}
+</span>243 <span style=''>   *
+</span>244 <span style=''>   * @param subscriber the observer instance that will get wrapped into a
+</span>245 <span style=''>   *                  `org.reactivestreams.Subscriber`, along with the
+</span>246 <span style=''>   *                  used scheduler
+</span>247 <span style=''>   *
+</span>248 <span style=''>   * @param requestCount the parameter passed to `Subscription.request`
+</span>249 <span style=''>   */
+</span>250 <span style=''>  def apply[T](subscriber: SynchronousSubscriber[T], requestCount: Int = 128): Subscriber[T] = {
+</span>251 <span style=''>    </span><span style='background: #AEF1AE'>new SynchronousSubscriberAsReactiveSubscriber[T](subscriber, requestCount)</span><span style=''>
+</span>252 <span style=''>  }
+</span>253 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          63
+        </td>
+        <td>
+          4518
+        </td>
+        <td>
+          2292
+          -
+          2403
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Predef.require
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.require(SubscriberAsReactiveSubscriber.this.requestCount.&gt;(0), &quot;requestCount must be strictly positive, according to the Reactive Streams contract&quot;)
+        </td>
+      </tr><tr>
+        <td>
+          63
+        </td>
+        <td>
+          4517
+        </td>
+        <td>
+          2318
+          -
+          2402
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          &quot;requestCount must be strictly positive, according to the Reactive Streams contract&quot;
+        </td>
+      </tr><tr>
+        <td>
+          63
+        </td>
+        <td>
+          4516
+        </td>
+        <td>
+          2300
+          -
+          2316
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          SubscriberAsReactiveSubscriber.this.requestCount.&gt;(0)
+        </td>
+      </tr><tr>
+        <td>
+          66
+        </td>
+        <td>
+          4523
+        </td>
+        <td>
+          2438
+          -
+          2610
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.streams.SynchronousSubscriberAsReactiveSubscriber.apply
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousSubscriberAsReactiveSubscriber.apply[T](monifu.reactive.observers.SynchronousBufferedSubscriber.unbounded[T](SubscriberAsReactiveSubscriber.this.subscriber.observer)(SubscriberAsReactiveSubscriber.this.subscriber.scheduler), SubscriberAsReactiveSubscriber.this.requestCount)
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          4521
+        </td>
+        <td>
+          2487
+          -
+          2569
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousBufferedSubscriber.unbounded
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.observers.SynchronousBufferedSubscriber.unbounded[T](SubscriberAsReactiveSubscriber.this.subscriber.observer)(SubscriberAsReactiveSubscriber.this.subscriber.scheduler)
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          4520
+        </td>
+        <td>
+          2548
+          -
+          2568
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          SubscriberAsReactiveSubscriber.this.subscriber.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          4519
+        </td>
+        <td>
+          2527
+          -
+          2546
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.observer
+        </td>
+        <td style="background: #AEF1AE">
+          SubscriberAsReactiveSubscriber.this.subscriber.observer
+        </td>
+      </tr><tr>
+        <td>
+          68
+        </td>
+        <td>
+          4522
+        </td>
+        <td>
+          2592
+          -
+          2604
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.streams.SubscriberAsReactiveSubscriber.requestCount
+        </td>
+        <td style="background: #AEF1AE">
+          SubscriberAsReactiveSubscriber.this.requestCount
+        </td>
+      </tr><tr>
+        <td>
+          72
+        </td>
+        <td>
+          4524
+        </td>
+        <td>
+          2659
+          -
+          2680
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          org.reactivestreams.Subscriber.onSubscribe
+        </td>
+        <td style="background: #AEF1AE">
+          SubscriberAsReactiveSubscriber.this.buffer.onSubscribe(s)
+        </td>
+      </tr><tr>
+        <td>
+          75
+        </td>
+        <td>
+          4525
+        </td>
+        <td>
+          2716
+          -
+          2735
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          org.reactivestreams.Subscriber.onNext
+        </td>
+        <td style="background: #AEF1AE">
+          SubscriberAsReactiveSubscriber.this.buffer.onNext(elem)
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          4526
+        </td>
+        <td>
+          2778
+          -
+          2796
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          org.reactivestreams.Subscriber.onError
+        </td>
+        <td style="background: #F0ADAD">
+          SubscriberAsReactiveSubscriber.this.buffer.onError(ex)
+        </td>
+      </tr><tr>
+        <td>
+          81
+        </td>
+        <td>
+          4527
+        </td>
+        <td>
+          2829
+          -
+          2848
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          org.reactivestreams.Subscriber.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          SubscriberAsReactiveSubscriber.this.buffer.onComplete()
+        </td>
+      </tr><tr>
+        <td>
+          125
+        </td>
+        <td>
+          4529
+        </td>
+        <td>
+          4412
+          -
+          4511
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.streams.SynchronousSubscriberAsReactiveSubscriber.apply
+        </td>
+        <td style="background: #F0ADAD">
+          SynchronousSubscriberAsReactiveSubscriber.apply[T](ref.asInstanceOf[monifu.reactive.observers.SynchronousSubscriber[T]], requestCount)
+        </td>
+      </tr><tr>
+        <td>
+          125
+        </td>
+        <td>
+          4528
+        </td>
+        <td>
+          4454
+          -
+          4496
+        </td>
+        <td>
+          TypeApply
+        </td>
+        <td>
+          scala.Any.asInstanceOf
+        </td>
+        <td style="background: #F0ADAD">
+          ref.asInstanceOf[monifu.reactive.observers.SynchronousSubscriber[T]]
+        </td>
+      </tr><tr>
+        <td>
+          127
+        </td>
+        <td>
+          4530
+        </td>
+        <td>
+          4536
+          -
+          4599
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.streams.SubscriberAsReactiveSubscriber.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new monifu.reactive.streams.SubscriberAsReactiveSubscriber[T](subscriber, requestCount)
+        </td>
+      </tr><tr>
+        <td>
+          164
+        </td>
+        <td>
+          4533
+        </td>
+        <td>
+          5734
+          -
+          5845
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Predef.require
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.require(SynchronousSubscriberAsReactiveSubscriber.this.requestCount.&gt;(0), &quot;requestCount must be strictly positive, according to the Reactive Streams contract&quot;)
+        </td>
+      </tr><tr>
+        <td>
+          164
+        </td>
+        <td>
+          4532
+        </td>
+        <td>
+          5760
+          -
+          5844
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          &quot;requestCount must be strictly positive, according to the Reactive Streams contract&quot;
+        </td>
+      </tr><tr>
+        <td>
+          164
+        </td>
+        <td>
+          4531
+        </td>
+        <td>
+          5742
+          -
+          5758
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousSubscriberAsReactiveSubscriber.this.requestCount.&gt;(0)
+        </td>
+      </tr><tr>
+        <td>
+          166
+        </td>
+        <td>
+          4534
+        </td>
+        <td>
+          5880
+          -
+          5900
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousSubscriberAsReactiveSubscriber.this.subscriber.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          168
+        </td>
+        <td>
+          4535
+        </td>
+        <td>
+          5937
+          -
+          5941
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          null
+        </td>
+      </tr><tr>
+        <td>
+          169
+        </td>
+        <td>
+          4536
+        </td>
+        <td>
+          5994
+          -
+          5995
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          0
+        </td>
+      </tr><tr>
+        <td>
+          170
+        </td>
+        <td>
+          4537
+        </td>
+        <td>
+          6039
+          -
+          6044
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          false
+        </td>
+      </tr><tr>
+        <td>
+          173
+        </td>
+        <td>
+          4542
+        </td>
+        <td>
+          6110
+          -
+          6206
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  SynchronousSubscriberAsReactiveSubscriber.this.subscription = s;
+  SynchronousSubscriberAsReactiveSubscriber.this.expectingCount = SynchronousSubscriberAsReactiveSubscriber.this.requestCount;
+  s.request(SynchronousSubscriberAsReactiveSubscriber.this.requestCount.toLong)
+}
+        </td>
+      </tr><tr>
+        <td>
+          173
+        </td>
+        <td>
+          4544
+        </td>
+        <td>
+          6093
+          -
+          6093
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          173
+        </td>
+        <td>
+          4538
+        </td>
+        <td>
+          6097
+          -
+          6108
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousSubscriberAsReactiveSubscriber.this.isCanceled.unary_!
+        </td>
+      </tr><tr>
+        <td>
+          173
+        </td>
+        <td>
+          4543
+        </td>
+        <td>
+          6093
+          -
+          6093
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          175
+        </td>
+        <td>
+          4539
+        </td>
+        <td>
+          6158
+          -
+          6170
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.streams.SynchronousSubscriberAsReactiveSubscriber.requestCount
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousSubscriberAsReactiveSubscriber.this.requestCount
+        </td>
+      </tr><tr>
+        <td>
+          176
+        </td>
+        <td>
+          4541
+        </td>
+        <td>
+          6177
+          -
+          6200
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          org.reactivestreams.Subscription.request
+        </td>
+        <td style="background: #AEF1AE">
+          s.request(SynchronousSubscriberAsReactiveSubscriber.this.requestCount.toLong)
+        </td>
+      </tr><tr>
+        <td>
+          176
+        </td>
+        <td>
+          4540
+        </td>
+        <td>
+          6187
+          -
+          6199
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Int.toLong
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousSubscriberAsReactiveSubscriber.this.requestCount.toLong
+        </td>
+      </tr><tr>
+        <td>
+          180
+        </td>
+        <td>
+          4545
+        </td>
+        <td>
+          6248
+          -
+          6259
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousSubscriberAsReactiveSubscriber.this.isCanceled.unary_!
+        </td>
+      </tr><tr>
+        <td>
+          180
+        </td>
+        <td>
+          4563
+        </td>
+        <td>
+          6244
+          -
+          6244
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          180
+        </td>
+        <td>
+          4562
+        </td>
+        <td>
+          6244
+          -
+          6244
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          180
+        </td>
+        <td>
+          4561
+        </td>
+        <td>
+          6261
+          -
+          6720
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  if (SynchronousSubscriberAsReactiveSubscriber.this.expectingCount.&gt;(0))
+    SynchronousSubscriberAsReactiveSubscriber.this.expectingCount = SynchronousSubscriberAsReactiveSubscriber.this.expectingCount.-(1)
+  else
+    ();
+  SynchronousSubscriberAsReactiveSubscriber.this.subscriber.observer.onNext(elem) match {
+    case monifu.reactive.Ack.Continue =&gt; if (SynchronousSubscriberAsReactiveSubscriber.this.expectingCount.==(0))
+      {
+        SynchronousSubscriberAsReactiveSubscriber.this.expectingCount = SynchronousSubscriberAsReactiveSubscriber.this.requestCount;
+        SynchronousSubscriberAsReactiveSubscriber.this.subscription.request(SynchronousSubscriberAsReactiveSubscriber.this.requestCount.toLong)
+      }
+    else
+      ()
+    case monifu.reactive.Ack.Cancel =&gt; {
+      SynchronousSubscriberAsReactiveSubscriber.this.isCanceled = true;
+      SynchronousSubscriberAsReactiveSubscriber.this.subscription.cancel()
+    }
+  }
+}
+        </td>
+      </tr><tr>
+        <td>
+          181
+        </td>
+        <td>
+          4548
+        </td>
+        <td>
+          6293
+          -
+          6312
+        </td>
+        <td>
+          Assign
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousSubscriberAsReactiveSubscriber.this.expectingCount = SynchronousSubscriberAsReactiveSubscriber.this.expectingCount.-(1)
+        </td>
+      </tr><tr>
+        <td>
+          181
+        </td>
+        <td>
+          4550
+        </td>
+        <td>
+          6269
+          -
+          6269
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          181
+        </td>
+        <td>
+          4547
+        </td>
+        <td>
+          6293
+          -
+          6312
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.-
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousSubscriberAsReactiveSubscriber.this.expectingCount.-(1)
+        </td>
+      </tr><tr>
+        <td>
+          181
+        </td>
+        <td>
+          4546
+        </td>
+        <td>
+          6273
+          -
+          6291
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousSubscriberAsReactiveSubscriber.this.expectingCount.&gt;(0)
+        </td>
+      </tr><tr>
+        <td>
+          181
+        </td>
+        <td>
+          4549
+        </td>
+        <td>
+          6269
+          -
+          6269
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          183
+        </td>
+        <td>
+          4551
+        </td>
+        <td>
+          6320
+          -
+          6352
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.observers.SynchronousObserver.onNext
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousSubscriberAsReactiveSubscriber.this.subscriber.observer.onNext(elem)
+        </td>
+      </tr><tr>
+        <td>
+          186
+        </td>
+        <td>
+          4557
+        </td>
+        <td>
+          6440
+          -
+          6440
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          186
+        </td>
+        <td>
+          4556
+        </td>
+        <td>
+          6465
+          -
+          6567
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  SynchronousSubscriberAsReactiveSubscriber.this.expectingCount = SynchronousSubscriberAsReactiveSubscriber.this.requestCount;
+  SynchronousSubscriberAsReactiveSubscriber.this.subscription.request(SynchronousSubscriberAsReactiveSubscriber.this.requestCount.toLong)
+}
+        </td>
+      </tr><tr>
+        <td>
+          186
+        </td>
+        <td>
+          4558
+        </td>
+        <td>
+          6440
+          -
+          6440
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          186
+        </td>
+        <td>
+          4552
+        </td>
+        <td>
+          6444
+          -
+          6463
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.==
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousSubscriberAsReactiveSubscriber.this.expectingCount.==(0)
+        </td>
+      </tr><tr>
+        <td>
+          187
+        </td>
+        <td>
+          4553
+        </td>
+        <td>
+          6496
+          -
+          6508
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.streams.SynchronousSubscriberAsReactiveSubscriber.requestCount
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousSubscriberAsReactiveSubscriber.this.requestCount
+        </td>
+      </tr><tr>
+        <td>
+          188
+        </td>
+        <td>
+          4554
+        </td>
+        <td>
+          6542
+          -
+          6554
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Int.toLong
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousSubscriberAsReactiveSubscriber.this.requestCount.toLong
+        </td>
+      </tr><tr>
+        <td>
+          188
+        </td>
+        <td>
+          4555
+        </td>
+        <td>
+          6521
+          -
+          6555
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          org.reactivestreams.Subscription.request
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousSubscriberAsReactiveSubscriber.this.subscription.request(SynchronousSubscriberAsReactiveSubscriber.this.requestCount.toLong)
+        </td>
+      </tr><tr>
+        <td>
+          192
+        </td>
+        <td>
+          4559
+        </td>
+        <td>
+          6670
+          -
+          6674
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          193
+        </td>
+        <td>
+          4560
+        </td>
+        <td>
+          6685
+          -
+          6706
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          org.reactivestreams.Subscription.cancel
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousSubscriberAsReactiveSubscriber.this.subscription.cancel()
+        </td>
+      </tr><tr>
+        <td>
+          199
+        </td>
+        <td>
+          4569
+        </td>
+        <td>
+          6769
+          -
+          6769
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          199
+        </td>
+        <td>
+          4568
+        </td>
+        <td>
+          6769
+          -
+          6769
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          199
+        </td>
+        <td>
+          4564
+        </td>
+        <td>
+          6773
+          -
+          6784
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #F0ADAD">
+          SynchronousSubscriberAsReactiveSubscriber.this.isCanceled.unary_!
+        </td>
+      </tr><tr>
+        <td>
+          199
+        </td>
+        <td>
+          4567
+        </td>
+        <td>
+          6786
+          -
+          6855
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          {
+  SynchronousSubscriberAsReactiveSubscriber.this.isCanceled = true;
+  SynchronousSubscriberAsReactiveSubscriber.this.subscriber.observer.onError(ex)
+}
+        </td>
+      </tr><tr>
+        <td>
+          200
+        </td>
+        <td>
+          4565
+        </td>
+        <td>
+          6807
+          -
+          6811
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          201
+        </td>
+        <td>
+          4566
+        </td>
+        <td>
+          6818
+          -
+          6849
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #F0ADAD">
+          SynchronousSubscriberAsReactiveSubscriber.this.subscriber.observer.onError(ex)
+        </td>
+      </tr><tr>
+        <td>
+          206
+        </td>
+        <td>
+          4575
+        </td>
+        <td>
+          6894
+          -
+          6894
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          206
+        </td>
+        <td>
+          4574
+        </td>
+        <td>
+          6894
+          -
+          6894
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          206
+        </td>
+        <td>
+          4573
+        </td>
+        <td>
+          6911
+          -
+          6981
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  SynchronousSubscriberAsReactiveSubscriber.this.isCanceled = true;
+  SynchronousSubscriberAsReactiveSubscriber.this.subscriber.observer.onComplete()
+}
+        </td>
+      </tr><tr>
+        <td>
+          206
+        </td>
+        <td>
+          4570
+        </td>
+        <td>
+          6898
+          -
+          6909
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousSubscriberAsReactiveSubscriber.this.isCanceled.unary_!
+        </td>
+      </tr><tr>
+        <td>
+          207
+        </td>
+        <td>
+          4571
+        </td>
+        <td>
+          6932
+          -
+          6936
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          208
+        </td>
+        <td>
+          4572
+        </td>
+        <td>
+          6943
+          -
+          6975
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          SynchronousSubscriberAsReactiveSubscriber.this.subscriber.observer.onComplete()
+        </td>
+      </tr><tr>
+        <td>
+          251
+        </td>
+        <td>
+          4576
+        </td>
+        <td>
+          8433
+          -
+          8507
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.streams.SynchronousSubscriberAsReactiveSubscriber.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new monifu.reactive.streams.SynchronousSubscriberAsReactiveSubscriber[T](subscriber, requestCount)
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

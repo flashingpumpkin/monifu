@@ -1,0 +1,3774 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          monifu/concurrent/atomic/padded/base.scala.html
+        </title>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''>
+</span>17 <span style=''>package monifu.concurrent.atomic.padded
+</span>18 <span style=''>
+</span>19 <span style=''>import java.lang.Double._
+</span>20 <span style=''>import java.lang.Float._
+</span>21 <span style=''>import java.util.concurrent.atomic.{AtomicLong => JavaAtomicLong}
+</span>22 <span style=''>import java.util.concurrent.atomic.{AtomicInteger => JavaAtomicInteger}
+</span>23 <span style=''>import java.util.concurrent.atomic.{AtomicBoolean => JavaAtomicBoolean}
+</span>24 <span style=''>import java.util.concurrent.atomic.{AtomicReference => JavaAtomicReference}
+</span>25 <span style=''>
+</span>26 <span style=''>import monifu.concurrent.atomic
+</span>27 <span style=''>import monifu.concurrent.atomic.{AtomicBuilder => BaseAtomicBuilder}
+</span>28 <span style=''>
+</span>29 <span style=''>/**
+</span>30 <span style=''> * Adds 128 bytes of cache-line padding to Java's AtomicLong.
+</span>31 <span style=''> */
+</span>32 <span style=''>private[padded] final class PaddedJavaAtomicLong(value: Long)
+</span>33 <span style=''>  extends JavaAtomicLong(value) {
+</span>34 <span style=''>
+</span>35 <span style=''>  @volatile
+</span>36 <span style=''>  var p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15 = </span><span style='background: #AEF1AE'>10L</span><span style=''>
+</span>37 <span style=''>
+</span>38 <span style=''>  def `$sum$` = {
+</span>39 <span style=''>    </span><span style='background: #F0ADAD'>p1 + p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9 + p10 + p11 + p12 + p13 + p14 + p15</span><span style=''>
+</span>40 <span style=''>  }
+</span>41 <span style=''>}
+</span>42 <span style=''>
+</span>43 <span style=''>/**
+</span>44 <span style=''> * Adds 128 bytes of cache-line padding to Java's AtomicInteger.
+</span>45 <span style=''> */
+</span>46 <span style=''>private[padded] final class PaddedJavaAtomicInteger(value: Int)
+</span>47 <span style=''>  extends JavaAtomicInteger(value) {
+</span>48 <span style=''>
+</span>49 <span style=''>  @volatile
+</span>50 <span style=''>  var p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15 = </span><span style='background: #AEF1AE'>10L</span><span style=''>
+</span>51 <span style=''>
+</span>52 <span style=''>  def `$sum$` = {
+</span>53 <span style=''>    </span><span style='background: #F0ADAD'>p1 + p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9 + p10 + p11 + p12 + p13 + p14 + p15</span><span style=''>
+</span>54 <span style=''>  }
+</span>55 <span style=''>}
+</span>56 <span style=''>
+</span>57 <span style=''>/**
+</span>58 <span style=''> * Adds 128 bytes of cache-line padding to Java's AtomicBoolean.
+</span>59 <span style=''> */
+</span>60 <span style=''>private[padded] final class PaddedJavaAtomicBoolean(value: Boolean)
+</span>61 <span style=''>  extends JavaAtomicBoolean(value) {
+</span>62 <span style=''>
+</span>63 <span style=''>  @volatile
+</span>64 <span style=''>  var p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15 = </span><span style='background: #AEF1AE'>10L</span><span style=''>
+</span>65 <span style=''>
+</span>66 <span style=''>  def `$sum$` = {
+</span>67 <span style=''>    </span><span style='background: #F0ADAD'>p1 + p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9 + p10 + p11 + p12 + p13 + p14 + p15</span><span style=''>
+</span>68 <span style=''>  }
+</span>69 <span style=''>}
+</span>70 <span style=''>
+</span>71 <span style=''>/**
+</span>72 <span style=''> * Adds 128 bytes of cache-line padding to Java's AtomicReference.
+</span>73 <span style=''> */
+</span>74 <span style=''>private[padded] final class PaddedJavaAtomicReference[T](value: T)
+</span>75 <span style=''>  extends JavaAtomicReference[T](value) {
+</span>76 <span style=''>
+</span>77 <span style=''>  @volatile
+</span>78 <span style=''>  var p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15 = </span><span style='background: #AEF1AE'>10L</span><span style=''>
+</span>79 <span style=''>
+</span>80 <span style=''>  def `$sum$` = {
+</span>81 <span style=''>    </span><span style='background: #F0ADAD'>p1 + p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9 + p10 + p11 + p12 + p13 + p14 + p15</span><span style=''>
+</span>82 <span style=''>  }
+</span>83 <span style=''>}
+</span>84 <span style=''>
+</span>85 <span style=''>/**
+</span>86 <span style=''> * Provides a constructor for building cache-line padded
+</span>87 <span style=''> * [[monifu.concurrent.atomic.Atomic Atomic]] references.
+</span>88 <span style=''> */
+</span>89 <span style=''>object Atomic {
+</span>90 <span style=''>  /**
+</span>91 <span style=''>   * Constructs an `Atomic[T]` reference. Based on the `initialValue`, it will return the best, most specific
+</span>92 <span style=''>   * type. E.g. you give it a number, it will return something inheriting from `AtomicNumber[T]`. That's why
+</span>93 <span style=''>   * it takes an `AtomicBuilder[T, R]` as an implicit parameter - but worry not about such details as it just works.
+</span>94 <span style=''>   *
+</span>95 <span style=''>   * @param initialValue is the initial value with which to initialize the Atomic reference
+</span>96 <span style=''>   * @param builder is the builder that helps us to build the best reference possible, based on our `initialValue`
+</span>97 <span style=''>   */
+</span>98 <span style=''>  def apply[T, R <: Atomic[T]](initialValue: T)(implicit builder: AtomicBuilder[T, R]): R =
+</span>99 <span style=''>    </span><span style='background: #AEF1AE'>builder.buildInstance(initialValue)</span><span style=''>
+</span>100 <span style=''>
+</span>101 <span style=''>  /**
+</span>102 <span style=''>   * Returns the builder that would be chosen to construct Atomic references
+</span>103 <span style=''>   * for the given `initialValue`.
+</span>104 <span style=''>   */
+</span>105 <span style=''>  def builderFor[T, R <: Atomic[T]](initialValue: T)(implicit builder: AtomicBuilder[T, R]): AtomicBuilder[T, R] =
+</span>106 <span style=''>    builder
+</span>107 <span style=''>}
+</span>108 <span style=''>
+</span>109 <span style=''>/**
+</span>110 <span style=''> * Provides a constructor for building cache-line padded
+</span>111 <span style=''> * [[monifu.concurrent.atomic.AtomicAny AtomicAny]] references.
+</span>112 <span style=''> */
+</span>113 <span style=''>object AtomicAny {
+</span>114 <span style=''>  def apply[T](initialValue: T): AtomicAny[T] =
+</span>115 <span style=''>    </span><span style='background: #AEF1AE'>atomic.AtomicAny.wrap(new PaddedJavaAtomicReference[T](initialValue))</span><span style=''>
+</span>116 <span style=''>}
+</span>117 <span style=''>
+</span>118 <span style=''>/**
+</span>119 <span style=''> * Provides a constructor for building cache-line padded
+</span>120 <span style=''> * [[monifu.concurrent.atomic.AtomicBoolean AtomicBoolean]] references.
+</span>121 <span style=''> */
+</span>122 <span style=''>object AtomicBoolean {
+</span>123 <span style=''>  def apply(initialValue: Boolean): AtomicBoolean =
+</span>124 <span style=''>    </span><span style='background: #AEF1AE'>atomic.AtomicBoolean.wrap(new PaddedJavaAtomicBoolean(initialValue))</span><span style=''>
+</span>125 <span style=''>}
+</span>126 <span style=''>
+</span>127 <span style=''>/**
+</span>128 <span style=''> * Provides a constructor for building cache-line padded
+</span>129 <span style=''> * [[monifu.concurrent.atomic.AtomicByte AtomicByte]] references.
+</span>130 <span style=''> */
+</span>131 <span style=''>object AtomicByte {
+</span>132 <span style=''>  def apply(initialValue: Byte): AtomicByte =
+</span>133 <span style=''>    </span><span style='background: #AEF1AE'>atomic.AtomicByte.wrap(new PaddedJavaAtomicInteger(initialValue))</span><span style=''>
+</span>134 <span style=''>}
+</span>135 <span style=''>
+</span>136 <span style=''>/**
+</span>137 <span style=''> * Provides a constructor for building cache-line padded
+</span>138 <span style=''> * [[monifu.concurrent.atomic.AtomicChar AtomicChar]] references.
+</span>139 <span style=''> */
+</span>140 <span style=''>object AtomicChar {
+</span>141 <span style=''>  def apply(initialValue: Char): AtomicChar =
+</span>142 <span style=''>    </span><span style='background: #AEF1AE'>atomic.AtomicChar.wrap(new PaddedJavaAtomicInteger(initialValue))</span><span style=''>
+</span>143 <span style=''>}
+</span>144 <span style=''>
+</span>145 <span style=''>/**
+</span>146 <span style=''> * Provides a constructor for building cache-line padded
+</span>147 <span style=''> * [[monifu.concurrent.atomic.AtomicDouble AtomicDouble]] references.
+</span>148 <span style=''> */
+</span>149 <span style=''>object AtomicDouble {
+</span>150 <span style=''>  def apply(initialValue: Double): AtomicDouble =
+</span>151 <span style=''>    </span><span style='background: #AEF1AE'>atomic.AtomicDouble.wrap(new PaddedJavaAtomicLong(doubleToLongBits(initialValue)))</span><span style=''>
+</span>152 <span style=''>}
+</span>153 <span style=''>
+</span>154 <span style=''>/**
+</span>155 <span style=''> * Provides a constructor for building cache-line padded
+</span>156 <span style=''> * [[monifu.concurrent.atomic.AtomicFloat AtomicFloat]] references.
+</span>157 <span style=''> */
+</span>158 <span style=''>object AtomicFloat {
+</span>159 <span style=''>  def apply(initialValue: Float): AtomicFloat =
+</span>160 <span style=''>    </span><span style='background: #AEF1AE'>atomic.AtomicFloat.wrap(new PaddedJavaAtomicInteger(floatToIntBits(initialValue)))</span><span style=''>
+</span>161 <span style=''>}
+</span>162 <span style=''>
+</span>163 <span style=''>/**
+</span>164 <span style=''> * Provides a constructor for building cache-line padded
+</span>165 <span style=''> * [[monifu.concurrent.atomic.AtomicInt AtomicInt]] references.
+</span>166 <span style=''> */
+</span>167 <span style=''>object AtomicInt {
+</span>168 <span style=''>  def apply(initialValue: Int): AtomicInt =
+</span>169 <span style=''>    </span><span style='background: #AEF1AE'>atomic.AtomicInt.wrap(new PaddedJavaAtomicInteger(initialValue))</span><span style=''>
+</span>170 <span style=''>}
+</span>171 <span style=''>
+</span>172 <span style=''>/**
+</span>173 <span style=''> * Provides a constructor for building cache-line padded
+</span>174 <span style=''> * [[monifu.concurrent.atomic.AtomicLong AtomicLong]] references.
+</span>175 <span style=''> */
+</span>176 <span style=''>object AtomicLong {
+</span>177 <span style=''>  def apply(initialValue: Long): AtomicLong =
+</span>178 <span style=''>    </span><span style='background: #AEF1AE'>atomic.AtomicLong.wrap(new PaddedJavaAtomicLong(initialValue))</span><span style=''>
+</span>179 <span style=''>}
+</span>180 <span style=''>
+</span>181 <span style=''>/**
+</span>182 <span style=''> * Provides a constructor for building cache-line padded
+</span>183 <span style=''> * [[monifu.concurrent.atomic.AtomicNumberAny AtomicNumberAny]] references.
+</span>184 <span style=''> */
+</span>185 <span style=''>object AtomicNumberAny {
+</span>186 <span style=''>  def apply[T : Numeric](initialValue: T): AtomicNumberAny[T] =
+</span>187 <span style=''>    </span><span style='background: #AEF1AE'>atomic.AtomicNumberAny.wrap(new PaddedJavaAtomicReference[T](initialValue))</span><span style=''>
+</span>188 <span style=''>}
+</span>189 <span style=''>
+</span>190 <span style=''>/**
+</span>191 <span style=''> * Provides a constructor for building cache-line padded
+</span>192 <span style=''> * [[monifu.concurrent.atomic.AtomicShort AtomicShort]] references.
+</span>193 <span style=''> */
+</span>194 <span style=''>object AtomicShort {
+</span>195 <span style=''>  def apply(initialValue: Short): AtomicShort =
+</span>196 <span style=''>    </span><span style='background: #AEF1AE'>atomic.AtomicShort.wrap(new PaddedJavaAtomicInteger(initialValue))</span><span style=''>
+</span>197 <span style=''>}
+</span>198 <span style=''>
+</span>199 <span style=''>trait AtomicBuilder[T, R <: Atomic[T]] extends BaseAtomicBuilder[T, R]
+</span>200 <span style=''>
+</span>201 <span style=''>object AtomicBuilder extends Implicits.Level3
+</span>202 <span style=''>
+</span>203 <span style=''>private[padded] object Implicits {
+</span>204 <span style=''>  trait Level1 {
+</span>205 <span style=''>    implicit def AtomicRefBuilder[T] = </span><span style='background: #AEF1AE'>new</span><span style=''> AtomicBuilder[T, AtomicAny[T]] {
+</span>206 <span style=''>      def buildInstance(initialValue: T) =
+</span>207 <span style=''>        </span><span style='background: #AEF1AE'>AtomicAny(initialValue)</span><span style=''>
+</span>208 <span style=''>    }
+</span>209 <span style=''>  }
+</span>210 <span style=''>
+</span>211 <span style=''>  trait Level2 extends Level1 {
+</span>212 <span style=''>    implicit def AtomicNumberBuilder[T : Numeric] =
+</span>213 <span style=''>      </span><span style='background: #AEF1AE'>new</span><span style=''> AtomicBuilder[T, AtomicNumberAny[T]] {
+</span>214 <span style=''>        def buildInstance(initialValue: T) =
+</span>215 <span style=''>          </span><span style='background: #AEF1AE'>AtomicNumberAny(initialValue)</span><span style=''>
+</span>216 <span style=''>      }
+</span>217 <span style=''>  }
+</span>218 <span style=''>
+</span>219 <span style=''>  trait Level3 extends Level2 {
+</span>220 <span style=''>    implicit val AtomicIntBuilder =
+</span>221 <span style=''>      </span><span style='background: #AEF1AE'>new</span><span style=''> AtomicBuilder[Int, AtomicInt] {
+</span>222 <span style=''>        def buildInstance(initialValue: Int) =
+</span>223 <span style=''>          </span><span style='background: #AEF1AE'>AtomicInt(initialValue)</span><span style=''>
+</span>224 <span style=''>      }
+</span>225 <span style=''>
+</span>226 <span style=''>    implicit val AtomicLongBuilder =
+</span>227 <span style=''>      </span><span style='background: #AEF1AE'>new</span><span style=''> AtomicBuilder[Long, AtomicLong] {
+</span>228 <span style=''>        def buildInstance(initialValue: Long) =
+</span>229 <span style=''>          </span><span style='background: #AEF1AE'>AtomicLong(initialValue)</span><span style=''>
+</span>230 <span style=''>      }
+</span>231 <span style=''>
+</span>232 <span style=''>    implicit val AtomicBooleanBuilder =
+</span>233 <span style=''>      </span><span style='background: #AEF1AE'>new</span><span style=''> AtomicBuilder[Boolean, AtomicBoolean] {
+</span>234 <span style=''>        def buildInstance(initialValue: Boolean) =
+</span>235 <span style=''>          </span><span style='background: #AEF1AE'>AtomicBoolean(initialValue)</span><span style=''>
+</span>236 <span style=''>      }
+</span>237 <span style=''>
+</span>238 <span style=''>    implicit val AtomicByteBuilder =
+</span>239 <span style=''>      </span><span style='background: #AEF1AE'>new</span><span style=''> AtomicBuilder[Byte, AtomicByte] {
+</span>240 <span style=''>        def buildInstance(initialValue: Byte): AtomicByte =
+</span>241 <span style=''>          </span><span style='background: #AEF1AE'>AtomicByte(initialValue)</span><span style=''>
+</span>242 <span style=''>      }
+</span>243 <span style=''>
+</span>244 <span style=''>    implicit val AtomicCharBuilder =
+</span>245 <span style=''>      </span><span style='background: #AEF1AE'>new</span><span style=''> AtomicBuilder[Char, AtomicChar] {
+</span>246 <span style=''>        def buildInstance(initialValue: Char): AtomicChar =
+</span>247 <span style=''>          </span><span style='background: #AEF1AE'>AtomicChar(initialValue)</span><span style=''>
+</span>248 <span style=''>      }
+</span>249 <span style=''>
+</span>250 <span style=''>    implicit val AtomicShortBuilder =
+</span>251 <span style=''>      </span><span style='background: #AEF1AE'>new</span><span style=''> AtomicBuilder[Short, AtomicShort] {
+</span>252 <span style=''>        def buildInstance(initialValue: Short): AtomicShort =
+</span>253 <span style=''>          </span><span style='background: #AEF1AE'>AtomicShort(initialValue)</span><span style=''>
+</span>254 <span style=''>      }
+</span>255 <span style=''>
+</span>256 <span style=''>    implicit val AtomicFloatBuilder =
+</span>257 <span style=''>      </span><span style='background: #AEF1AE'>new</span><span style=''> AtomicBuilder[Float, AtomicFloat] {
+</span>258 <span style=''>        def buildInstance(initialValue: Float): AtomicFloat =
+</span>259 <span style=''>          </span><span style='background: #AEF1AE'>AtomicFloat(initialValue)</span><span style=''>
+</span>260 <span style=''>      }
+</span>261 <span style=''>
+</span>262 <span style=''>    implicit val AtomicDoubleBuilder =
+</span>263 <span style=''>      </span><span style='background: #AEF1AE'>new</span><span style=''> AtomicBuilder[Double, AtomicDouble] {
+</span>264 <span style=''>        def buildInstance(initialValue: Double): AtomicDouble =
+</span>265 <span style=''>          </span><span style='background: #AEF1AE'>AtomicDouble(initialValue)</span><span style=''>
+</span>266 <span style=''>      }
+</span>267 <span style=''>  }
+</span>268 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          1743
+        </td>
+        <td>
+          1344
+          -
+          1344
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          1746
+        </td>
+        <td>
+          1344
+          -
+          1344
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          1737
+        </td>
+        <td>
+          1344
+          -
+          1344
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          1739
+        </td>
+        <td>
+          1344
+          -
+          1344
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          1748
+        </td>
+        <td>
+          1344
+          -
+          1344
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          1742
+        </td>
+        <td>
+          1344
+          -
+          1344
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          1736
+        </td>
+        <td>
+          1344
+          -
+          1344
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          1745
+        </td>
+        <td>
+          1344
+          -
+          1344
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          1744
+        </td>
+        <td>
+          1344
+          -
+          1344
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          1747
+        </td>
+        <td>
+          1344
+          -
+          1344
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          1738
+        </td>
+        <td>
+          1344
+          -
+          1344
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          1741
+        </td>
+        <td>
+          1344
+          -
+          1344
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          1750
+        </td>
+        <td>
+          1344
+          -
+          1347
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          1749
+        </td>
+        <td>
+          1344
+          -
+          1344
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          1740
+        </td>
+        <td>
+          1344
+          -
+          1344
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          39
+        </td>
+        <td>
+          1752
+        </td>
+        <td>
+          1381
+          -
+          1383
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicLong.p3
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicLong.this.p3
+        </td>
+      </tr><tr>
+        <td>
+          39
+        </td>
+        <td>
+          1761
+        </td>
+        <td>
+          1428
+          -
+          1431
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicLong.p12
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicLong.this.p12
+        </td>
+      </tr><tr>
+        <td>
+          39
+        </td>
+        <td>
+          1755
+        </td>
+        <td>
+          1396
+          -
+          1398
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicLong.p6
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicLong.this.p6
+        </td>
+      </tr><tr>
+        <td>
+          39
+        </td>
+        <td>
+          1764
+        </td>
+        <td>
+          1446
+          -
+          1449
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicLong.p15
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicLong.this.p15
+        </td>
+      </tr><tr>
+        <td>
+          39
+        </td>
+        <td>
+          1754
+        </td>
+        <td>
+          1391
+          -
+          1393
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicLong.p5
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicLong.this.p5
+        </td>
+      </tr><tr>
+        <td>
+          39
+        </td>
+        <td>
+          1763
+        </td>
+        <td>
+          1440
+          -
+          1443
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicLong.p14
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicLong.this.p14
+        </td>
+      </tr><tr>
+        <td>
+          39
+        </td>
+        <td>
+          1757
+        </td>
+        <td>
+          1406
+          -
+          1408
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicLong.p8
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicLong.this.p8
+        </td>
+      </tr><tr>
+        <td>
+          39
+        </td>
+        <td>
+          1751
+        </td>
+        <td>
+          1376
+          -
+          1378
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicLong.p2
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicLong.this.p2
+        </td>
+      </tr><tr>
+        <td>
+          39
+        </td>
+        <td>
+          1760
+        </td>
+        <td>
+          1422
+          -
+          1425
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicLong.p11
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicLong.this.p11
+        </td>
+      </tr><tr>
+        <td>
+          39
+        </td>
+        <td>
+          1762
+        </td>
+        <td>
+          1434
+          -
+          1437
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicLong.p13
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicLong.this.p13
+        </td>
+      </tr><tr>
+        <td>
+          39
+        </td>
+        <td>
+          1753
+        </td>
+        <td>
+          1386
+          -
+          1388
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicLong.p4
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicLong.this.p4
+        </td>
+      </tr><tr>
+        <td>
+          39
+        </td>
+        <td>
+          1765
+        </td>
+        <td>
+          1371
+          -
+          1449
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.+
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicLong.this.p1.+(PaddedJavaAtomicLong.this.p2).+(PaddedJavaAtomicLong.this.p3).+(PaddedJavaAtomicLong.this.p4).+(PaddedJavaAtomicLong.this.p5).+(PaddedJavaAtomicLong.this.p6).+(PaddedJavaAtomicLong.this.p7).+(PaddedJavaAtomicLong.this.p8).+(PaddedJavaAtomicLong.this.p9).+(PaddedJavaAtomicLong.this.p10).+(PaddedJavaAtomicLong.this.p11).+(PaddedJavaAtomicLong.this.p12).+(PaddedJavaAtomicLong.this.p13).+(PaddedJavaAtomicLong.this.p14).+(PaddedJavaAtomicLong.this.p15)
+        </td>
+      </tr><tr>
+        <td>
+          39
+        </td>
+        <td>
+          1756
+        </td>
+        <td>
+          1401
+          -
+          1403
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicLong.p7
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicLong.this.p7
+        </td>
+      </tr><tr>
+        <td>
+          39
+        </td>
+        <td>
+          1759
+        </td>
+        <td>
+          1416
+          -
+          1419
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicLong.p10
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicLong.this.p10
+        </td>
+      </tr><tr>
+        <td>
+          39
+        </td>
+        <td>
+          1758
+        </td>
+        <td>
+          1411
+          -
+          1413
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicLong.p9
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicLong.this.p9
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          1770
+        </td>
+        <td>
+          1717
+          -
+          1717
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          1779
+        </td>
+        <td>
+          1717
+          -
+          1717
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          1773
+        </td>
+        <td>
+          1717
+          -
+          1717
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          1772
+        </td>
+        <td>
+          1717
+          -
+          1717
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          1766
+        </td>
+        <td>
+          1717
+          -
+          1717
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          1775
+        </td>
+        <td>
+          1717
+          -
+          1717
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          1778
+        </td>
+        <td>
+          1717
+          -
+          1717
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          1769
+        </td>
+        <td>
+          1717
+          -
+          1717
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          1777
+        </td>
+        <td>
+          1717
+          -
+          1717
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          1780
+        </td>
+        <td>
+          1717
+          -
+          1720
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          1771
+        </td>
+        <td>
+          1717
+          -
+          1717
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          1774
+        </td>
+        <td>
+          1717
+          -
+          1717
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          1768
+        </td>
+        <td>
+          1717
+          -
+          1717
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          1776
+        </td>
+        <td>
+          1717
+          -
+          1717
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          50
+        </td>
+        <td>
+          1767
+        </td>
+        <td>
+          1717
+          -
+          1717
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          53
+        </td>
+        <td>
+          1788
+        </td>
+        <td>
+          1784
+          -
+          1786
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicInteger.p9
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicInteger.this.p9
+        </td>
+      </tr><tr>
+        <td>
+          53
+        </td>
+        <td>
+          1782
+        </td>
+        <td>
+          1754
+          -
+          1756
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicInteger.p3
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicInteger.this.p3
+        </td>
+      </tr><tr>
+        <td>
+          53
+        </td>
+        <td>
+          1791
+        </td>
+        <td>
+          1801
+          -
+          1804
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicInteger.p12
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicInteger.this.p12
+        </td>
+      </tr><tr>
+        <td>
+          53
+        </td>
+        <td>
+          1781
+        </td>
+        <td>
+          1749
+          -
+          1751
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicInteger.p2
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicInteger.this.p2
+        </td>
+      </tr><tr>
+        <td>
+          53
+        </td>
+        <td>
+          1790
+        </td>
+        <td>
+          1795
+          -
+          1798
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicInteger.p11
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicInteger.this.p11
+        </td>
+      </tr><tr>
+        <td>
+          53
+        </td>
+        <td>
+          1793
+        </td>
+        <td>
+          1813
+          -
+          1816
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicInteger.p14
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicInteger.this.p14
+        </td>
+      </tr><tr>
+        <td>
+          53
+        </td>
+        <td>
+          1784
+        </td>
+        <td>
+          1764
+          -
+          1766
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicInteger.p5
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicInteger.this.p5
+        </td>
+      </tr><tr>
+        <td>
+          53
+        </td>
+        <td>
+          1787
+        </td>
+        <td>
+          1779
+          -
+          1781
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicInteger.p8
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicInteger.this.p8
+        </td>
+      </tr><tr>
+        <td>
+          53
+        </td>
+        <td>
+          1786
+        </td>
+        <td>
+          1774
+          -
+          1776
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicInteger.p7
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicInteger.this.p7
+        </td>
+      </tr><tr>
+        <td>
+          53
+        </td>
+        <td>
+          1795
+        </td>
+        <td>
+          1744
+          -
+          1822
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.+
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicInteger.this.p1.+(PaddedJavaAtomicInteger.this.p2).+(PaddedJavaAtomicInteger.this.p3).+(PaddedJavaAtomicInteger.this.p4).+(PaddedJavaAtomicInteger.this.p5).+(PaddedJavaAtomicInteger.this.p6).+(PaddedJavaAtomicInteger.this.p7).+(PaddedJavaAtomicInteger.this.p8).+(PaddedJavaAtomicInteger.this.p9).+(PaddedJavaAtomicInteger.this.p10).+(PaddedJavaAtomicInteger.this.p11).+(PaddedJavaAtomicInteger.this.p12).+(PaddedJavaAtomicInteger.this.p13).+(PaddedJavaAtomicInteger.this.p14).+(PaddedJavaAtomicInteger.this.p15)
+        </td>
+      </tr><tr>
+        <td>
+          53
+        </td>
+        <td>
+          1789
+        </td>
+        <td>
+          1789
+          -
+          1792
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicInteger.p10
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicInteger.this.p10
+        </td>
+      </tr><tr>
+        <td>
+          53
+        </td>
+        <td>
+          1783
+        </td>
+        <td>
+          1759
+          -
+          1761
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicInteger.p4
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicInteger.this.p4
+        </td>
+      </tr><tr>
+        <td>
+          53
+        </td>
+        <td>
+          1792
+        </td>
+        <td>
+          1807
+          -
+          1810
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicInteger.p13
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicInteger.this.p13
+        </td>
+      </tr><tr>
+        <td>
+          53
+        </td>
+        <td>
+          1794
+        </td>
+        <td>
+          1819
+          -
+          1822
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicInteger.p15
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicInteger.this.p15
+        </td>
+      </tr><tr>
+        <td>
+          53
+        </td>
+        <td>
+          1785
+        </td>
+        <td>
+          1769
+          -
+          1771
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicInteger.p6
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicInteger.this.p6
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          1806
+        </td>
+        <td>
+          2094
+          -
+          2094
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          1797
+        </td>
+        <td>
+          2094
+          -
+          2094
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          1799
+        </td>
+        <td>
+          2094
+          -
+          2094
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          1808
+        </td>
+        <td>
+          2094
+          -
+          2094
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          1802
+        </td>
+        <td>
+          2094
+          -
+          2094
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          1796
+        </td>
+        <td>
+          2094
+          -
+          2094
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          1805
+        </td>
+        <td>
+          2094
+          -
+          2094
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          1804
+        </td>
+        <td>
+          2094
+          -
+          2094
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          1798
+        </td>
+        <td>
+          2094
+          -
+          2094
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          1807
+        </td>
+        <td>
+          2094
+          -
+          2094
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          1810
+        </td>
+        <td>
+          2094
+          -
+          2097
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          1801
+        </td>
+        <td>
+          2094
+          -
+          2094
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          1800
+        </td>
+        <td>
+          2094
+          -
+          2094
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          1809
+        </td>
+        <td>
+          2094
+          -
+          2094
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          1803
+        </td>
+        <td>
+          2094
+          -
+          2094
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          1815
+        </td>
+        <td>
+          2146
+          -
+          2148
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicBoolean.p6
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicBoolean.this.p6
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          1824
+        </td>
+        <td>
+          2196
+          -
+          2199
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicBoolean.p15
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicBoolean.this.p15
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          1823
+        </td>
+        <td>
+          2190
+          -
+          2193
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicBoolean.p14
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicBoolean.this.p14
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          1814
+        </td>
+        <td>
+          2141
+          -
+          2143
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicBoolean.p5
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicBoolean.this.p5
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          1817
+        </td>
+        <td>
+          2156
+          -
+          2158
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicBoolean.p8
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicBoolean.this.p8
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          1820
+        </td>
+        <td>
+          2172
+          -
+          2175
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicBoolean.p11
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicBoolean.this.p11
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          1811
+        </td>
+        <td>
+          2126
+          -
+          2128
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicBoolean.p2
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicBoolean.this.p2
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          1822
+        </td>
+        <td>
+          2184
+          -
+          2187
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicBoolean.p13
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicBoolean.this.p13
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          1813
+        </td>
+        <td>
+          2136
+          -
+          2138
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicBoolean.p4
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicBoolean.this.p4
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          1825
+        </td>
+        <td>
+          2121
+          -
+          2199
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.+
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicBoolean.this.p1.+(PaddedJavaAtomicBoolean.this.p2).+(PaddedJavaAtomicBoolean.this.p3).+(PaddedJavaAtomicBoolean.this.p4).+(PaddedJavaAtomicBoolean.this.p5).+(PaddedJavaAtomicBoolean.this.p6).+(PaddedJavaAtomicBoolean.this.p7).+(PaddedJavaAtomicBoolean.this.p8).+(PaddedJavaAtomicBoolean.this.p9).+(PaddedJavaAtomicBoolean.this.p10).+(PaddedJavaAtomicBoolean.this.p11).+(PaddedJavaAtomicBoolean.this.p12).+(PaddedJavaAtomicBoolean.this.p13).+(PaddedJavaAtomicBoolean.this.p14).+(PaddedJavaAtomicBoolean.this.p15)
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          1816
+        </td>
+        <td>
+          2151
+          -
+          2153
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicBoolean.p7
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicBoolean.this.p7
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          1819
+        </td>
+        <td>
+          2166
+          -
+          2169
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicBoolean.p10
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicBoolean.this.p10
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          1818
+        </td>
+        <td>
+          2161
+          -
+          2163
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicBoolean.p9
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicBoolean.this.p9
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          1812
+        </td>
+        <td>
+          2131
+          -
+          2133
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicBoolean.p3
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicBoolean.this.p3
+        </td>
+      </tr><tr>
+        <td>
+          67
+        </td>
+        <td>
+          1821
+        </td>
+        <td>
+          2178
+          -
+          2181
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicBoolean.p12
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicBoolean.this.p12
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          1833
+        </td>
+        <td>
+          2477
+          -
+          2477
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          1832
+        </td>
+        <td>
+          2477
+          -
+          2477
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          1826
+        </td>
+        <td>
+          2477
+          -
+          2477
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          1835
+        </td>
+        <td>
+          2477
+          -
+          2477
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          1838
+        </td>
+        <td>
+          2477
+          -
+          2477
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          1829
+        </td>
+        <td>
+          2477
+          -
+          2477
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          1837
+        </td>
+        <td>
+          2477
+          -
+          2477
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          1831
+        </td>
+        <td>
+          2477
+          -
+          2477
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          1840
+        </td>
+        <td>
+          2477
+          -
+          2480
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          1834
+        </td>
+        <td>
+          2477
+          -
+          2477
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          1828
+        </td>
+        <td>
+          2477
+          -
+          2477
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          1836
+        </td>
+        <td>
+          2477
+          -
+          2477
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          1827
+        </td>
+        <td>
+          2477
+          -
+          2477
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          1839
+        </td>
+        <td>
+          2477
+          -
+          2477
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          1830
+        </td>
+        <td>
+          2477
+          -
+          2477
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          10L
+        </td>
+      </tr><tr>
+        <td>
+          81
+        </td>
+        <td>
+          1851
+        </td>
+        <td>
+          2561
+          -
+          2564
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicReference.p12
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicReference.this.p12
+        </td>
+      </tr><tr>
+        <td>
+          81
+        </td>
+        <td>
+          1842
+        </td>
+        <td>
+          2514
+          -
+          2516
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicReference.p3
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicReference.this.p3
+        </td>
+      </tr><tr>
+        <td>
+          81
+        </td>
+        <td>
+          1841
+        </td>
+        <td>
+          2509
+          -
+          2511
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicReference.p2
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicReference.this.p2
+        </td>
+      </tr><tr>
+        <td>
+          81
+        </td>
+        <td>
+          1850
+        </td>
+        <td>
+          2555
+          -
+          2558
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicReference.p11
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicReference.this.p11
+        </td>
+      </tr><tr>
+        <td>
+          81
+        </td>
+        <td>
+          1844
+        </td>
+        <td>
+          2524
+          -
+          2526
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicReference.p5
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicReference.this.p5
+        </td>
+      </tr><tr>
+        <td>
+          81
+        </td>
+        <td>
+          1853
+        </td>
+        <td>
+          2573
+          -
+          2576
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicReference.p14
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicReference.this.p14
+        </td>
+      </tr><tr>
+        <td>
+          81
+        </td>
+        <td>
+          1847
+        </td>
+        <td>
+          2539
+          -
+          2541
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicReference.p8
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicReference.this.p8
+        </td>
+      </tr><tr>
+        <td>
+          81
+        </td>
+        <td>
+          1846
+        </td>
+        <td>
+          2534
+          -
+          2536
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicReference.p7
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicReference.this.p7
+        </td>
+      </tr><tr>
+        <td>
+          81
+        </td>
+        <td>
+          1855
+        </td>
+        <td>
+          2504
+          -
+          2582
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.+
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicReference.this.p1.+(PaddedJavaAtomicReference.this.p2).+(PaddedJavaAtomicReference.this.p3).+(PaddedJavaAtomicReference.this.p4).+(PaddedJavaAtomicReference.this.p5).+(PaddedJavaAtomicReference.this.p6).+(PaddedJavaAtomicReference.this.p7).+(PaddedJavaAtomicReference.this.p8).+(PaddedJavaAtomicReference.this.p9).+(PaddedJavaAtomicReference.this.p10).+(PaddedJavaAtomicReference.this.p11).+(PaddedJavaAtomicReference.this.p12).+(PaddedJavaAtomicReference.this.p13).+(PaddedJavaAtomicReference.this.p14).+(PaddedJavaAtomicReference.this.p15)
+        </td>
+      </tr><tr>
+        <td>
+          81
+        </td>
+        <td>
+          1849
+        </td>
+        <td>
+          2549
+          -
+          2552
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicReference.p10
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicReference.this.p10
+        </td>
+      </tr><tr>
+        <td>
+          81
+        </td>
+        <td>
+          1843
+        </td>
+        <td>
+          2519
+          -
+          2521
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicReference.p4
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicReference.this.p4
+        </td>
+      </tr><tr>
+        <td>
+          81
+        </td>
+        <td>
+          1852
+        </td>
+        <td>
+          2567
+          -
+          2570
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicReference.p13
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicReference.this.p13
+        </td>
+      </tr><tr>
+        <td>
+          81
+        </td>
+        <td>
+          1845
+        </td>
+        <td>
+          2529
+          -
+          2531
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicReference.p6
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicReference.this.p6
+        </td>
+      </tr><tr>
+        <td>
+          81
+        </td>
+        <td>
+          1854
+        </td>
+        <td>
+          2579
+          -
+          2582
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicReference.p15
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicReference.this.p15
+        </td>
+      </tr><tr>
+        <td>
+          81
+        </td>
+        <td>
+          1848
+        </td>
+        <td>
+          2544
+          -
+          2546
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicReference.p9
+        </td>
+        <td style="background: #F0ADAD">
+          PaddedJavaAtomicReference.this.p9
+        </td>
+      </tr><tr>
+        <td>
+          99
+        </td>
+        <td>
+          1856
+        </td>
+        <td>
+          3385
+          -
+          3420
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicBuilder.buildInstance
+        </td>
+        <td style="background: #AEF1AE">
+          builder.buildInstance(initialValue)
+        </td>
+      </tr><tr>
+        <td>
+          115
+        </td>
+        <td>
+          1858
+        </td>
+        <td>
+          3876
+          -
+          3945
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicAny.wrap
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.atomic.AtomicAny.wrap[T](new monifu.concurrent.atomic.padded.PaddedJavaAtomicReference[T](initialValue))
+        </td>
+      </tr><tr>
+        <td>
+          115
+        </td>
+        <td>
+          1857
+        </td>
+        <td>
+          3898
+          -
+          3944
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicReference.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new monifu.concurrent.atomic.padded.PaddedJavaAtomicReference[T](initialValue)
+        </td>
+      </tr><tr>
+        <td>
+          124
+        </td>
+        <td>
+          1859
+        </td>
+        <td>
+          4191
+          -
+          4232
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicBoolean.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new PaddedJavaAtomicBoolean(initialValue)
+        </td>
+      </tr><tr>
+        <td>
+          124
+        </td>
+        <td>
+          1860
+        </td>
+        <td>
+          4165
+          -
+          4233
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicBoolean.wrap
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.atomic.AtomicBoolean.wrap(new PaddedJavaAtomicBoolean(initialValue))
+        </td>
+      </tr><tr>
+        <td>
+          133
+        </td>
+        <td>
+          1862
+        </td>
+        <td>
+          4461
+          -
+          4502
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicInteger.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new PaddedJavaAtomicInteger(initialValue.toInt)
+        </td>
+      </tr><tr>
+        <td>
+          133
+        </td>
+        <td>
+          1861
+        </td>
+        <td>
+          4489
+          -
+          4501
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Byte.toInt
+        </td>
+        <td style="background: #AEF1AE">
+          initialValue.toInt
+        </td>
+      </tr><tr>
+        <td>
+          133
+        </td>
+        <td>
+          1863
+        </td>
+        <td>
+          4438
+          -
+          4503
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicByte.wrap
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.atomic.AtomicByte.wrap(new PaddedJavaAtomicInteger(initialValue.toInt))
+        </td>
+      </tr><tr>
+        <td>
+          142
+        </td>
+        <td>
+          1865
+        </td>
+        <td>
+          4731
+          -
+          4772
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicInteger.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new PaddedJavaAtomicInteger(initialValue.toInt)
+        </td>
+      </tr><tr>
+        <td>
+          142
+        </td>
+        <td>
+          1864
+        </td>
+        <td>
+          4759
+          -
+          4771
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Char.toInt
+        </td>
+        <td style="background: #AEF1AE">
+          initialValue.toInt
+        </td>
+      </tr><tr>
+        <td>
+          142
+        </td>
+        <td>
+          1866
+        </td>
+        <td>
+          4708
+          -
+          4773
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicChar.wrap
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.atomic.AtomicChar.wrap(new PaddedJavaAtomicInteger(initialValue.toInt))
+        </td>
+      </tr><tr>
+        <td>
+          151
+        </td>
+        <td>
+          1868
+        </td>
+        <td>
+          5013
+          -
+          5069
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicLong.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new PaddedJavaAtomicLong(java.lang.Double.doubleToLongBits(initialValue))
+        </td>
+      </tr><tr>
+        <td>
+          151
+        </td>
+        <td>
+          1867
+        </td>
+        <td>
+          5038
+          -
+          5068
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Double.doubleToLongBits
+        </td>
+        <td style="background: #AEF1AE">
+          java.lang.Double.doubleToLongBits(initialValue)
+        </td>
+      </tr><tr>
+        <td>
+          151
+        </td>
+        <td>
+          1869
+        </td>
+        <td>
+          4988
+          -
+          5070
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicDouble.wrap
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.atomic.AtomicDouble.wrap(new PaddedJavaAtomicLong(java.lang.Double.doubleToLongBits(initialValue)))
+        </td>
+      </tr><tr>
+        <td>
+          160
+        </td>
+        <td>
+          1871
+        </td>
+        <td>
+          5304
+          -
+          5361
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicInteger.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new PaddedJavaAtomicInteger(java.lang.Float.floatToIntBits(initialValue))
+        </td>
+      </tr><tr>
+        <td>
+          160
+        </td>
+        <td>
+          1870
+        </td>
+        <td>
+          5332
+          -
+          5360
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Float.floatToIntBits
+        </td>
+        <td style="background: #AEF1AE">
+          java.lang.Float.floatToIntBits(initialValue)
+        </td>
+      </tr><tr>
+        <td>
+          160
+        </td>
+        <td>
+          1872
+        </td>
+        <td>
+          5280
+          -
+          5362
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicFloat.wrap
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.atomic.AtomicFloat.wrap(new PaddedJavaAtomicInteger(java.lang.Float.floatToIntBits(initialValue)))
+        </td>
+      </tr><tr>
+        <td>
+          169
+        </td>
+        <td>
+          1874
+        </td>
+        <td>
+          5562
+          -
+          5626
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicInt.wrap
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.atomic.AtomicInt.wrap(new PaddedJavaAtomicInteger(initialValue))
+        </td>
+      </tr><tr>
+        <td>
+          169
+        </td>
+        <td>
+          1873
+        </td>
+        <td>
+          5584
+          -
+          5625
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicInteger.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new PaddedJavaAtomicInteger(initialValue)
+        </td>
+      </tr><tr>
+        <td>
+          178
+        </td>
+        <td>
+          1876
+        </td>
+        <td>
+          5831
+          -
+          5893
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicLong.wrap
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.atomic.AtomicLong.wrap(new PaddedJavaAtomicLong(initialValue))
+        </td>
+      </tr><tr>
+        <td>
+          178
+        </td>
+        <td>
+          1875
+        </td>
+        <td>
+          5854
+          -
+          5892
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicLong.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new PaddedJavaAtomicLong(initialValue)
+        </td>
+      </tr><tr>
+        <td>
+          187
+        </td>
+        <td>
+          1877
+        </td>
+        <td>
+          6131
+          -
+          6206
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicNumberAny.wrap
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.atomic.AtomicNumberAny.wrap[T](new monifu.concurrent.atomic.padded.PaddedJavaAtomicReference[T](initialValue))(evidence$1)
+        </td>
+      </tr><tr>
+        <td>
+          196
+        </td>
+        <td>
+          1880
+        </td>
+        <td>
+          6416
+          -
+          6482
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicShort.wrap
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.atomic.AtomicShort.wrap(new PaddedJavaAtomicInteger(initialValue.toInt))
+        </td>
+      </tr><tr>
+        <td>
+          196
+        </td>
+        <td>
+          1879
+        </td>
+        <td>
+          6440
+          -
+          6481
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.PaddedJavaAtomicInteger.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new PaddedJavaAtomicInteger(initialValue.toInt)
+        </td>
+      </tr><tr>
+        <td>
+          196
+        </td>
+        <td>
+          1878
+        </td>
+        <td>
+          6468
+          -
+          6480
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Short.toInt
+        </td>
+        <td style="background: #AEF1AE">
+          initialValue.toInt
+        </td>
+      </tr><tr>
+        <td>
+          205
+        </td>
+        <td>
+          1882
+        </td>
+        <td>
+          6696
+          -
+          6699
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.Implicits.Level1.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          207
+        </td>
+        <td>
+          1881
+        </td>
+        <td>
+          6784
+          -
+          6807
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.AtomicAny.apply
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicAny.apply[T](initialValue)
+        </td>
+      </tr><tr>
+        <td>
+          213
+        </td>
+        <td>
+          1884
+        </td>
+        <td>
+          6909
+          -
+          6912
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.Implicits.Level2.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          215
+        </td>
+        <td>
+          1883
+        </td>
+        <td>
+          7007
+          -
+          7036
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.AtomicNumberAny.apply
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicNumberAny.apply[T](initialValue)(evidence$2)
+        </td>
+      </tr><tr>
+        <td>
+          221
+        </td>
+        <td>
+          1886
+        </td>
+        <td>
+          7124
+          -
+          7127
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.Implicits.Level3.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          223
+        </td>
+        <td>
+          1885
+        </td>
+        <td>
+          7217
+          -
+          7240
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.AtomicInt.apply
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicInt.apply(initialValue)
+        </td>
+      </tr><tr>
+        <td>
+          227
+        </td>
+        <td>
+          1888
+        </td>
+        <td>
+          7293
+          -
+          7296
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.Implicits.Level3.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          229
+        </td>
+        <td>
+          1887
+        </td>
+        <td>
+          7389
+          -
+          7413
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.AtomicLong.apply
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicLong.apply(initialValue)
+        </td>
+      </tr><tr>
+        <td>
+          233
+        </td>
+        <td>
+          1890
+        </td>
+        <td>
+          7469
+          -
+          7472
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.Implicits.Level3.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          235
+        </td>
+        <td>
+          1889
+        </td>
+        <td>
+          7574
+          -
+          7601
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.AtomicBoolean.apply
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicBoolean.apply(initialValue)
+        </td>
+      </tr><tr>
+        <td>
+          239
+        </td>
+        <td>
+          1892
+        </td>
+        <td>
+          7654
+          -
+          7657
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.Implicits.Level3.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          241
+        </td>
+        <td>
+          1891
+        </td>
+        <td>
+          7762
+          -
+          7786
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.AtomicByte.apply
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicByte.apply(initialValue)
+        </td>
+      </tr><tr>
+        <td>
+          245
+        </td>
+        <td>
+          1894
+        </td>
+        <td>
+          7839
+          -
+          7842
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.Implicits.Level3.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          247
+        </td>
+        <td>
+          1893
+        </td>
+        <td>
+          7947
+          -
+          7971
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.AtomicChar.apply
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicChar.apply(initialValue)
+        </td>
+      </tr><tr>
+        <td>
+          251
+        </td>
+        <td>
+          1896
+        </td>
+        <td>
+          8025
+          -
+          8028
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.Implicits.Level3.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          253
+        </td>
+        <td>
+          1895
+        </td>
+        <td>
+          8137
+          -
+          8162
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.AtomicShort.apply
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicShort.apply(initialValue)
+        </td>
+      </tr><tr>
+        <td>
+          257
+        </td>
+        <td>
+          1898
+        </td>
+        <td>
+          8216
+          -
+          8219
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.Implicits.Level3.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          259
+        </td>
+        <td>
+          1897
+        </td>
+        <td>
+          8328
+          -
+          8353
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.AtomicFloat.apply
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicFloat.apply(initialValue)
+        </td>
+      </tr><tr>
+        <td>
+          263
+        </td>
+        <td>
+          1900
+        </td>
+        <td>
+          8408
+          -
+          8411
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.Implicits.Level3.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          265
+        </td>
+        <td>
+          1899
+        </td>
+        <td>
+          8524
+          -
+          8550
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.padded.AtomicDouble.apply
+        </td>
+        <td style="background: #AEF1AE">
+          AtomicDouble.apply(initialValue)
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

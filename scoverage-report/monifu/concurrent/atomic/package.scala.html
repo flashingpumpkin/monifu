@@ -1,0 +1,329 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          monifu/concurrent/atomic/package.scala.html
+        </title>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''> 
+</span>17 <span style=''>package monifu.concurrent
+</span>18 <span style=''>
+</span>19 <span style=''>import scala.concurrent.TimeoutException
+</span>20 <span style=''>
+</span>21 <span style=''>/**
+</span>22 <span style=''> * A small toolkit of classes that support compare-and-swap semantics for safe mutation of variables.
+</span>23 <span style=''> *
+</span>24 <span style=''> * On top of the JVM, this means dealing with lock-free thread-safe programming. Also works on top of Javascript,
+</span>25 <span style=''> * with Scala.js (for good reasons, as Atomic references are still useful in non-multi-threaded environments).
+</span>26 <span style=''> *
+</span>27 <span style=''> * The backbone of Atomic references is this method:
+</span>28 <span style=''> * {{{
+</span>29 <span style=''> *   def compareAndSet(expect: T, update: T): Boolean
+</span>30 <span style=''> * }}}
+</span>31 <span style=''> *
+</span>32 <span style=''> * This method atomically sets a variable to the `update` value if it currently holds
+</span>33 <span style=''> * the `expect` value, reporting `true` on success or `false` on failure. The classes in this package
+</span>34 <span style=''> * also contain methods to get and unconditionally set values. They also support weak operations,
+</span>35 <span style=''> * defined in `WeakAtomic[T]`, such as (e.g. `weakCompareAndSet`, `lazySet`) or operations that
+</span>36 <span style=''> * block the current thread through ''spin-locking'', until a condition happens (e.g. `waitForCompareAndSet`),
+</span>37 <span style=''> * methods exposed by `BlockingAtomic[T]`.
+</span>38 <span style=''> *
+</span>39 <span style=''> * Building a reference is easy with the provided constructor, which will automatically return the
+</span>40 <span style=''> * most specific type needed (in the following sample, that's an `AtomicDouble`, inheriting from `AtomicNumber[T]`):
+</span>41 <span style=''> * {{{
+</span>42 <span style=''> *   val atomicNumber = Atomic(12.2)
+</span>43 <span style=''> *
+</span>44 <span style=''> *   atomicNumber.incrementAndGet()
+</span>45 <span style=''> *   // => 13.2
+</span>46 <span style=''> * }}}
+</span>47 <span style=''> *
+</span>48 <span style=''> * In comparison with `java.util.concurrent.AtomicReference`, these references implement common interfaces
+</span>49 <span style=''> * that you can use generically (i.e. `Atomic[T]`, `AtomicNumber[T]`, `BlockableAtomic[T]`, `WeakAtomic[T]`).
+</span>50 <span style=''> * And also provide useful helpers for atomically mutating of values
+</span>51 <span style=''> * (i.e. `transform`, `transformAndGet`, `getAndTransform`, etc...) or of numbers of any kind
+</span>52 <span style=''> * (`incrementAndGet`, `getAndAdd`, etc...).
+</span>53 <span style=''> *
+</span>54 <span style=''> * A high-level documentation describing the rationale for these can be found here:
+</span>55 <span style=''> * [[https://github.com/alexandru/monifu/blob/master/docs/atomic.md Atomic Reference]]
+</span>56 <span style=''> */
+</span>57 <span style=''>package object atomic {
+</span>58 <span style=''>  /**
+</span>59 <span style=''>   * For private use only by the `monifu` package.
+</span>60 <span style=''>   *
+</span>61 <span style=''>   * Checks if the current thread has been interrupted, throwing
+</span>62 <span style=''>   * an `InterruptedException` in case it is.
+</span>63 <span style=''>   */
+</span>64 <span style=''>  @inline private[atomic] def interruptedCheck(): Unit = {
+</span>65 <span style=''>    if (</span><span style='background: #AEF1AE'>Thread.interrupted</span><span style=''>)
+</span>66 <span style=''>      </span><span style='background: #F0ADAD'>throw new InterruptedException()</span><span style=''>
+</span>67 <span style=''>  }
+</span>68 <span style=''>
+</span>69 <span style=''>  /**
+</span>70 <span style=''>   * For private use only by the `monifu` package.
+</span>71 <span style=''>   *
+</span>72 <span style=''>   * Checks if the timeout is due, throwing a `TimeoutException` in case it is.
+</span>73 <span style=''>   */
+</span>74 <span style=''>  @inline private[atomic] def timeoutCheck(endsAtNanos: Long): Unit = {
+</span>75 <span style=''>    if (</span><span style='background: #AEF1AE'>System.nanoTime >= endsAtNanos</span><span style=''>)
+</span>76 <span style=''>      </span><span style='background: #AEF1AE'>throw new TimeoutException()</span><span style=''>
+</span>77 <span style=''>  }
+</span>78 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          65
+        </td>
+        <td>
+          1730
+        </td>
+        <td>
+          2875
+          -
+          2875
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          65
+        </td>
+        <td>
+          1726
+        </td>
+        <td>
+          2879
+          -
+          2897
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          java.lang.Thread.interrupted
+        </td>
+        <td style="background: #AEF1AE">
+          java.this.lang.Thread.interrupted()
+        </td>
+      </tr><tr>
+        <td>
+          65
+        </td>
+        <td>
+          1729
+        </td>
+        <td>
+          2875
+          -
+          2875
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          66
+        </td>
+        <td>
+          1728
+        </td>
+        <td>
+          2905
+          -
+          2937
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          throw new scala.`package`.InterruptedException()
+        </td>
+      </tr><tr>
+        <td>
+          66
+        </td>
+        <td>
+          1727
+        </td>
+        <td>
+          2905
+          -
+          2937
+        </td>
+        <td>
+          Throw
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          throw new scala.`package`.InterruptedException()
+        </td>
+      </tr><tr>
+        <td>
+          75
+        </td>
+        <td>
+          1734
+        </td>
+        <td>
+          3167
+          -
+          3167
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          75
+        </td>
+        <td>
+          1731
+        </td>
+        <td>
+          3171
+          -
+          3201
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.&gt;=
+        </td>
+        <td style="background: #AEF1AE">
+          java.this.lang.System.nanoTime().&gt;=(endsAtNanos)
+        </td>
+      </tr><tr>
+        <td>
+          75
+        </td>
+        <td>
+          1735
+        </td>
+        <td>
+          3167
+          -
+          3167
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          76
+        </td>
+        <td>
+          1733
+        </td>
+        <td>
+          3209
+          -
+          3237
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          throw new scala.concurrent.`package`.TimeoutException()
+        </td>
+      </tr><tr>
+        <td>
+          76
+        </td>
+        <td>
+          1732
+        </td>
+        <td>
+          3209
+          -
+          3237
+        </td>
+        <td>
+          Throw
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          throw new scala.concurrent.`package`.TimeoutException()
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

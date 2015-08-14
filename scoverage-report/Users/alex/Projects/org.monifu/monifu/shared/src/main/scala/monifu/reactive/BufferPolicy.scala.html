@@ -1,0 +1,434 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          /Users/alex/Projects/org.monifu/monifu/shared/src/main/scala/monifu/reactive/BufferPolicy.scala.html
+        </title>
+        <link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css"/>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+        <script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script>
+        <script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.18.3/addons/pager/jquery.tablesorter.pager.min.js"></script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''>
+</span>17 <span style=''>package monifu.reactive
+</span>18 <span style=''>
+</span>19 <span style=''>/**
+</span>20 <span style=''> * Represents the buffering policy chosen for actions that need buffering,
+</span>21 <span style=''> * instructing the pipeline what to do when the buffer is full.
+</span>22 <span style=''> *
+</span>23 <span style=''> * For the available policies, see:
+</span>24 <span style=''> *
+</span>25 <span style=''> * - [[BufferPolicy.Unbounded Unbounded]]
+</span>26 <span style=''> * - [[BufferPolicy.OverflowTriggering OverflowTriggering]]
+</span>27 <span style=''> * - [[BufferPolicy.BackPressured BackPressured]]
+</span>28 <span style=''> *
+</span>29 <span style=''> * Used in [[monifu.reactive.observers.BufferedSubscriber BufferedSubscriber]]
+</span>30 <span style=''> * to implement buffering when concurrent actions are needed, such as in
+</span>31 <span style=''> * [[monifu.reactive.Channel Channels]] or in [[monifu.reactive.Observable.merge Observable.merge]].
+</span>32 <span style=''> */
+</span>33 <span style=''>sealed trait BufferPolicy[+T]
+</span>34 <span style=''>
+</span>35 <span style=''>object BufferPolicy {
+</span>36 <span style=''>  /**
+</span>37 <span style=''>   * A category of [[BufferPolicy]] for buffers that can be used
+</span>38 <span style=''>   * synchronously, without worrying about back-pressure concerns.
+</span>39 <span style=''>   *
+</span>40 <span style=''>   * Needed such that buffer policies can safely be used
+</span>41 <span style=''>   * in combination with [[Channel]] for publishing. For now,
+</span>42 <span style=''>   * that's all policies except [[BackPressured]], a policy
+</span>43 <span style=''>   * that can't work for [[Channel]].
+</span>44 <span style=''>   */
+</span>45 <span style=''>  sealed trait Synchronous[+T] extends BufferPolicy[T]
+</span>46 <span style=''>  
+</span>47 <span style=''>  /**
+</span>48 <span style=''>   * A [[BufferPolicy]] specifying that the buffer is completely unbounded.
+</span>49 <span style=''>   * Using this policy implies that with a fast data source, the system's
+</span>50 <span style=''>   * memory can be exhausted and the process might blow up on lack of memory.
+</span>51 <span style=''>   */
+</span>52 <span style=''>  case object Unbounded extends Synchronous[Nothing]
+</span>53 <span style=''>
+</span>54 <span style=''>  /**
+</span>55 <span style=''>   * A [[BufferPolicy]] specifying that on reaching the maximum size,
+</span>56 <span style=''>   * the pipeline should cancel the subscription and send an `onError`
+</span>57 <span style=''>   * to the observer(s) downstream.
+</span>58 <span style=''>   *
+</span>59 <span style=''>   * @param bufferSize specifies how many events our buffer can hold
+</span>60 <span style=''>   *                   before overflowing
+</span>61 <span style=''>   */
+</span>62 <span style=''>  case class OverflowTriggering(bufferSize: Int)
+</span>63 <span style=''>    extends Synchronous[Nothing] {
+</span>64 <span style=''>
+</span>65 <span style=''>    </span><span style='background: #AEF1AE'>require(bufferSize > 1, </span><span style='background: #F0ADAD'>"bufferSize must be strictly greater than 1"</span><span style='background: #AEF1AE'>)</span><span style=''>
+</span>66 <span style=''>  }
+</span>67 <span style=''>
+</span>68 <span style=''>  /**
+</span>69 <span style=''>   * A [[BufferPolicy]] specifying that on reaching the maximum size,
+</span>70 <span style=''>   * the pipeline should try to apply back-pressure (i.e. it should try
+</span>71 <span style=''>   * delaying the data source in producing more elements, until the
+</span>72 <span style=''>   * the consumer has drained the buffer and space is available).
+</span>73 <span style=''>   *
+</span>74 <span style=''>   * @param bufferSize specifies how many events our buffer can hold
+</span>75 <span style=''>   *                   before overflowing
+</span>76 <span style=''>   */
+</span>77 <span style=''>  case class BackPressured(bufferSize: Int)
+</span>78 <span style=''>    extends BufferPolicy[Nothing] {
+</span>79 <span style=''>
+</span>80 <span style=''>    </span><span style='background: #AEF1AE'>require(bufferSize > 1, </span><span style='background: #F0ADAD'>"bufferSize should be strictly greater than 1"</span><span style='background: #AEF1AE'>)</span><span style=''>
+</span>81 <span style=''>  }
+</span>82 <span style=''>
+</span>83 <span style=''>  /**
+</span>84 <span style=''>   * A [[BufferPolicy]] specifying that on reaching the maximum size,
+</span>85 <span style=''>   * the pipeline should begin dropping incoming events until the buffer
+</span>86 <span style=''>   * has room in it again and is free to process more elements.
+</span>87 <span style=''>   *
+</span>88 <span style=''>   * @param bufferSize specifies how many events our buffer can hold
+</span>89 <span style=''>   *                   before overflowing
+</span>90 <span style=''>   */
+</span>91 <span style=''>  case class DropIncoming[T](bufferSize: Int)
+</span>92 <span style=''>    extends Synchronous[Nothing] {
+</span>93 <span style=''>
+</span>94 <span style=''>    </span><span style='background: #AEF1AE'>require(bufferSize > 1, </span><span style='background: #F0ADAD'>"bufferSize should be strictly greater than 1"</span><span style='background: #AEF1AE'>)</span><span style=''>
+</span>95 <span style=''>  }
+</span>96 <span style=''>
+</span>97 <span style=''>  /**
+</span>98 <span style=''>   * A [[BufferPolicy]] specifying that on reaching the maximum size,
+</span>99 <span style=''>   * the pipeline should begin dropping incoming events until the buffer
+</span>100 <span style=''>   * has room in it again and is free to process more elements.
+</span>101 <span style=''>   *
+</span>102 <span style=''>   * @param bufferSize specifies how many events our buffer can hold
+</span>103 <span style=''>   *                   before overflowing
+</span>104 <span style=''>   * @param onOverflow is a function that receives the number of events that were
+</span>105 <span style=''>   *                   dropped and is used to construct an overflow event for
+</span>106 <span style=''>   *                   signalling downstream that events were dropped.
+</span>107 <span style=''>   */
+</span>108 <span style=''>  case class DropIncomingThenSignal[+T](bufferSize: Int, onOverflow: Long => T)
+</span>109 <span style=''>    extends Synchronous[T] {
+</span>110 <span style=''>        
+</span>111 <span style=''>    </span><span style='background: #AEF1AE'>require(bufferSize > 1, </span><span style='background: #F0ADAD'>"bufferSize should be strictly greater than 1"</span><span style='background: #AEF1AE'>)</span><span style=''>
+</span>112 <span style=''>  }
+</span>113 <span style=''>
+</span>114 <span style=''>  /**
+</span>115 <span style=''>   * The default library-wide policy used whenever a default argument
+</span>116 <span style=''>   * value is needed.
+</span>117 <span style=''>   */
+</span>118 <span style=''>  val default: BufferPolicy[Nothing] = </span><span style='background: #AEF1AE'>BackPressured(bufferSize = 2048)</span><span style=''>
+</span>119 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          65
+        </td>
+        <td>
+          2488
+        </td>
+        <td>
+          2406
+          -
+          2420
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          OverflowTriggering.this.bufferSize.&gt;(1)
+        </td>
+      </tr><tr>
+        <td>
+          65
+        </td>
+        <td>
+          2490
+        </td>
+        <td>
+          2398
+          -
+          2467
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Predef.require
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.require(OverflowTriggering.this.bufferSize.&gt;(1), &quot;bufferSize must be strictly greater than 1&quot;)
+        </td>
+      </tr><tr>
+        <td>
+          65
+        </td>
+        <td>
+          2489
+        </td>
+        <td>
+          2422
+          -
+          2466
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          &quot;bufferSize must be strictly greater than 1&quot;
+        </td>
+      </tr><tr>
+        <td>
+          80
+        </td>
+        <td>
+          2493
+        </td>
+        <td>
+          2962
+          -
+          3033
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Predef.require
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.require(BackPressured.this.bufferSize.&gt;(1), &quot;bufferSize should be strictly greater than 1&quot;)
+        </td>
+      </tr><tr>
+        <td>
+          80
+        </td>
+        <td>
+          2492
+        </td>
+        <td>
+          2986
+          -
+          3032
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          &quot;bufferSize should be strictly greater than 1&quot;
+        </td>
+      </tr><tr>
+        <td>
+          80
+        </td>
+        <td>
+          2491
+        </td>
+        <td>
+          2970
+          -
+          2984
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          BackPressured.this.bufferSize.&gt;(1)
+        </td>
+      </tr><tr>
+        <td>
+          94
+        </td>
+        <td>
+          2496
+        </td>
+        <td>
+          3460
+          -
+          3531
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Predef.require
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.require(DropIncoming.this.bufferSize.&gt;(1), &quot;bufferSize should be strictly greater than 1&quot;)
+        </td>
+      </tr><tr>
+        <td>
+          94
+        </td>
+        <td>
+          2495
+        </td>
+        <td>
+          3484
+          -
+          3530
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          &quot;bufferSize should be strictly greater than 1&quot;
+        </td>
+      </tr><tr>
+        <td>
+          94
+        </td>
+        <td>
+          2494
+        </td>
+        <td>
+          3468
+          -
+          3482
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncoming.this.bufferSize.&gt;(1)
+        </td>
+      </tr><tr>
+        <td>
+          111
+        </td>
+        <td>
+          2499
+        </td>
+        <td>
+          4225
+          -
+          4296
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Predef.require
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.require(DropIncomingThenSignal.this.bufferSize.&gt;(1), &quot;bufferSize should be strictly greater than 1&quot;)
+        </td>
+      </tr><tr>
+        <td>
+          111
+        </td>
+        <td>
+          2498
+        </td>
+        <td>
+          4249
+          -
+          4295
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          &quot;bufferSize should be strictly greater than 1&quot;
+        </td>
+      </tr><tr>
+        <td>
+          111
+        </td>
+        <td>
+          2497
+        </td>
+        <td>
+          4233
+          -
+          4247
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          DropIncomingThenSignal.this.bufferSize.&gt;(1)
+        </td>
+      </tr><tr>
+        <td>
+          118
+        </td>
+        <td>
+          2500
+        </td>
+        <td>
+          4445
+          -
+          4477
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.BufferPolicy.BackPressured.apply
+        </td>
+        <td style="background: #AEF1AE">
+          BufferPolicy.this.BackPressured.apply(2048)
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

@@ -1,0 +1,994 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          monifu/concurrent/cancelables/SingleAssignmentCancelable.scala.html
+        </title>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''> 
+</span>17 <span style=''>package monifu.concurrent.cancelables
+</span>18 <span style=''>
+</span>19 <span style=''>import monifu.concurrent.atomic.AtomicAny
+</span>20 <span style=''>import scala.annotation.tailrec
+</span>21 <span style=''>import monifu.concurrent.Cancelable
+</span>22 <span style=''>
+</span>23 <span style=''>
+</span>24 <span style=''>/**
+</span>25 <span style=''> * Represents a [[monifu.concurrent.Cancelable]] that can be assigned only once to another
+</span>26 <span style=''> * cancelable reference.
+</span>27 <span style=''> *
+</span>28 <span style=''> * Similar to [[monifu.concurrent.cancelables.MultiAssignmentCancelable]], except that
+</span>29 <span style=''> * in case of multi-assignment, it throws a `java.lang.IllegalStateException`.
+</span>30 <span style=''> *
+</span>31 <span style=''> * If the assignment happens after this cancelable has been canceled, then on
+</span>32 <span style=''> * assignment the reference will get canceled too.
+</span>33 <span style=''> *
+</span>34 <span style=''> * Useful in case you need a forward reference.
+</span>35 <span style=''> */
+</span>36 <span style=''>final class SingleAssignmentCancelable private () extends BooleanCancelable {
+</span>37 <span style=''>  import State._
+</span>38 <span style=''>
+</span>39 <span style=''>  def isCanceled: Boolean = </span><span style='background: #AEF1AE'>state.get</span><span style=''> match {
+</span>40 <span style=''>    case IsEmptyCanceled | IsCanceled =>
+</span>41 <span style=''>      </span><span style='background: #AEF1AE'>true</span><span style=''>
+</span>42 <span style=''>    case _ =>
+</span>43 <span style=''>      </span><span style='background: #F0ADAD'>false</span><span style=''>
+</span>44 <span style=''>  }
+</span>45 <span style=''>
+</span>46 <span style=''>  /**
+</span>47 <span style=''>   * Sets the underlying cancelable reference with `s`.
+</span>48 <span style=''>   *
+</span>49 <span style=''>   * In case this `SingleAssignmentCancelable` is already canceled,
+</span>50 <span style=''>   * then the reference `value` will also be canceled on assignment.
+</span>51 <span style=''>   *
+</span>52 <span style=''>   * @throws IllegalStateException in case this cancelable has already been assigned
+</span>53 <span style=''>   */
+</span>54 <span style=''>  @throws(classOf[IllegalStateException])
+</span>55 <span style=''>  @tailrec
+</span>56 <span style=''>  def update(value: Cancelable): Unit = </span><span style='background: #AEF1AE'>state.get</span><span style=''> match {
+</span>57 <span style=''>    case Empty =>
+</span>58 <span style=''>      if (</span><span style='background: #AEF1AE'>!state.compareAndSet(Empty, IsNotCanceled(value))</span><span style=''>)
+</span>59 <span style=''>        </span><span style='background: #F0ADAD'>update(value)</span><span style=''>
+</span>60 <span style=''>    case IsEmptyCanceled =>
+</span>61 <span style=''>      if (</span><span style='background: #AEF1AE'>!state.compareAndSet(IsEmptyCanceled, IsCanceled)</span><span style=''>)
+</span>62 <span style=''>        </span><span style='background: #F0ADAD'>update(value)</span><span style=''>
+</span>63 <span style=''>      else
+</span>64 <span style=''>        </span><span style='background: #AEF1AE'>value.cancel()</span><span style=''>
+</span>65 <span style=''>    case IsCanceled | IsNotCanceled(_) =>
+</span>66 <span style=''>      </span><span style='background: #AEF1AE'>throw new IllegalStateException("Cannot assign to SingleAssignmentCancelable, as it was already assigned once")</span><span style=''>
+</span>67 <span style=''>  }
+</span>68 <span style=''>
+</span>69 <span style=''>  @tailrec
+</span>70 <span style=''>  def cancel(): Boolean = </span><span style='background: #AEF1AE'>state.get</span><span style=''> match {
+</span>71 <span style=''>    case Empty =>
+</span>72 <span style=''>      if (</span><span style='background: #AEF1AE'>!state.compareAndSet(Empty, IsEmptyCanceled)</span><span style=''>)
+</span>73 <span style=''>        </span><span style='background: #F0ADAD'>cancel()</span><span style=''>
+</span>74 <span style=''>      else
+</span>75 <span style=''>        </span><span style='background: #AEF1AE'>true</span><span style=''>
+</span>76 <span style=''>    case old @ IsNotCanceled(s) =>
+</span>77 <span style=''>      if (</span><span style='background: #AEF1AE'>!state.compareAndSet(old, IsCanceled)</span><span style=''>)
+</span>78 <span style=''>        </span><span style='background: #F0ADAD'>cancel()</span><span style=''>
+</span>79 <span style=''>      else </span><span style='background: #AEF1AE'>{
+</span>80 <span style=''></span><span style='background: #AEF1AE'>        s.cancel()
+</span>81 <span style=''></span><span style='background: #AEF1AE'>        true
+</span>82 <span style=''></span><span style='background: #AEF1AE'>      }</span><span style=''>
+</span>83 <span style=''>    case IsEmptyCanceled | IsCanceled =>
+</span>84 <span style=''>      </span><span style='background: #AEF1AE'>false</span><span style=''>
+</span>85 <span style=''>  }
+</span>86 <span style=''>
+</span>87 <span style=''>  /**
+</span>88 <span style=''>   * Alias for `update(value)`
+</span>89 <span style=''>   */
+</span>90 <span style=''>  def `:=`(value: Cancelable): Unit =
+</span>91 <span style=''>    </span><span style='background: #AEF1AE'>update(value)</span><span style=''>
+</span>92 <span style=''>
+</span>93 <span style=''>  private[this] val state = </span><span style='background: #AEF1AE'>AtomicAny(Empty : State)</span><span style=''>
+</span>94 <span style=''>
+</span>95 <span style=''>  private[this] sealed trait State
+</span>96 <span style=''>  private[this] object State {
+</span>97 <span style=''>    case object Empty extends State
+</span>98 <span style=''>    case class IsNotCanceled(s: Cancelable) extends State
+</span>99 <span style=''>    case object IsCanceled extends State
+</span>100 <span style=''>    case object IsEmptyCanceled extends State
+</span>101 <span style=''>  }
+</span>102 <span style=''>}
+</span>103 <span style=''>
+</span>104 <span style=''>object SingleAssignmentCancelable {
+</span>105 <span style=''>  def  apply(): SingleAssignmentCancelable =
+</span>106 <span style=''>    </span><span style='background: #AEF1AE'>new SingleAssignmentCancelable()</span><span style=''>
+</span>107 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          39
+        </td>
+        <td>
+          2230
+        </td>
+        <td>
+          1363
+          -
+          1372
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicAny.get
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentCancelable.this.state.get
+        </td>
+      </tr><tr>
+        <td>
+          41
+        </td>
+        <td>
+          2231
+        </td>
+        <td>
+          1428
+          -
+          1432
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          43
+        </td>
+        <td>
+          2232
+        </td>
+        <td>
+          1453
+          -
+          1458
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          false
+        </td>
+      </tr><tr>
+        <td>
+          56
+        </td>
+        <td>
+          2233
+        </td>
+        <td>
+          1857
+          -
+          1866
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicAny.get
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentCancelable.this.state.get
+        </td>
+      </tr><tr>
+        <td>
+          58
+        </td>
+        <td>
+          2236
+        </td>
+        <td>
+          1903
+          -
+          1952
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentCancelable.this.state.compareAndSet(SingleAssignmentCancelable.this.State.Empty, SingleAssignmentCancelable.this.State.IsNotCanceled.apply(value)).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          58
+        </td>
+        <td>
+          2239
+        </td>
+        <td>
+          1899
+          -
+          1899
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          58
+        </td>
+        <td>
+          2235
+        </td>
+        <td>
+          1931
+          -
+          1951
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.SingleAssignmentCancelable.State.IsNotCanceled.apply
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentCancelable.this.State.IsNotCanceled.apply(value)
+        </td>
+      </tr><tr>
+        <td>
+          58
+        </td>
+        <td>
+          2234
+        </td>
+        <td>
+          1924
+          -
+          1929
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.cancelables.SingleAssignmentCancelable.State.Empty
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentCancelable.this.State.Empty
+        </td>
+      </tr><tr>
+        <td>
+          58
+        </td>
+        <td>
+          2240
+        </td>
+        <td>
+          1899
+          -
+          1899
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          59
+        </td>
+        <td>
+          2238
+        </td>
+        <td>
+          1962
+          -
+          1975
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.concurrent.cancelables.SingleAssignmentCancelable.update
+        </td>
+        <td style="background: #F0ADAD">
+          SingleAssignmentCancelable.this.update(value)
+        </td>
+      </tr><tr>
+        <td>
+          59
+        </td>
+        <td>
+          2237
+        </td>
+        <td>
+          1962
+          -
+          1975
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.SingleAssignmentCancelable.update
+        </td>
+        <td style="background: #F0ADAD">
+          SingleAssignmentCancelable.this.update(value)
+        </td>
+      </tr><tr>
+        <td>
+          61
+        </td>
+        <td>
+          2242
+        </td>
+        <td>
+          2052
+          -
+          2062
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.cancelables.SingleAssignmentCancelable.State.IsCanceled
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentCancelable.this.State.IsCanceled
+        </td>
+      </tr><tr>
+        <td>
+          61
+        </td>
+        <td>
+          2241
+        </td>
+        <td>
+          2035
+          -
+          2050
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.cancelables.SingleAssignmentCancelable.State.IsEmptyCanceled
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentCancelable.this.State.IsEmptyCanceled
+        </td>
+      </tr><tr>
+        <td>
+          61
+        </td>
+        <td>
+          2243
+        </td>
+        <td>
+          2014
+          -
+          2063
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentCancelable.this.state.compareAndSet(SingleAssignmentCancelable.this.State.IsEmptyCanceled, SingleAssignmentCancelable.this.State.IsCanceled).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          62
+        </td>
+        <td>
+          2245
+        </td>
+        <td>
+          2073
+          -
+          2086
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.concurrent.cancelables.SingleAssignmentCancelable.update
+        </td>
+        <td style="background: #F0ADAD">
+          SingleAssignmentCancelable.this.update(value)
+        </td>
+      </tr><tr>
+        <td>
+          62
+        </td>
+        <td>
+          2244
+        </td>
+        <td>
+          2073
+          -
+          2086
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.SingleAssignmentCancelable.update
+        </td>
+        <td style="background: #F0ADAD">
+          SingleAssignmentCancelable.this.update(value)
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          2248
+        </td>
+        <td>
+          2106
+          -
+          2120
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  value.cancel();
+  ()
+}
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          2247
+        </td>
+        <td>
+          2118
+          -
+          2118
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          64
+        </td>
+        <td>
+          2246
+        </td>
+        <td>
+          2106
+          -
+          2120
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Cancelable.cancel
+        </td>
+        <td style="background: #AEF1AE">
+          value.cancel()
+        </td>
+      </tr><tr>
+        <td>
+          66
+        </td>
+        <td>
+          2249
+        </td>
+        <td>
+          2169
+          -
+          2280
+        </td>
+        <td>
+          Throw
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          throw new java.this.lang.IllegalStateException(&quot;Cannot assign to SingleAssignmentCancelable, as it was already assigned once&quot;)
+        </td>
+      </tr><tr>
+        <td>
+          70
+        </td>
+        <td>
+          2250
+        </td>
+        <td>
+          2323
+          -
+          2332
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicAny.get
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentCancelable.this.state.get
+        </td>
+      </tr><tr>
+        <td>
+          72
+        </td>
+        <td>
+          2251
+        </td>
+        <td>
+          2390
+          -
+          2395
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.cancelables.SingleAssignmentCancelable.State.Empty
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentCancelable.this.State.Empty
+        </td>
+      </tr><tr>
+        <td>
+          72
+        </td>
+        <td>
+          2253
+        </td>
+        <td>
+          2369
+          -
+          2413
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentCancelable.this.state.compareAndSet(SingleAssignmentCancelable.this.State.Empty, SingleAssignmentCancelable.this.State.IsEmptyCanceled).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          72
+        </td>
+        <td>
+          2252
+        </td>
+        <td>
+          2397
+          -
+          2412
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.cancelables.SingleAssignmentCancelable.State.IsEmptyCanceled
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentCancelable.this.State.IsEmptyCanceled
+        </td>
+      </tr><tr>
+        <td>
+          73
+        </td>
+        <td>
+          2254
+        </td>
+        <td>
+          2423
+          -
+          2431
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.SingleAssignmentCancelable.cancel
+        </td>
+        <td style="background: #F0ADAD">
+          SingleAssignmentCancelable.this.cancel()
+        </td>
+      </tr><tr>
+        <td>
+          73
+        </td>
+        <td>
+          2255
+        </td>
+        <td>
+          2423
+          -
+          2431
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.concurrent.cancelables.SingleAssignmentCancelable.cancel
+        </td>
+        <td style="background: #F0ADAD">
+          SingleAssignmentCancelable.this.cancel()
+        </td>
+      </tr><tr>
+        <td>
+          75
+        </td>
+        <td>
+          2257
+        </td>
+        <td>
+          2451
+          -
+          2455
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          75
+        </td>
+        <td>
+          2256
+        </td>
+        <td>
+          2451
+          -
+          2455
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          77
+        </td>
+        <td>
+          2259
+        </td>
+        <td>
+          2501
+          -
+          2538
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Boolean.unary_!
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentCancelable.this.state.compareAndSet(old, SingleAssignmentCancelable.this.State.IsCanceled).unary_!
+        </td>
+      </tr><tr>
+        <td>
+          77
+        </td>
+        <td>
+          2258
+        </td>
+        <td>
+          2527
+          -
+          2537
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.cancelables.SingleAssignmentCancelable.State.IsCanceled
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentCancelable.this.State.IsCanceled
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          2260
+        </td>
+        <td>
+          2548
+          -
+          2556
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.SingleAssignmentCancelable.cancel
+        </td>
+        <td style="background: #F0ADAD">
+          SingleAssignmentCancelable.this.cancel()
+        </td>
+      </tr><tr>
+        <td>
+          78
+        </td>
+        <td>
+          2261
+        </td>
+        <td>
+          2548
+          -
+          2556
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.concurrent.cancelables.SingleAssignmentCancelable.cancel
+        </td>
+        <td style="background: #F0ADAD">
+          SingleAssignmentCancelable.this.cancel()
+        </td>
+      </tr><tr>
+        <td>
+          79
+        </td>
+        <td>
+          2264
+        </td>
+        <td>
+          2568
+          -
+          2609
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          {
+  s.cancel();
+  true
+}
+        </td>
+      </tr><tr>
+        <td>
+          80
+        </td>
+        <td>
+          2262
+        </td>
+        <td>
+          2578
+          -
+          2588
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Cancelable.cancel
+        </td>
+        <td style="background: #AEF1AE">
+          s.cancel()
+        </td>
+      </tr><tr>
+        <td>
+          81
+        </td>
+        <td>
+          2263
+        </td>
+        <td>
+          2597
+          -
+          2601
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          true
+        </td>
+      </tr><tr>
+        <td>
+          84
+        </td>
+        <td>
+          2265
+        </td>
+        <td>
+          2657
+          -
+          2662
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          false
+        </td>
+      </tr><tr>
+        <td>
+          91
+        </td>
+        <td>
+          2266
+        </td>
+        <td>
+          2753
+          -
+          2766
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.SingleAssignmentCancelable.update
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentCancelable.this.update(value)
+        </td>
+      </tr><tr>
+        <td>
+          93
+        </td>
+        <td>
+          2268
+        </td>
+        <td>
+          2796
+          -
+          2820
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicAny.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.concurrent.atomic.AtomicAny.apply[SingleAssignmentCancelable.this.State]((SingleAssignmentCancelable.this.State.Empty: SingleAssignmentCancelable.this.State))
+        </td>
+      </tr><tr>
+        <td>
+          93
+        </td>
+        <td>
+          2267
+        </td>
+        <td>
+          2806
+          -
+          2811
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.cancelables.SingleAssignmentCancelable.State.Empty
+        </td>
+        <td style="background: #AEF1AE">
+          SingleAssignmentCancelable.this.State.Empty
+        </td>
+      </tr><tr>
+        <td>
+          106
+        </td>
+        <td>
+          2269
+        </td>
+        <td>
+          3161
+          -
+          3193
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.cancelables.SingleAssignmentCancelable.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new SingleAssignmentCancelable()
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

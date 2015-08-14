@@ -1,0 +1,463 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          monifu/reactive/builders/repeat.scala.html
+        </title>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''>
+</span>17 <span style=''>package monifu.reactive.builders
+</span>18 <span style=''>
+</span>19 <span style=''>import monifu.reactive.Ack.Continue
+</span>20 <span style=''>import monifu.reactive.Observable
+</span>21 <span style=''>
+</span>22 <span style=''>object repeat {
+</span>23 <span style=''>  /**
+</span>24 <span style=''>   * Creates an Observable that continuously emits the given ''item'' repeatedly.
+</span>25 <span style=''>   */
+</span>26 <span style=''>  def apply[T](elems: T*): Observable[T] = {
+</span>27 <span style=''>    if (</span><span style='background: #AEF1AE'>elems.size == 0</span><span style=''>)
+</span>28 <span style=''>      </span><span style='background: #F0ADAD'>Observable.empty</span><span style=''>
+</span>29 <span style=''>    else </span><span style='background: #AEF1AE'>if (elems.size == 1) {
+</span>30 <span style=''></span><span style='background: #AEF1AE'>      Observable.create { subscriber =>
+</span>31 <span style=''></span><span style='background: #AEF1AE'>        implicit val s = subscriber.scheduler
+</span>32 <span style=''></span><span style='background: #AEF1AE'>        val o = subscriber.observer
+</span>33 <span style=''></span><span style='background: #AEF1AE'>
+</span>34 <span style=''></span><span style='background: #AEF1AE'>        def loop(elem: T): Unit =
+</span>35 <span style=''></span><span style='background: #AEF1AE'>          o.onNext(elem).onSuccess {
+</span>36 <span style=''></span><span style='background: #AEF1AE'>            case Continue =>
+</span>37 <span style=''></span><span style='background: #AEF1AE'>              loop(elem)
+</span>38 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>39 <span style=''></span><span style='background: #AEF1AE'>
+</span>40 <span style=''></span><span style='background: #AEF1AE'>        loop(elems.head)
+</span>41 <span style=''></span><span style='background: #AEF1AE'>      }
+</span>42 <span style=''></span><span style='background: #AEF1AE'>    }
+</span>43 <span style=''></span><span style='background: #AEF1AE'>    else
+</span>44 <span style=''></span><span style='background: #AEF1AE'>      </span><span style='background: #F0ADAD'>Observable.fromIterable(elems).repeat</span><span style=''>
+</span>45 <span style=''>  }
+</span>46 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          27
+        </td>
+        <td>
+          2888
+        </td>
+        <td>
+          879
+          -
+          894
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.==
+        </td>
+        <td style="background: #AEF1AE">
+          elems.size.==(0)
+        </td>
+      </tr><tr>
+        <td>
+          28
+        </td>
+        <td>
+          2890
+        </td>
+        <td>
+          902
+          -
+          918
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Observable.empty
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Observable.empty
+        </td>
+      </tr><tr>
+        <td>
+          28
+        </td>
+        <td>
+          2889
+        </td>
+        <td>
+          902
+          -
+          918
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Observable.empty
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Observable.empty
+        </td>
+      </tr><tr>
+        <td>
+          29
+        </td>
+        <td>
+          2891
+        </td>
+        <td>
+          932
+          -
+          947
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Int.==
+        </td>
+        <td style="background: #AEF1AE">
+          elems.size.==(1)
+        </td>
+      </tr><tr>
+        <td>
+          29
+        </td>
+        <td>
+          2901
+        </td>
+        <td>
+          928
+          -
+          1303
+        </td>
+        <td>
+          If
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          if (elems.size.==(1))
+  monifu.reactive.Observable.create[T](((subscriber: monifu.reactive.Subscriber[T]) =&gt; {
+    implicit val s: monifu.concurrent.Scheduler = subscriber.scheduler;
+    val o: monifu.reactive.Observer[T] = subscriber.observer;
+    def loop(elem: T): Unit = o.onNext(elem).onSuccess[Unit](({
+      @SerialVersionUID(value = 0) final &lt;synthetic&gt; class $anonfun extends scala.runtime.AbstractPartialFunction[monifu.reactive.Ack,Unit] with Serializable {
+        def &lt;init&gt;(): &lt;$anon: monifu.reactive.Ack =&gt; Unit&gt; = {
+          $anonfun.super.&lt;init&gt;();
+          ()
+        };
+        final override def applyOrElse[A1 &lt;: monifu.reactive.Ack, B1 &gt;: Unit](x1: A1, default: A1 =&gt; B1): B1 = ((x1.asInstanceOf[monifu.reactive.Ack]: monifu.reactive.Ack): monifu.reactive.Ack @unchecked) match {
+          case monifu.reactive.Ack.Continue =&gt; loop(elem)
+          case (defaultCase$ @ _) =&gt; default.apply(x1)
+        };
+        final def isDefinedAt(x1: monifu.reactive.Ack): Boolean = ((x1.asInstanceOf[monifu.reactive.Ack]: monifu.reactive.Ack): monifu.reactive.Ack @unchecked) match {
+          case monifu.reactive.Ack.Continue =&gt; true
+          case (defaultCase$ @ _) =&gt; false
+        }
+      };
+      new $anonfun()
+    }: PartialFunction[monifu.reactive.Ack,Unit]))(s);
+    loop(elems.head)
+  }))
+else
+  monifu.reactive.Observable.fromIterable[T](elems).repeat
+        </td>
+      </tr><tr>
+        <td>
+          30
+        </td>
+        <td>
+          2897
+        </td>
+        <td>
+          957
+          -
+          1244
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observable.create
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Observable.create[T](((subscriber: monifu.reactive.Subscriber[T]) =&gt; {
+  implicit val s: monifu.concurrent.Scheduler = subscriber.scheduler;
+  val o: monifu.reactive.Observer[T] = subscriber.observer;
+  def loop(elem: T): Unit = o.onNext(elem).onSuccess[Unit](({
+    @SerialVersionUID(value = 0) final &lt;synthetic&gt; class $anonfun extends scala.runtime.AbstractPartialFunction[monifu.reactive.Ack,Unit] with Serializable {
+      def &lt;init&gt;(): &lt;$anon: monifu.reactive.Ack =&gt; Unit&gt; = {
+        $anonfun.super.&lt;init&gt;();
+        ()
+      };
+      final override def applyOrElse[A1 &lt;: monifu.reactive.Ack, B1 &gt;: Unit](x1: A1, default: A1 =&gt; B1): B1 = ((x1.asInstanceOf[monifu.reactive.Ack]: monifu.reactive.Ack): monifu.reactive.Ack @unchecked) match {
+        case monifu.reactive.Ack.Continue =&gt; loop(elem)
+        case (defaultCase$ @ _) =&gt; default.apply(x1)
+      };
+      final def isDefinedAt(x1: monifu.reactive.Ack): Boolean = ((x1.asInstanceOf[monifu.reactive.Ack]: monifu.reactive.Ack): monifu.reactive.Ack @unchecked) match {
+        case monifu.reactive.Ack.Continue =&gt; true
+        case (defaultCase$ @ _) =&gt; false
+      }
+    };
+    new $anonfun()
+  }: PartialFunction[monifu.reactive.Ack,Unit]))(s);
+  loop(elems.head)
+}))
+        </td>
+      </tr><tr>
+        <td>
+          30
+        </td>
+        <td>
+          2898
+        </td>
+        <td>
+          957
+          -
+          1244
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Observable.create
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Observable.create[T](((subscriber: monifu.reactive.Subscriber[T]) =&gt; {
+  implicit val s: monifu.concurrent.Scheduler = subscriber.scheduler;
+  val o: monifu.reactive.Observer[T] = subscriber.observer;
+  def loop(elem: T): Unit = o.onNext(elem).onSuccess[Unit](({
+    @SerialVersionUID(value = 0) final &lt;synthetic&gt; class $anonfun extends scala.runtime.AbstractPartialFunction[monifu.reactive.Ack,Unit] with Serializable {
+      def &lt;init&gt;(): &lt;$anon: monifu.reactive.Ack =&gt; Unit&gt; = {
+        $anonfun.super.&lt;init&gt;();
+        ()
+      };
+      final override def applyOrElse[A1 &lt;: monifu.reactive.Ack, B1 &gt;: Unit](x1: A1, default: A1 =&gt; B1): B1 = ((x1.asInstanceOf[monifu.reactive.Ack]: monifu.reactive.Ack): monifu.reactive.Ack @unchecked) match {
+        case monifu.reactive.Ack.Continue =&gt; loop(elem)
+        case (defaultCase$ @ _) =&gt; default.apply(x1)
+      };
+      final def isDefinedAt(x1: monifu.reactive.Ack): Boolean = ((x1.asInstanceOf[monifu.reactive.Ack]: monifu.reactive.Ack): monifu.reactive.Ack @unchecked) match {
+        case monifu.reactive.Ack.Continue =&gt; true
+        case (defaultCase$ @ _) =&gt; false
+      }
+    };
+    new $anonfun()
+  }: PartialFunction[monifu.reactive.Ack,Unit]))(s);
+  loop(elems.head)
+}))
+        </td>
+      </tr><tr>
+        <td>
+          31
+        </td>
+        <td>
+          2892
+        </td>
+        <td>
+          1016
+          -
+          1036
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          32
+        </td>
+        <td>
+          2893
+        </td>
+        <td>
+          1053
+          -
+          1072
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.observer
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.observer
+        </td>
+      </tr><tr>
+        <td>
+          35
+        </td>
+        <td>
+          2894
+        </td>
+        <td>
+          1118
+          -
+          1210
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.concurrent.Future.onSuccess
+        </td>
+        <td style="background: #AEF1AE">
+          o.onNext(elem).onSuccess[Unit](({
+  @SerialVersionUID(value = 0) final &lt;synthetic&gt; class $anonfun extends scala.runtime.AbstractPartialFunction[monifu.reactive.Ack,Unit] with Serializable {
+    def &lt;init&gt;(): &lt;$anon: monifu.reactive.Ack =&gt; Unit&gt; = {
+      $anonfun.super.&lt;init&gt;();
+      ()
+    };
+    final override def applyOrElse[A1 &lt;: monifu.reactive.Ack, B1 &gt;: Unit](x1: A1, default: A1 =&gt; B1): B1 = ((x1.asInstanceOf[monifu.reactive.Ack]: monifu.reactive.Ack): monifu.reactive.Ack @unchecked) match {
+      case monifu.reactive.Ack.Continue =&gt; loop(elem)
+      case (defaultCase$ @ _) =&gt; default.apply(x1)
+    };
+    final def isDefinedAt(x1: monifu.reactive.Ack): Boolean = ((x1.asInstanceOf[monifu.reactive.Ack]: monifu.reactive.Ack): monifu.reactive.Ack @unchecked) match {
+      case monifu.reactive.Ack.Continue =&gt; true
+      case (defaultCase$ @ _) =&gt; false
+    }
+  };
+  new $anonfun()
+}: PartialFunction[monifu.reactive.Ack,Unit]))(s)
+        </td>
+      </tr><tr>
+        <td>
+          40
+        </td>
+        <td>
+          2896
+        </td>
+        <td>
+          1220
+          -
+          1236
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.builders.repeat.loop
+        </td>
+        <td style="background: #AEF1AE">
+          loop(elems.head)
+        </td>
+      </tr><tr>
+        <td>
+          40
+        </td>
+        <td>
+          2895
+        </td>
+        <td>
+          1225
+          -
+          1235
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.collection.IterableLike.head
+        </td>
+        <td style="background: #AEF1AE">
+          elems.head
+        </td>
+      </tr><tr>
+        <td>
+          44
+        </td>
+        <td>
+          2900
+        </td>
+        <td>
+          1266
+          -
+          1303
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Observable.repeat
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Observable.fromIterable[T](elems).repeat
+        </td>
+      </tr><tr>
+        <td>
+          44
+        </td>
+        <td>
+          2899
+        </td>
+        <td>
+          1266
+          -
+          1303
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Observable.repeat
+        </td>
+        <td style="background: #F0ADAD">
+          monifu.reactive.Observable.fromIterable[T](elems).repeat
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

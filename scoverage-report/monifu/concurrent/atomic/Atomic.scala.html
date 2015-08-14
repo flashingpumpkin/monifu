@@ -1,0 +1,232 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          monifu/concurrent/atomic/Atomic.scala.html
+        </title>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''> 
+</span>17 <span style=''>package monifu.concurrent.atomic
+</span>18 <span style=''>
+</span>19 <span style=''>/**
+</span>20 <span style=''> * Base trait of all atomic references, no matter the type.
+</span>21 <span style=''> */
+</span>22 <span style=''>trait Atomic[T] extends Any {
+</span>23 <span style=''>  /**
+</span>24 <span style=''>   * @return the current value persisted by this Atomic
+</span>25 <span style=''>   */
+</span>26 <span style=''>  def get: T
+</span>27 <span style=''>
+</span>28 <span style=''>  /**
+</span>29 <span style=''>   * @return the current value persisted by this Atomic, an alias for `get()`
+</span>30 <span style=''>   */
+</span>31 <span style=''>  def apply(): T = </span><span style='background: #AEF1AE'>get</span><span style=''>
+</span>32 <span style=''>
+</span>33 <span style=''>  /**
+</span>34 <span style=''>   * Updates the current value.
+</span>35 <span style=''>   * @param update will be the new value returned by `get()`
+</span>36 <span style=''>   */
+</span>37 <span style=''>  def set(update: T): Unit
+</span>38 <span style=''>
+</span>39 <span style=''>  /**
+</span>40 <span style=''>   * Alias for `set()`. Updates the current value.
+</span>41 <span style=''>   * @param value will be the new value returned by `get()`
+</span>42 <span style=''>   */
+</span>43 <span style=''>  def update(value: T): Unit
+</span>44 <span style=''>
+</span>45 <span style=''>  /**
+</span>46 <span style=''>   * Alias for `set()`. Updates the current value.
+</span>47 <span style=''>   * @param value will be the new value returned by `get()`
+</span>48 <span style=''>   */
+</span>49 <span style=''>  def `:=`(value: T): Unit
+</span>50 <span style=''>
+</span>51 <span style=''>  /**
+</span>52 <span style=''>   * Does a compare-and-set operation on the current value. For more info, checkout the related
+</span>53 <span style=''>   * [[https://en.wikipedia.org/wiki/Compare-and-swap Compare-and-swap Wikipedia page]].
+</span>54 <span style=''>   *
+</span>55 <span style=''>   * It's an atomic, worry free operation.
+</span>56 <span style=''>   *
+</span>57 <span style=''>   * @param expect is the value you expect to be persisted when the operation happens
+</span>58 <span style=''>   * @param update will be the new value, should the check for `expect` succeeds
+</span>59 <span style=''>   * @return either true in case the operation succeeded or false otherwise
+</span>60 <span style=''>   */
+</span>61 <span style=''>  def compareAndSet(expect: T, update: T): Boolean
+</span>62 <span style=''>
+</span>63 <span style=''>  /**
+</span>64 <span style=''>   * Sets the persisted value to `update` and returns the old value that was in place.
+</span>65 <span style=''>   * It's an atomic, worry free operation.
+</span>66 <span style=''>   */
+</span>67 <span style=''>  def getAndSet(update: T): T
+</span>68 <span style=''>
+</span>69 <span style=''>  /**
+</span>70 <span style=''>   * Eventually sets to the given value. Has weaker visibility guarantees than the normal `set()`.
+</span>71 <span style=''>   *
+</span>72 <span style=''>   */
+</span>73 <span style=''>  def lazySet(update: T): Unit
+</span>74 <span style=''>
+</span>75 <span style=''>  /**
+</span>76 <span style=''>   * Abstracts over `compareAndSet`. You specify a transformation by specifying a callback to be
+</span>77 <span style=''>   * executed, a callback that transforms the current value. This method will loop until it will
+</span>78 <span style=''>   * succeed in replacing the current value with the one produced by your callback.
+</span>79 <span style=''>   *
+</span>80 <span style=''>   * Note that the callback will be executed on each iteration of the loop, so it can be called
+</span>81 <span style=''>   * multiple times - don't do destructive I/O or operations that mutate global state in it.
+</span>82 <span style=''>   *
+</span>83 <span style=''>   * @param cb is a callback that receives the current value as input and returns a tuple that specifies
+</span>84 <span style=''>   *           the update + what should this method return when the operation succeeds.
+</span>85 <span style=''>   * @return whatever was specified by your callback, once the operation succeeds
+</span>86 <span style=''>   */
+</span>87 <span style=''>  def transformAndExtract[U](cb: (T) => (U, T)): U
+</span>88 <span style=''>
+</span>89 <span style=''>  /**
+</span>90 <span style=''>   * Abstracts over `compareAndSet`. You specify a transformation by specifying a callback to be
+</span>91 <span style=''>   * executed, a callback that transforms the current value. This method will loop until it will
+</span>92 <span style=''>   * succeed in replacing the current value with the one produced by the given callback.
+</span>93 <span style=''>   *
+</span>94 <span style=''>   * Note that the callback will be executed on each iteration of the loop, so it can be called
+</span>95 <span style=''>   * multiple times - don't do destructive I/O or operations that mutate global state in it.
+</span>96 <span style=''>   *
+</span>97 <span style=''>   * @param cb is a callback that receives the current value as input and returns the `update` which is the
+</span>98 <span style=''>   *           new value that should be persisted
+</span>99 <span style=''>   * @return whatever the update is, after the operation succeeds
+</span>100 <span style=''>   */
+</span>101 <span style=''>  def transformAndGet(cb: (T) => T): T
+</span>102 <span style=''>
+</span>103 <span style=''>  /**
+</span>104 <span style=''>   * Abstracts over `compareAndSet`. You specify a transformation by specifying a callback to be
+</span>105 <span style=''>   * executed, a callback that transforms the current value. This method will loop until it will
+</span>106 <span style=''>   * succeed in replacing the current value with the one produced by the given callback.
+</span>107 <span style=''>   *
+</span>108 <span style=''>   * Note that the callback will be executed on each iteration of the loop, so it can be called
+</span>109 <span style=''>   * multiple times - don't do destructive I/O or operations that mutate global state in it.
+</span>110 <span style=''>   *
+</span>111 <span style=''>   * @param cb is a callback that receives the current value as input and returns the `update` which is the
+</span>112 <span style=''>   *           new value that should be persisted
+</span>113 <span style=''>   * @return the old value, just prior to when the successful update happened
+</span>114 <span style=''>   */
+</span>115 <span style=''>  def getAndTransform(cb: (T) => T): T
+</span>116 <span style=''>
+</span>117 <span style=''>  /**
+</span>118 <span style=''>   * Abstracts over `compareAndSet`. You specify a transformation by specifying a callback to be
+</span>119 <span style=''>   * executed, a callback that transforms the current value. This method will loop until it will
+</span>120 <span style=''>   * succeed in replacing the current value with the one produced by the given callback.
+</span>121 <span style=''>   *
+</span>122 <span style=''>   * Note that the callback will be executed on each iteration of the loop, so it can be called
+</span>123 <span style=''>   * multiple times - don't do destructive I/O or operations that mutate global state in it.
+</span>124 <span style=''>   *
+</span>125 <span style=''>   * @param cb is a callback that receives the current value as input and returns the `update` which is the
+</span>126 <span style=''>   *           new value that should be persisted
+</span>127 <span style=''>   */
+</span>128 <span style=''>  def transform(cb: (T) => T): Unit
+</span>129 <span style=''>}
+</span>130 <span style=''>
+</span>131 <span style=''>object Atomic {
+</span>132 <span style=''>  /**
+</span>133 <span style=''>   * Constructs an `Atomic[T]` reference. Based on the `initialValue`, it will return the best, most specific
+</span>134 <span style=''>   * type. E.g. you give it a number, it will return something inheriting from `AtomicNumber[T]`. That's why
+</span>135 <span style=''>   * it takes an `AtomicBuilder[T, R]` as an implicit parameter - but worry not about such details as it just works.
+</span>136 <span style=''>   *
+</span>137 <span style=''>   * @param initialValue is the initial value with which to initialize the Atomic reference
+</span>138 <span style=''>   * @param builder is the builder that helps us to build the best reference possible, based on our `initialValue`
+</span>139 <span style=''>   */
+</span>140 <span style=''>  def apply[T, R <: Atomic[T]](initialValue: T)(implicit builder: AtomicBuilder[T, R]): R =
+</span>141 <span style=''>    </span><span style='background: #AEF1AE'>builder.buildInstance(initialValue)</span><span style=''>
+</span>142 <span style=''>
+</span>143 <span style=''>  /**
+</span>144 <span style=''>   * Returns the builder that would be chosen to construct Atomic references
+</span>145 <span style=''>   * for the given `initialValue`.
+</span>146 <span style=''>   */
+</span>147 <span style=''>  def builderFor[T, R <: Atomic[T]](initialValue: T)(implicit builder: AtomicBuilder[T, R]): AtomicBuilder[T, R] =
+</span>148 <span style=''>    builder
+</span>149 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          31
+        </td>
+        <td>
+          27
+        </td>
+        <td>
+          935
+          -
+          938
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.concurrent.atomic.Atomic.get
+        </td>
+        <td style="background: #AEF1AE">
+          Atomic.this.get
+        </td>
+      </tr><tr>
+        <td>
+          141
+        </td>
+        <td>
+          28
+        </td>
+        <td>
+          5950
+          -
+          5985
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.atomic.AtomicBuilder.buildInstance
+        </td>
+        <td style="background: #AEF1AE">
+          builder.buildInstance(initialValue)
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

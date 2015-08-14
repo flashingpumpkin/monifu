@@ -1,0 +1,775 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          /Users/alex/Projects/org.monifu/monifu/shared/src/main/scala/monifu/reactive/builders/range.scala.html
+        </title>
+        <link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css"/>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+        <script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script>
+        <script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.18.3/addons/pager/jquery.tablesorter.pager.min.js"></script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''>
+</span>17 <span style=''>package monifu.reactive.builders
+</span>18 <span style=''>
+</span>19 <span style=''>import monifu.reactive.Ack.Continue
+</span>20 <span style=''>import monifu.reactive.Observable
+</span>21 <span style=''>import scala.annotation.tailrec
+</span>22 <span style=''>
+</span>23 <span style=''>object range {
+</span>24 <span style=''>  /**
+</span>25 <span style=''>   * Creates an Observable that emits items in the given range.
+</span>26 <span style=''>   *
+</span>27 <span style=''>   * <img src="https://raw.githubusercontent.com/wiki/monifu/monifu/assets/rx-operators/range.png" />
+</span>28 <span style=''>   *
+</span>29 <span style=''>   * @param from the range start
+</span>30 <span style=''>   * @param until the range end
+</span>31 <span style=''>   * @param step increment step, either positive or negative
+</span>32 <span style=''>   */
+</span>33 <span style=''>  def apply(from: Long, until: Long, step: Long = 1): Observable[Long] = {
+</span>34 <span style=''>    </span><span style='background: #AEF1AE'>require(step != 0, "step must be a number different from zero")</span><span style=''>
+</span>35 <span style=''>
+</span>36 <span style=''>    </span><span style='background: #AEF1AE'>Observable.create { subscriber =>
+</span>37 <span style=''></span><span style='background: #AEF1AE'>      implicit val s = subscriber.scheduler
+</span>38 <span style=''></span><span style='background: #AEF1AE'>      val o = subscriber.observer
+</span>39 <span style=''></span><span style='background: #AEF1AE'>
+</span>40 <span style=''></span><span style='background: #AEF1AE'>      def scheduleLoop(from: Long, until: Long, step: Long): Unit =
+</span>41 <span style=''></span><span style='background: #AEF1AE'>        s.execute(new Runnable {
+</span>42 <span style=''></span><span style='background: #AEF1AE'>          private[this] def isInRange(x: Long): Boolean = {
+</span>43 <span style=''></span><span style='background: #AEF1AE'>            (step > 0 && x < until) || (step < 0 && x > until)
+</span>44 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>45 <span style=''></span><span style='background: #AEF1AE'>
+</span>46 <span style=''></span><span style='background: #AEF1AE'>          def reschedule(from: Long, until: Long, step: Long): Unit =
+</span>47 <span style=''></span><span style='background: #AEF1AE'>            fastLoop(from, until, step)
+</span>48 <span style=''></span><span style='background: #AEF1AE'>
+</span>49 <span style=''></span><span style='background: #AEF1AE'>          @tailrec
+</span>50 <span style=''></span><span style='background: #AEF1AE'>          def fastLoop(from: Long, until: Long, step: Long): Unit =
+</span>51 <span style=''></span><span style='background: #AEF1AE'>            if (isInRange(from))
+</span>52 <span style=''></span><span style='background: #AEF1AE'>              o.onNext(from) match {
+</span>53 <span style=''></span><span style='background: #AEF1AE'>                case sync if sync.isCompleted =>
+</span>54 <span style=''></span><span style='background: #AEF1AE'>                  sync.value.get match {
+</span>55 <span style=''></span><span style='background: #AEF1AE'>                    case Continue.IsSuccess =>
+</span>56 <span style=''></span><span style='background: #AEF1AE'>                      fastLoop(from + step, until, step)
+</span>57 <span style=''></span><span style='background: #AEF1AE'>                    case _ =>
+</span>58 <span style=''></span><span style='background: #AEF1AE'>                      () // do nothing else
+</span>59 <span style=''></span><span style='background: #AEF1AE'>                  }
+</span>60 <span style=''></span><span style='background: #AEF1AE'>
+</span>61 <span style=''></span><span style='background: #AEF1AE'>                case async =>
+</span>62 <span style=''></span><span style='background: #AEF1AE'>                  async.onComplete {
+</span>63 <span style=''></span><span style='background: #AEF1AE'>                    case Continue.IsSuccess =>
+</span>64 <span style=''></span><span style='background: #AEF1AE'>                      reschedule(from + step, until, step)
+</span>65 <span style=''></span><span style='background: #AEF1AE'>                    case _ =>
+</span>66 <span style=''></span><span style='background: #AEF1AE'>                      () // do nothing else
+</span>67 <span style=''></span><span style='background: #AEF1AE'>                  }
+</span>68 <span style=''></span><span style='background: #AEF1AE'>              }
+</span>69 <span style=''></span><span style='background: #AEF1AE'>            else
+</span>70 <span style=''></span><span style='background: #AEF1AE'>              o.onComplete()
+</span>71 <span style=''></span><span style='background: #AEF1AE'>
+</span>72 <span style=''></span><span style='background: #AEF1AE'>          def run(): Unit = {
+</span>73 <span style=''></span><span style='background: #AEF1AE'>            fastLoop(from, until, step)
+</span>74 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>75 <span style=''></span><span style='background: #AEF1AE'>        })
+</span>76 <span style=''></span><span style='background: #AEF1AE'>
+</span>77 <span style=''></span><span style='background: #AEF1AE'>      scheduleLoop(from, until, step)
+</span>78 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>79 <span style=''>  }
+</span>80 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          34
+        </td>
+        <td>
+          2861
+        </td>
+        <td>
+          1175
+          -
+          1218
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          &quot;step must be a number different from zero&quot;
+        </td>
+      </tr><tr>
+        <td>
+          34
+        </td>
+        <td>
+          2860
+        </td>
+        <td>
+          1164
+          -
+          1173
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.!=
+        </td>
+        <td style="background: #AEF1AE">
+          step.!=(0)
+        </td>
+      </tr><tr>
+        <td>
+          34
+        </td>
+        <td>
+          2862
+        </td>
+        <td>
+          1156
+          -
+          1219
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Predef.require
+        </td>
+        <td style="background: #AEF1AE">
+          scala.this.Predef.require(step.!=(0), &quot;step must be a number different from zero&quot;)
+        </td>
+      </tr><tr>
+        <td>
+          36
+        </td>
+        <td>
+          2887
+        </td>
+        <td>
+          1225
+          -
+          2599
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observable.create
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Observable.create[Long](((subscriber: monifu.reactive.Subscriber[Long]) =&gt; {
+  implicit val s: monifu.concurrent.Scheduler = subscriber.scheduler;
+  val o: monifu.reactive.Observer[Long] = subscriber.observer;
+  def scheduleLoop(from: Long, until: Long, step: Long): Unit = s.execute({
+    final class $anon extends Object with Runnable {
+      def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+        $anon.super.&lt;init&gt;();
+        ()
+      };
+      private[this] def isInRange(x: Long): Boolean = step.&gt;(0).&amp;&amp;(x.&lt;(until)).||(step.&lt;(0).&amp;&amp;(x.&gt;(until)));
+      def reschedule(from: Long, until: Long, step: Long): Unit = $anon.this.fastLoop(from, until, step);
+      @scala.annotation.tailrec def fastLoop(from: Long, until: Long, step: Long): Unit = if ($anon.this.isInRange(from))
+        o.onNext(from) match {
+          case (sync @ _) if sync.isCompleted =&gt; sync.value.get match {
+            case monifu.reactive.Ack.Continue.IsSuccess =&gt; $anon.this.fastLoop(from.+(step), until, step)
+            case _ =&gt; ()
+          }
+          case (async @ _) =&gt; async.onComplete[Unit](((x0$1: scala.util.Try[monifu.reactive.Ack]) =&gt; x0$1 match {
+            case monifu.reactive.Ack.Continue.IsSuccess =&gt; $anon.this.reschedule(from.+(step), until, step)
+            case _ =&gt; ()
+          }))(s)
+        }
+      else
+        o.onComplete();
+      def run(): Unit = $anon.this.fastLoop(from, until, step)
+    };
+    new $anon()
+  });
+  scheduleLoop(from, until, step)
+}))
+        </td>
+      </tr><tr>
+        <td>
+          37
+        </td>
+        <td>
+          2863
+        </td>
+        <td>
+          1282
+          -
+          1302
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          38
+        </td>
+        <td>
+          2864
+        </td>
+        <td>
+          1317
+          -
+          1336
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.observer
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.observer
+        </td>
+      </tr><tr>
+        <td>
+          41
+        </td>
+        <td>
+          2885
+        </td>
+        <td>
+          1414
+          -
+          2554
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.concurrent.Scheduler.execute
+        </td>
+        <td style="background: #AEF1AE">
+          s.execute({
+  final class $anon extends Object with Runnable {
+    def &lt;init&gt;(): &lt;$anon: Runnable&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    private[this] def isInRange(x: Long): Boolean = step.&gt;(0).&amp;&amp;(x.&lt;(until)).||(step.&lt;(0).&amp;&amp;(x.&gt;(until)));
+    def reschedule(from: Long, until: Long, step: Long): Unit = $anon.this.fastLoop(from, until, step);
+    @scala.annotation.tailrec def fastLoop(from: Long, until: Long, step: Long): Unit = if ($anon.this.isInRange(from))
+      o.onNext(from) match {
+        case (sync @ _) if sync.isCompleted =&gt; sync.value.get match {
+          case monifu.reactive.Ack.Continue.IsSuccess =&gt; $anon.this.fastLoop(from.+(step), until, step)
+          case _ =&gt; ()
+        }
+        case (async @ _) =&gt; async.onComplete[Unit](((x0$1: scala.util.Try[monifu.reactive.Ack]) =&gt; x0$1 match {
+          case monifu.reactive.Ack.Continue.IsSuccess =&gt; $anon.this.reschedule(from.+(step), until, step)
+          case _ =&gt; ()
+        }))(s)
+      }
+    else
+      o.onComplete();
+    def run(): Unit = $anon.this.fastLoop(from, until, step)
+  };
+  new $anon()
+})
+        </td>
+      </tr><tr>
+        <td>
+          41
+        </td>
+        <td>
+          2884
+        </td>
+        <td>
+          1424
+          -
+          1427
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.builders.range.$anon.&lt;init&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          new $anon()
+        </td>
+      </tr><tr>
+        <td>
+          43
+        </td>
+        <td>
+          2870
+        </td>
+        <td>
+          1511
+          -
+          1561
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Boolean.||
+        </td>
+        <td style="background: #AEF1AE">
+          step.&gt;(0).&amp;&amp;(x.&lt;(until)).||(step.&lt;(0).&amp;&amp;(x.&gt;(until)))
+        </td>
+      </tr><tr>
+        <td>
+          43
+        </td>
+        <td>
+          2867
+        </td>
+        <td>
+          1546
+          -
+          1547
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          0
+        </td>
+      </tr><tr>
+        <td>
+          43
+        </td>
+        <td>
+          2866
+        </td>
+        <td>
+          1524
+          -
+          1533
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.&lt;
+        </td>
+        <td style="background: #AEF1AE">
+          x.&lt;(until)
+        </td>
+      </tr><tr>
+        <td>
+          43
+        </td>
+        <td>
+          2869
+        </td>
+        <td>
+          1539
+          -
+          1560
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Boolean.&amp;&amp;
+        </td>
+        <td style="background: #AEF1AE">
+          step.&lt;(0).&amp;&amp;(x.&gt;(until))
+        </td>
+      </tr><tr>
+        <td>
+          43
+        </td>
+        <td>
+          2865
+        </td>
+        <td>
+          1519
+          -
+          1520
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          0
+        </td>
+      </tr><tr>
+        <td>
+          43
+        </td>
+        <td>
+          2868
+        </td>
+        <td>
+          1551
+          -
+          1560
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          x.&gt;(until)
+        </td>
+      </tr><tr>
+        <td>
+          47
+        </td>
+        <td>
+          2871
+        </td>
+        <td>
+          1657
+          -
+          1684
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.builders.range.$anon.fastLoop
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this.fastLoop(from, until, step)
+        </td>
+      </tr><tr>
+        <td>
+          51
+        </td>
+        <td>
+          2872
+        </td>
+        <td>
+          1789
+          -
+          1804
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.builders.range.$anon.isInRange
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this.isInRange(from)
+        </td>
+      </tr><tr>
+        <td>
+          52
+        </td>
+        <td>
+          2873
+        </td>
+        <td>
+          1820
+          -
+          1834
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onNext
+        </td>
+        <td style="background: #AEF1AE">
+          o.onNext(from)
+        </td>
+      </tr><tr>
+        <td>
+          52
+        </td>
+        <td>
+          2880
+        </td>
+        <td>
+          1820
+          -
+          2414
+        </td>
+        <td>
+          Match
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          o.onNext(from) match {
+  case (sync @ _) if sync.isCompleted =&gt; sync.value.get match {
+    case monifu.reactive.Ack.Continue.IsSuccess =&gt; $anon.this.fastLoop(from.+(step), until, step)
+    case _ =&gt; ()
+  }
+  case (async @ _) =&gt; async.onComplete[Unit](((x0$1: scala.util.Try[monifu.reactive.Ack]) =&gt; x0$1 match {
+    case monifu.reactive.Ack.Continue.IsSuccess =&gt; $anon.this.reschedule(from.+(step), until, step)
+    case _ =&gt; ()
+  }))(s)
+}
+        </td>
+      </tr><tr>
+        <td>
+          53
+        </td>
+        <td>
+          2874
+        </td>
+        <td>
+          1872
+          -
+          1888
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.concurrent.Future.isCompleted
+        </td>
+        <td style="background: #AEF1AE">
+          sync.isCompleted
+        </td>
+      </tr><tr>
+        <td>
+          54
+        </td>
+        <td>
+          2875
+        </td>
+        <td>
+          1910
+          -
+          1924
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          scala.Option.get
+        </td>
+        <td style="background: #AEF1AE">
+          sync.value.get
+        </td>
+      </tr><tr>
+        <td>
+          56
+        </td>
+        <td>
+          2876
+        </td>
+        <td>
+          2011
+          -
+          2022
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.Long.+
+        </td>
+        <td style="background: #AEF1AE">
+          from.+(step)
+        </td>
+      </tr><tr>
+        <td>
+          56
+        </td>
+        <td>
+          2877
+        </td>
+        <td>
+          2002
+          -
+          2036
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.builders.range.$anon.fastLoop
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this.fastLoop(from.+(step), until, step)
+        </td>
+      </tr><tr>
+        <td>
+          58
+        </td>
+        <td>
+          2878
+        </td>
+        <td>
+          2089
+          -
+          2091
+        </td>
+        <td>
+          Literal
+        </td>
+        <td>
+          &lt;nosymbol&gt;
+        </td>
+        <td style="background: #AEF1AE">
+          ()
+        </td>
+      </tr><tr>
+        <td>
+          62
+        </td>
+        <td>
+          2879
+        </td>
+        <td>
+          2180
+          -
+          2398
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          scala.concurrent.Future.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          async.onComplete[Unit](((x0$1: scala.util.Try[monifu.reactive.Ack]) =&gt; x0$1 match {
+  case monifu.reactive.Ack.Continue.IsSuccess =&gt; $anon.this.reschedule(from.+(step), until, step)
+  case _ =&gt; ()
+}))(s)
+        </td>
+      </tr><tr>
+        <td>
+          70
+        </td>
+        <td>
+          2882
+        </td>
+        <td>
+          2446
+          -
+          2460
+        </td>
+        <td>
+          Block
+        </td>
+        <td>
+          monifu.reactive.Observer.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          o.onComplete()
+        </td>
+      </tr><tr>
+        <td>
+          70
+        </td>
+        <td>
+          2881
+        </td>
+        <td>
+          2446
+          -
+          2460
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          o.onComplete()
+        </td>
+      </tr><tr>
+        <td>
+          73
+        </td>
+        <td>
+          2883
+        </td>
+        <td>
+          2504
+          -
+          2531
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.builders.range.$anon.fastLoop
+        </td>
+        <td style="background: #AEF1AE">
+          $anon.this.fastLoop(from, until, step)
+        </td>
+      </tr><tr>
+        <td>
+          77
+        </td>
+        <td>
+          2886
+        </td>
+        <td>
+          2562
+          -
+          2593
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.builders.range.scheduleLoop
+        </td>
+        <td style="background: #AEF1AE">
+          scheduleLoop(from, until, step)
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

@@ -1,0 +1,280 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          monifu/reactive/operators/reduce.scala.html
+        </title>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''>
+</span>17 <span style=''>package monifu.reactive.operators
+</span>18 <span style=''>
+</span>19 <span style=''>import monifu.reactive.Ack.{Cancel, Continue}
+</span>20 <span style=''>import monifu.reactive.{Ack, Observer, Observable}
+</span>21 <span style=''>import monifu.reactive.internals._
+</span>22 <span style=''>import scala.concurrent.Future
+</span>23 <span style=''>import scala.util.control.NonFatal
+</span>24 <span style=''>
+</span>25 <span style=''>object reduce {
+</span>26 <span style=''>  /**
+</span>27 <span style=''>   * Implementation for [[monifu.reactive.Observable.reduce]].
+</span>28 <span style=''>   */
+</span>29 <span style=''>  def apply[T](source: Observable[T])(op: (T, T) => T): Observable[T] = {
+</span>30 <span style=''>    </span><span style='background: #AEF1AE'>Observable.create { subscriber =>
+</span>31 <span style=''></span><span style='background: #AEF1AE'>      implicit val s = subscriber.scheduler
+</span>32 <span style=''></span><span style='background: #AEF1AE'>      val observer = subscriber.observer
+</span>33 <span style=''></span><span style='background: #AEF1AE'>
+</span>34 <span style=''></span><span style='background: #AEF1AE'>      source.unsafeSubscribe(new Observer[T] {
+</span>35 <span style=''></span><span style='background: #AEF1AE'>        private[this] var state: T = _
+</span>36 <span style=''></span><span style='background: #AEF1AE'>        private[this] var isFirst = true
+</span>37 <span style=''></span><span style='background: #AEF1AE'>        private[this] var wasApplied = false
+</span>38 <span style=''></span><span style='background: #AEF1AE'>
+</span>39 <span style=''></span><span style='background: #AEF1AE'>        def onNext(elem: T): Future[Ack] = {
+</span>40 <span style=''></span><span style='background: #AEF1AE'>          // See Section 6.4. in the Rx Design Guidelines:
+</span>41 <span style=''></span><span style='background: #AEF1AE'>          // Protect calls to user code from within an operator
+</span>42 <span style=''></span><span style='background: #AEF1AE'>          try {
+</span>43 <span style=''></span><span style='background: #AEF1AE'>            if (isFirst) {
+</span>44 <span style=''></span><span style='background: #AEF1AE'>              isFirst = false
+</span>45 <span style=''></span><span style='background: #AEF1AE'>              state = elem
+</span>46 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>47 <span style=''></span><span style='background: #AEF1AE'>            else {
+</span>48 <span style=''></span><span style='background: #AEF1AE'>              state = op(state, elem)
+</span>49 <span style=''></span><span style='background: #AEF1AE'>              if (!wasApplied) wasApplied = true
+</span>50 <span style=''></span><span style='background: #AEF1AE'>            }
+</span>51 <span style=''></span><span style='background: #AEF1AE'>
+</span>52 <span style=''></span><span style='background: #AEF1AE'>            Continue
+</span>53 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>54 <span style=''></span><span style='background: #AEF1AE'>          catch {
+</span>55 <span style=''></span><span style='background: #AEF1AE'>            case NonFatal(ex) =>
+</span>56 <span style=''></span><span style='background: #AEF1AE'>              onError(ex)
+</span>57 <span style=''></span><span style='background: #AEF1AE'>              Cancel
+</span>58 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>59 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>60 <span style=''></span><span style='background: #AEF1AE'>
+</span>61 <span style=''></span><span style='background: #AEF1AE'>        def onComplete() = {
+</span>62 <span style=''></span><span style='background: #AEF1AE'>          if (wasApplied) {
+</span>63 <span style=''></span><span style='background: #AEF1AE'>            observer.onNext(state)
+</span>64 <span style=''></span><span style='background: #AEF1AE'>              .onContinueSignalComplete(observer)
+</span>65 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>66 <span style=''></span><span style='background: #AEF1AE'>          else {
+</span>67 <span style=''></span><span style='background: #AEF1AE'>            observer.onComplete()
+</span>68 <span style=''></span><span style='background: #AEF1AE'>          }
+</span>69 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>70 <span style=''></span><span style='background: #AEF1AE'>
+</span>71 <span style=''></span><span style='background: #AEF1AE'>        def onError(ex: Throwable) = {
+</span>72 <span style=''></span><span style='background: #AEF1AE'>          observer.onError(ex)
+</span>73 <span style=''></span><span style='background: #AEF1AE'>        }
+</span>74 <span style=''></span><span style='background: #AEF1AE'>      })
+</span>75 <span style=''></span><span style='background: #AEF1AE'>    }</span><span style=''>
+</span>76 <span style=''>  }
+</span>77 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          30
+        </td>
+        <td>
+          4235
+        </td>
+        <td>
+          1014
+          -
+          2186
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observable.create
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.Observable.create[T](((subscriber: monifu.reactive.Subscriber[T]) =&gt; {
+  implicit val s: monifu.concurrent.Scheduler = subscriber.scheduler;
+  val observer: monifu.reactive.Observer[T] = subscriber.observer;
+  source.unsafeSubscribe({
+    final class $anon extends AnyRef with monifu.reactive.Observer[T] {
+      def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[T]&gt; = {
+        $anon.super.&lt;init&gt;();
+        ()
+      };
+      private[this] var state: T = _;
+      private[this] var isFirst: Boolean = true;
+      private[this] var wasApplied: Boolean = false;
+      def onNext(elem: T): scala.concurrent.Future[monifu.reactive.Ack] = try {
+        if ($anon.this.isFirst)
+          {
+            $anon.this.isFirst = false;
+            $anon.this.state = elem
+          }
+        else
+          {
+            $anon.this.state = op.apply($anon.this.state, elem);
+            if ($anon.this.wasApplied.unary_!)
+              $anon.this.wasApplied = true
+            else
+              ()
+          };
+        monifu.reactive.Ack.Continue
+      } catch {
+        case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((ex @ _)) =&gt; {
+          $anon.this.onError(ex);
+          monifu.reactive.Ack.Cancel
+        }
+      };
+      def onComplete(): Unit = if ($anon.this.wasApplied)
+        monifu.reactive.internals.`package`.FutureAckExtensions(observer.onNext($anon.this.state)).onContinueSignalComplete[T](observer)(s)
+      else
+        observer.onComplete();
+      def onError(ex: Throwable): Unit = observer.onError(ex)
+    };
+    new $anon()
+  })(s)
+}))
+        </td>
+      </tr><tr>
+        <td>
+          31
+        </td>
+        <td>
+          4232
+        </td>
+        <td>
+          1071
+          -
+          1091
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          32
+        </td>
+        <td>
+          4233
+        </td>
+        <td>
+          1113
+          -
+          1132
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.Subscriber.observer
+        </td>
+        <td style="background: #AEF1AE">
+          subscriber.observer
+        </td>
+      </tr><tr>
+        <td>
+          34
+        </td>
+        <td>
+          4234
+        </td>
+        <td>
+          1140
+          -
+          2180
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.Observable.unsafeSubscribe
+        </td>
+        <td style="background: #AEF1AE">
+          source.unsafeSubscribe({
+  final class $anon extends AnyRef with monifu.reactive.Observer[T] {
+    def &lt;init&gt;(): &lt;$anon: monifu.reactive.Observer[T]&gt; = {
+      $anon.super.&lt;init&gt;();
+      ()
+    };
+    private[this] var state: T = _;
+    private[this] var isFirst: Boolean = true;
+    private[this] var wasApplied: Boolean = false;
+    def onNext(elem: T): scala.concurrent.Future[monifu.reactive.Ack] = try {
+      if ($anon.this.isFirst)
+        {
+          $anon.this.isFirst = false;
+          $anon.this.state = elem
+        }
+      else
+        {
+          $anon.this.state = op.apply($anon.this.state, elem);
+          if ($anon.this.wasApplied.unary_!)
+            $anon.this.wasApplied = true
+          else
+            ()
+        };
+      monifu.reactive.Ack.Continue
+    } catch {
+      case scala.util.control.NonFatal.unapply(&lt;unapply-selector&gt;) &lt;unapply&gt; ((ex @ _)) =&gt; {
+        $anon.this.onError(ex);
+        monifu.reactive.Ack.Cancel
+      }
+    };
+    def onComplete(): Unit = if ($anon.this.wasApplied)
+      monifu.reactive.internals.`package`.FutureAckExtensions(observer.onNext($anon.this.state)).onContinueSignalComplete[T](observer)(s)
+    else
+      observer.onComplete();
+    def onError(ex: Throwable): Unit = observer.onError(ex)
+  };
+  new $anon()
+})(s)
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>

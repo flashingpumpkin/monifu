@@ -1,0 +1,309 @@
+<html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title id="title">
+          monifu/reactive/channels/SubjectChannel.scala.html
+        </title>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/css/theme.default.min.css" type="text/css"/><script src="http://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.20.1/js/jquery.tablesorter.min.js"></script><link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" type="text/css"/><script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js"></script><script type="text/javascript">
+        $(document).ready(function() {$(".tablesorter").tablesorter();});
+      </script>
+        <style>
+          table.codegrid { font-family: monospace; font-size: 12px; width: auto!important; }table.statementlist { width: auto!important; font-size: 13px; } table.codegrid td { padding: 0!important; border: 0!important } table td.linenumber { width: 40px!important; } 
+        </style>
+      </head>
+      <body style="font-family: monospace;">
+        <ul class="nav nav-tabs">
+          <li>
+            <a href="#codegrid" data-toggle="tab">Codegrid</a>
+          </li>
+          <li>
+            <a href="#statementlist" data-toggle="tab">Statement List</a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane active" id="codegrid">
+            <pre style='font-size: 12pt; font-family: courier;'>1 <span style=''>/*
+</span>2 <span style=''> * Copyright (c) 2014-2015 Alexandru Nedelcu
+</span>3 <span style=''> *
+</span>4 <span style=''> * Licensed under the Apache License, Version 2.0 (the "License");
+</span>5 <span style=''> * you may not use this file except in compliance with the License.
+</span>6 <span style=''> * You may obtain a copy of the License at
+</span>7 <span style=''> *
+</span>8 <span style=''> *     http://www.apache.org/licenses/LICENSE-2.0
+</span>9 <span style=''> *
+</span>10 <span style=''> * Unless required by applicable law or agreed to in writing, software
+</span>11 <span style=''> * distributed under the License is distributed on an "AS IS" BASIS,
+</span>12 <span style=''> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span>13 <span style=''> * See the License for the specific language governing permissions and
+</span>14 <span style=''> * limitations under the License.
+</span>15 <span style=''> */
+</span>16 <span style=''> 
+</span>17 <span style=''>package monifu.reactive.channels
+</span>18 <span style=''>
+</span>19 <span style=''>import monifu.concurrent.Scheduler
+</span>20 <span style=''>import monifu.reactive.BufferPolicy.Unbounded
+</span>21 <span style=''>import monifu.reactive._
+</span>22 <span style=''>import monifu.reactive.observers.BufferedSubscriber
+</span>23 <span style=''>
+</span>24 <span style=''>/**
+</span>25 <span style=''> * Wraps any [[Subject]] into a [[Channel]].
+</span>26 <span style=''> */
+</span>27 <span style=''>class SubjectChannel[-I,+O](subject: Subject[I, O], policy: BufferPolicy.Synchronous[I])
+</span>28 <span style=''>    (implicit scheduler: Scheduler)
+</span>29 <span style=''>  extends Channel[I] with Observable[O] {
+</span>30 <span style=''>
+</span>31 <span style=''>  private[this] val channel = </span><span style='background: #AEF1AE'>BufferedSubscriber(subject, policy)</span><span style=''>
+</span>32 <span style=''>
+</span>33 <span style=''>  final def subscribeFn(subscriber: Subscriber[O]): Unit = {
+</span>34 <span style=''>    </span><span style='background: #AEF1AE'>subject.unsafeSubscribe(subscriber)</span><span style=''>
+</span>35 <span style=''>  }
+</span>36 <span style=''>
+</span>37 <span style=''>  final def pushNext(elems: I*): Unit = {
+</span>38 <span style=''>    </span><span style='background: #AEF1AE'>for (elem <- elems) channel.observer.onNext(elem)</span><span style=''>
+</span>39 <span style=''>  }
+</span>40 <span style=''>
+</span>41 <span style=''>  final def pushComplete(): Unit = {
+</span>42 <span style=''>    </span><span style='background: #AEF1AE'>channel.observer.onComplete()</span><span style=''>
+</span>43 <span style=''>  }
+</span>44 <span style=''>
+</span>45 <span style=''>  final def pushError(ex: Throwable): Unit = {
+</span>46 <span style=''>    </span><span style='background: #AEF1AE'>channel.observer.onError(ex)</span><span style=''>
+</span>47 <span style=''>  }
+</span>48 <span style=''>}
+</span>49 <span style=''>
+</span>50 <span style=''>object SubjectChannel {
+</span>51 <span style=''>  /**
+</span>52 <span style=''>   * Wraps any [[Subject]] into a [[Channel]].
+</span>53 <span style=''>   */
+</span>54 <span style=''>  def apply[I,O](subject: Subject[I, O], bufferPolicy: BufferPolicy.Synchronous[I] = Unbounded)
+</span>55 <span style=''>      (implicit s: Scheduler): SubjectChannel[I, O] = {
+</span>56 <span style=''>    </span><span style='background: #F0ADAD'>new SubjectChannel[I,O](subject, bufferPolicy)</span><span style=''>
+</span>57 <span style=''>  }
+</span>58 <span style=''>}
+</span></pre>
+          </div>
+          <div class="tab-pane" id="statementlist">
+            <table cellspacing="0" cellpadding="0" class="table statementlist">
+      <tr>
+        <th>Line</th>
+        <th>Stmt Id</th>
+        <th>Pos</th>
+        <th>Tree</th>
+        <th>Symbol</th>
+        <th>Code</th>
+      </tr><tr>
+        <td>
+          31
+        </td>
+        <td>
+          2990
+        </td>
+        <td>
+          1056
+          -
+          1091
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.observers.BufferedSubscriber.apply
+        </td>
+        <td style="background: #AEF1AE">
+          monifu.reactive.observers.BufferedSubscriber.apply[I](SubjectChannel.this.subject, SubjectChannel.this.policy)(SubjectChannel.this.scheduler)
+        </td>
+      </tr><tr>
+        <td>
+          31
+        </td>
+        <td>
+          2987
+        </td>
+        <td>
+          1075
+          -
+          1082
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.channels.SubjectChannel.subject
+        </td>
+        <td style="background: #AEF1AE">
+          SubjectChannel.this.subject
+        </td>
+      </tr><tr>
+        <td>
+          31
+        </td>
+        <td>
+          2989
+        </td>
+        <td>
+          1074
+          -
+          1074
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.channels.SubjectChannel.scheduler
+        </td>
+        <td style="background: #AEF1AE">
+          SubjectChannel.this.scheduler
+        </td>
+      </tr><tr>
+        <td>
+          31
+        </td>
+        <td>
+          2988
+        </td>
+        <td>
+          1084
+          -
+          1090
+        </td>
+        <td>
+          Select
+        </td>
+        <td>
+          monifu.reactive.channels.SubjectChannel.policy
+        </td>
+        <td style="background: #AEF1AE">
+          SubjectChannel.this.policy
+        </td>
+      </tr><tr>
+        <td>
+          34
+        </td>
+        <td>
+          2991
+        </td>
+        <td>
+          1158
+          -
+          1193
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observable.unsafeSubscribe
+        </td>
+        <td style="background: #AEF1AE">
+          SubjectChannel.this.subject.unsafeSubscribe(subscriber)
+        </td>
+      </tr><tr>
+        <td>
+          38
+        </td>
+        <td>
+          2993
+        </td>
+        <td>
+          1245
+          -
+          1294
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          scala.collection.IterableLike.foreach
+        </td>
+        <td style="background: #AEF1AE">
+          elems.foreach[scala.concurrent.Future[monifu.reactive.Ack]](((elem: I) =&gt; SubjectChannel.this.channel.observer.onNext(elem)))
+        </td>
+      </tr><tr>
+        <td>
+          38
+        </td>
+        <td>
+          2992
+        </td>
+        <td>
+          1265
+          -
+          1294
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onNext
+        </td>
+        <td style="background: #AEF1AE">
+          SubjectChannel.this.channel.observer.onNext(elem)
+        </td>
+      </tr><tr>
+        <td>
+          42
+        </td>
+        <td>
+          2994
+        </td>
+        <td>
+          1341
+          -
+          1370
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onComplete
+        </td>
+        <td style="background: #AEF1AE">
+          SubjectChannel.this.channel.observer.onComplete()
+        </td>
+      </tr><tr>
+        <td>
+          46
+        </td>
+        <td>
+          2995
+        </td>
+        <td>
+          1427
+          -
+          1455
+        </td>
+        <td>
+          Apply
+        </td>
+        <td>
+          monifu.reactive.Observer.onError
+        </td>
+        <td style="background: #AEF1AE">
+          SubjectChannel.this.channel.observer.onError(ex)
+        </td>
+      </tr><tr>
+        <td>
+          56
+        </td>
+        <td>
+          2996
+        </td>
+        <td>
+          1702
+          -
+          1748
+        </td>
+        <td>
+          ApplyToImplicitArgs
+        </td>
+        <td>
+          monifu.reactive.channels.SubjectChannel.&lt;init&gt;
+        </td>
+        <td style="background: #F0ADAD">
+          new monifu.reactive.channels.SubjectChannel[I,O](subject, bufferPolicy)(s)
+        </td>
+      </tr>
+    </table>
+          </div>
+        </div>
+      </body>
+    </html>
