@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="UTF-8">
+    <title>Monifu by monifu</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" type="text/css" href="stylesheets/normalize.css" media="screen">
+    <link href='https://fonts.googleapis.com/css?family=Open+Sans:400,700' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen">
+    <link rel="stylesheet" type="text/css" href="stylesheets/github-light.css" media="screen">
+  </head>
+  <body>
+    <section class="page-header">
+      <h1 class="project-name">Monifu</h1>
+      <h2 class="project-tagline">Reactive Programming for Scala and Scala.js</h2>
+      <a href="https://github.com/monifu/monifu" class="btn">View on GitHub</a>
+      <a href="https://github.com/monifu/monifu/zipball/master" class="btn">Download .zip</a>
+      <a href="https://github.com/monifu/monifu/tarball/master" class="btn">Download .tar.gz</a>
+    </section>
+
+    <section class="main-content">
+      <p><img src="https://raw.githubusercontent.com/wiki/monifu/monifu/assets/monifu.png" align="right"></p>
+
+<p>Idiomatic Reactive Extensions for Scala. Targets both the JVM and <a href="http://www.scala-js.org/">Scala.js</a>.</p>
+
+<p><a href="https://travis-ci.org/monifu/monifu"><img src="https://travis-ci.org/monifu/monifu.png?branch=v1.0-M6" alt="Build Status"></a>
+<a href="https://gitter.im/monifu/monifu?utm_source=badge&amp;utm_medium=badge&amp;utm_campaign=pr-badge&amp;utm_content=badge"><img src="https://badges.gitter.im/Join%20Chat.svg" alt="Gitter"></a></p>
+
+<h2>
+<a id="teaser" class="anchor" href="#teaser" aria-hidden="true"><span class="octicon octicon-link"></span></a>Teaser</h2>
+
+<div class="highlight highlight-scala"><pre><span class="pl-k">import</span> <span class="pl-v">monifu.concurrent.Implicits.</span><span class="pl-v">globalScheduler</span>
+<span class="pl-k">import</span> <span class="pl-v">play.api.libs.ws.</span><span class="pl-v">_</span>
+<span class="pl-k">import</span> <span class="pl-v">monifu.reactive.</span><span class="pl-v">_</span>
+
+<span class="pl-c">// emits an auto-incremented number, every second</span>
+<span class="pl-en">Observable</span>.interval(<span class="pl-c1">1.</span>second)
+  <span class="pl-c">// drops the first 10 emitted events</span>
+  .drop(<span class="pl-c1">10</span>)
+  <span class="pl-c">// takes the first 100 emitted events  </span>
+  .take(<span class="pl-c1">100</span>)
+  <span class="pl-c">// per second, makes requests and concatenates the results</span>
+  .flatMap(x <span class="pl-k">=&gt;</span> <span class="pl-en">WS</span>.request(s<span class="pl-s"><span class="pl-pds">"</span>http://some.endpoint.com/request?tick=$x<span class="pl-pds">"</span></span>).get())
+  <span class="pl-c">// filters only valid responses</span>
+  .filter(response <span class="pl-k">=&gt;</span> response.status <span class="pl-k">==</span> <span class="pl-c1">200</span>)
+  <span class="pl-c">// samples by 3 seconds, repeating previous results in case of nothing new</span>
+  .sampleRepeated(<span class="pl-c1">3.</span>seconds)
+  <span class="pl-c">// processes response, selecting the body</span>
+  .map(response <span class="pl-k">=&gt;</span> response.body)
+  <span class="pl-c">// creates subscription, foreach response print it</span>
+  .foreach(x <span class="pl-k">=&gt;</span> println(x))</pre></div>
+
+<p>There's actually a lot more to Monifu.</p>
+
+<h2>
+<a id="documentation" class="anchor" href="#documentation" aria-hidden="true"><span class="octicon octicon-link"></span></a>Documentation</h2>
+
+<p><strong>NOTE (Feb 27):</strong> the documentation is a little obsolete and incomplete in places.
+Currently the project is marching towards a stable 1.0 and properly documented
+version. Be patient :-)</p>
+
+<p>The available documentation is maintained as a <a href="https://github.com/monifu/monifu/wiki">GitHub's Wiki</a>.
+Work in progress.</p>
+
+<ul>
+<li><a href="https://github.com/monifu/monifu/wiki/Reactive-Extensions-%28Rx%29">Reactive Extensions (Rx)</a></li>
+<li><a href="https://github.com/monifu/monifu/wiki/Atomic-References">Atomic References</a></li>
+<li><a href="https://github.com/monifu/monifu/wiki/Schedulers">Schedulers</a></li>
+</ul>
+
+<p>API documentation:</p>
+
+<ul>
+<li><a href="http://www.monifu.org/monifu/current/api/">monifu</a></li>
+<li><a href="http://www.monifu.org/monifu-js/current/api/">monifu-js</a></li>
+</ul>
+
+<p>Release Notes:</p>
+
+<ul>
+<li><a href="https://github.com/monifu/monifu/wiki/1.0-M1">Version 1.0-M1 - Feb 27, 2015</a></li>
+<li><a href="https://github.com/monifu/monifu/wiki/Release-Notes">Other Versions</a></li>
+</ul>
+
+<h2>
+<a id="usage" class="anchor" href="#usage" aria-hidden="true"><span class="octicon octicon-link"></span></a>Usage</h2>
+
+<p>The packages are published on Maven Central. Compiled for Scala 2.11.5
+and Scala.js 0.6.0. Older versions are no longer supported.</p>
+
+<ul>
+<li>Current stable release is: <code>1.0-M6</code>
+</li>
+</ul>
+
+<h3>
+<a id="for-the-jvm" class="anchor" href="#for-the-jvm" aria-hidden="true"><span class="octicon octicon-link"></span></a>For the JVM</h3>
+
+<div class="highlight highlight-scala"><pre>libraryDependencies <span class="pl-k">+</span><span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">"</span>org.monifu<span class="pl-pds">"</span></span> <span class="pl-k">%%</span> <span class="pl-s"><span class="pl-pds">"</span>monifu<span class="pl-pds">"</span></span> <span class="pl-k">%</span> <span class="pl-s"><span class="pl-pds">"</span>1.0-M6<span class="pl-pds">"</span></span></pre></div>
+
+<h3>
+<a id="for-targeting-javascript-runtimes-with-scalajs" class="anchor" href="#for-targeting-javascript-runtimes-with-scalajs" aria-hidden="true"><span class="octicon octicon-link"></span></a>For targeting Javascript runtimes with Scala.js</h3>
+
+<div class="highlight highlight-scala"><pre>libraryDependencies <span class="pl-k">+</span><span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">"</span>org.monifu<span class="pl-pds">"</span></span> <span class="pl-k">%%%</span> <span class="pl-s"><span class="pl-pds">"</span>monifu<span class="pl-pds">"</span></span> <span class="pl-k">%</span> <span class="pl-s"><span class="pl-pds">"</span>1.0-M6<span class="pl-pds">"</span></span></pre></div>
+
+<h2>
+<a id="license" class="anchor" href="#license" aria-hidden="true"><span class="octicon octicon-link"></span></a>License</h2>
+
+<p>All code in this repository is licensed under the Apache License, Version 2.0.
+See <a href="./LICENSE.txt">LICENCE.txt</a>.</p>
+
+<h2>
+<a id="acknowledgements" class="anchor" href="#acknowledgements" aria-hidden="true"><span class="octicon octicon-link"></span></a>Acknowledgements</h2>
+
+<p><img src="https://raw.githubusercontent.com/wiki/monifu/monifu/assets/yklogo.png" align="right">
+YourKit supports the Monifu project with its full-featured Java Profiler.
+YourKit, LLC is the creator <a href="http://www.yourkit.com/java/profiler/index.jsp">YourKit Java Profiler</a>
+and <a href="http://www.yourkit.com/.net/profiler/index.jsp">YourKit .NET Profiler</a>,
+innovative and intelligent tools for profiling Java and .NET applications.</p>
+
+      <footer class="site-footer">
+        <span class="site-footer-owner"><a href="https://github.com/monifu/monifu">Monifu</a> is maintained by <a href="https://github.com/monifu">monifu</a>.</span>
+
+        <span class="site-footer-credits">This page was generated by <a href="https://pages.github.com">GitHub Pages</a> using the <a href="https://github.com/jasonlong/cayman-theme">Cayman theme</a> by <a href="https://twitter.com/jasonlong">Jason Long</a>.</span>
+      </footer>
+
+    </section>
+
+  
+  </body>
+</html>
